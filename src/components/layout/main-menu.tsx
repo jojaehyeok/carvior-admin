@@ -14,14 +14,14 @@ const mainMenuData: IMenu[] = [
   },
   {
     id: "product",
-    name: "상품 관리",
+    name: "진단 관리",
     icon: <Package2 className="w-5 h-5" />,
     submenu: [
       {
         id: "productList",
-        name: "상품 목록",
+        name: "진단 신청목록",
         link: {
-          path: "/sample/product/list",
+          path: "/sample/product/BookingListPage",
         },
       },
     ],
