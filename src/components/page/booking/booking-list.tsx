@@ -40,7 +40,7 @@ const BookingList = () => {
   const fetchBookings = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:4000/api/v1/external/request/list');
+      const response = await fetch('/api/v1/external/request/list');
       const result = await response.json();
       setData(result);
       setError(false);
