@@ -56,7 +56,7 @@ const DefaultLayout = ({ Page, ...props }: IDefaultLayoutProps) => {
       <div className="z-40 flex items-center justify-between px-5 border-b h-14 sm:hidden">
         <div className="flex items-center">
           <div className="flex items-center justify-center w-8 h-8 text-white rounded-lg bg-turquoise">P</div>
-          <div className="ml-3 text-lg text-black">Purple Admin UI</div>
+          <div className="ml-3 text-lg text-black">CHAVATA ADMIN</div>
         </div>
         <div>
           <MenuBtn isActive={isShowPopupMenu} setActive={setActive} />
