@@ -3,12 +3,18 @@
 import DefaultTable from "@/components/shared/ui/default-table";
 import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
 import { ISO8601DateTime } from "@/types/common";
-import { Button, Dropdown, Input, Modal, Select, Tag, message } from "antd"; // Modal, Input, Select, message 추가
+import { Button, Divider, Input, Modal, Select, Tag, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
-import { Download, Eye } from "lucide-react";
-import { useRouter } from "next/router";
+import { Download, Eye, UserPlus } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
+
+// --- 인터페이스 정의 ---
+interface IDriver {
+  accountId: string;
+  name: string;
+  status: string;
+}
 
 interface IBooking {
   id: number;
@@ -20,45 +26,65 @@ interface IBooking {
   preferredDateTime: string;
   status: 'PENDING' | 'ASSIGNED' | 'COMPLETED' | 'CANCELLED';
   adminMemo?: string;
+  assignedDriverId?: string;    // ✅ 추가
+  assignedDriverName?: string;  // ✅ 추가
   createdAt: ISO8601DateTime;
 }
 
 const BookingList = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [data, setData] = useState<IBooking[]>([]);
+  const [drivers, setDrivers] = useState<IDriver[]>([]); // ✅ 진단사 목록 상태
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const router = useRouter();
 
-  // --- 팝업 제어를 위한 상태 ---
+  // --- 상세/수정 모달 상태 ---
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBooking, setEditingBooking] = useState<IBooking | null>(null);
   const [tempMemo, setTempMemo] = useState("");
   const [tempStatus, setTempStatus] = useState<IBooking['status']>('PENDING');
+  const [selectedDriver, setSelectedDriver] = useState<{ id: string, name: string } | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
+  const API_BASE = process.env.NEXT_PUBLIC_API_ENDPOINT || 'http://localhost:4000/api/v1';
+
+  // 1. 신청 목록 가져오기
   const fetchBookings = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/v1/external/request/list');
+      const response = await fetch(`${API_BASE}/external/request/list`);
       const result = await response.json();
       setData(result);
-      setError(false);
     } catch (err) {
-      setError(true);
+      message.error("목록 로드 실패");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [API_BASE]);
 
-  useEffect(() => { fetchBookings(); }, [fetchBookings]);
+  // 2. 진단사 목록 가져오기 (배정용)
+  const fetchDrivers = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/drivers`);
+      const result = await response.json();
+      // 승인된(APPROVED/ACTIVE) 진단사만 필터링해서 보여주면 더 좋습니다.
+      setDrivers(Array.isArray(result) ? result : []);
+    } catch (err) {
+      console.error("진단사 로드 실패", err);
+    }
+  }, [API_BASE]);
 
-  // --- 💾 업데이트 저장 로직 ---
+  useEffect(() => {
+    fetchBookings();
+    fetchDrivers();
+  }, [fetchBookings, fetchDrivers]);
+
+  // --- 💾 저장 로직 (상태 + 메모 + 진단사 배정 통합) ---
   const handleUpdate = async () => {
     if (!editingBooking) return;
     setIsUpdating(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/v1/external/request/${editingBooking.id}/status`, {
+      // ✅ 1. 상태 및 메모 업데이트
+      const statusRes = await fetch(`${API_BASE}/external/request/${editingBooking.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -67,15 +93,25 @@ const BookingList = () => {
         })
       });
 
-      if (res.ok) {
-        message.success("변경사항이 저장되었습니다.");
+      // ✅ 2. 진단사 배정 업데이트 (진단사가 선택된 경우만)
+      if (selectedDriver && tempStatus === 'ASSIGNED') {
+        await fetch(`${API_BASE}/external/request/${editingBooking.id}/assign`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: selectedDriver.id,
+            name: selectedDriver.name
+          })
+        });
+      }
+
+      if (statusRes.ok) {
+        message.success("정보가 성공적으로 반영되었습니다.");
         setIsModalOpen(false);
-        fetchBookings(); // 목록 새로고침
-      } else {
-        message.error("저장에 실패했습니다.");
+        fetchBookings();
       }
     } catch (e) {
-      message.error("서버 통신 오류");
+      message.error("저장 중 오류 발생");
     } finally {
       setIsUpdating(false);
     }
@@ -102,6 +138,7 @@ const BookingList = () => {
             setEditingBooking(record);
             setTempMemo(record.adminMemo || "");
             setTempStatus(record.status);
+            setSelectedDriver(record.assignedDriverId ? { id: record.assignedDriverId, name: record.assignedDriverName || "" } : null);
             setIsModalOpen(true);
           }}
         >
@@ -126,6 +163,11 @@ const BookingList = () => {
       render: (value: string) => <span className="font-bold text-blue-600">{value}</span>,
     },
     {
+      title: "배정 진단사",
+      dataIndex: "assignedDriverName",
+      render: (value: string) => value ? <Tag icon={<UserPlus size={12} />} color="processing">{value}</Tag> : <span className="text-gray-300">-</span>,
+    },
+    {
       title: "딜러/연락처",
       dataIndex: "dealerName",
       render: (value: string, record) => (
@@ -144,21 +186,13 @@ const BookingList = () => {
         return <Tag color={config.color}>{config.label}</Tag>;
       },
     },
-    {
-      title: "관리자 메모",
-      dataIndex: "adminMemo",
-      ellipsis: true,
-      render: (value: string) => <span className="text-xs text-gray-400">{value || "-"}</span>,
-    },
   ];
 
   return (
     <>
       <DefaultTableBtn className="justify-between">
         <div className="flex items-center gap-2">
-          <Dropdown disabled={selectedRowKeys.length === 0} menu={{ items: [{ key: '1', label: '일괄 변경' }] }}>
-            <Button size="middle">일괄작업</Button>
-          </Dropdown>
+          <span className="text-sm text-gray-500 ml-2">총 {data.length}건</span>
         </div>
         <div className="flex gap-2">
           <Button icon={<Download size={16} />}>엑셀</Button>
@@ -175,9 +209,9 @@ const BookingList = () => {
         className="mt-3"
       />
 
-      {/* --- 상세 정보 및 관리자 메모 수정 모달 --- */}
+      {/* --- 상세 정보 및 배정 모달 --- */}
       <Modal
-        title={`진단 신청 상세 정보 (${editingBooking?.carNumber})`}
+        title={`신청 상세 정보 및 관리 (${editingBooking?.carNumber})`}
         open={isModalOpen}
         onOk={handleUpdate}
         onCancel={() => setIsModalOpen(false)}
@@ -186,17 +220,25 @@ const BookingList = () => {
         cancelText="닫기"
         width={600}
       >
-        <div className="py-4 flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-xl">
+        <div className="py-4 flex flex-col gap-5">
+          {/* 정보 요약 */}
+          <div className="grid grid-cols-2 gap-4 p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
             <div><p className="text-xs text-gray-400">딜러/상사</p><p className="font-bold">{editingBooking?.dealerName}</p></div>
             <div><p className="text-xs text-gray-400">연락처</p><p className="font-bold">{editingBooking?.contact}</p></div>
-            <div className="col-span-2"><p className="text-xs text-gray-400">주소</p><p className="font-bold">{editingBooking?.address}</p></div>
+            <div className="col-span-2"><p className="text-xs text-gray-400">희망 일시 / 주소</p>
+              <p className="font-medium text-sm">{editingBooking?.preferredDateTime}</p>
+              <p className="text-gray-600 text-xs">{editingBooking?.address}</p>
+            </div>
           </div>
 
+          <Divider style={{ margin: '8px 0' }} />
+
+          {/* 진행 상태 */}
           <div>
-            <label className="block text-sm font-medium mb-1">진행 상태 변경</label>
+            <label className="block text-sm font-bold mb-2 text-slate-700">진행 상태</label>
             <Select
               className="w-full"
+              size="large"
               value={tempStatus}
               onChange={(value) => setTempStatus(value)}
               options={[
@@ -208,13 +250,29 @@ const BookingList = () => {
             />
           </div>
 
+          {/* 진단사 배정 (상태가 ASSIGNED일 때만 강조되거나 필요) */}
           <div>
-            <label className="block text-sm font-medium mb-1">관리자 메모</label>
+            <label className="block text-sm font-bold mb-2 text-slate-700">진단사 지정</label>
+            <Select
+              className="w-full"
+              size="large"
+              placeholder="배정할 진단사를 선택하세요"
+              value={selectedDriver?.id}
+              onChange={(val, option: any) => setSelectedDriver({ id: val, name: option.label })}
+              options={drivers.map(d => ({ value: d.accountId, label: d.name }))}
+              showSearch
+              filterOption={(input, option) => (option?.label ?? '').includes(input)}
+            />
+          </div>
+
+          {/* 관리자 메모 */}
+          <div>
+            <label className="block text-sm font-bold mb-2 text-slate-700">관리자 메모</label>
             <Input.TextArea
-              rows={4}
+              rows={3}
               value={tempMemo}
               onChange={(e) => setTempMemo(e.target.value)}
-              placeholder="진단사 정보 등을 입력하세요."
+              placeholder="참고사항을 입력하세요."
             />
           </div>
         </div>
