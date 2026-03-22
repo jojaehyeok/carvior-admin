@@ -13,15 +13,21 @@ const mainMenuData: IMenu[] = [
     },
   },
   {
-    id: "product",
+    id: "diagnosis",
     name: "진단 관리",
     icon: <Package2 className="w-5 h-5" />,
     submenu: [
       {
-        id: "productList",
+        id: "bookingList",
         name: "진단 신청목록",
+        link: { path: "/sample/product/BookingListPage" }, // 원래 있던 거
+      },
+      {
+        id: "driverList",
+        name: "진단사 계정 관리",
         link: {
-          path: "/sample/product/BookingListPage",
+          // ✅ 포인트: 파일 경로랑 똑같이 맞춰주면 원페이지(SPA)처럼 뜹니다!
+          path: "/sample/product/DriverListPage"
         },
       },
     ],
