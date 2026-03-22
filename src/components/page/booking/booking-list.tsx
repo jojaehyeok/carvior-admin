@@ -164,6 +164,34 @@ const BookingList = () => {
       dataIndex: "createdAt",
       render: (value: ISO8601DateTime) => dayjs(value).format("YYYY-MM-DD"),
     },
+    {
+      title: "진단 리포트",
+      key: "report",
+      width: 120,
+      align: "center",
+      render: (_, record) => {
+        // 진단 완료(COMPLETED) 상태일 때만 버튼을 활성화할지, 
+        // 아니면 관리자니까 작업 중에도 미리 볼 수 있게 할지 결정하면 됩니다.
+        const isCompleted = record.status === 'COMPLETED';
+
+        return (
+          <Button
+            size="small"
+            type="primary"
+            ghost
+            // 💡 팁: 관리자는 작업 중에도 보고 싶을 수 있으니 disabled를 아예 빼는 것도 방법입니다!
+            disabled={!isCompleted}
+            icon={<Eye size={14} />}
+            onClick={() => {
+              // ✅ 우리가 만든 리포트 페이지 경로(/reports/[id])로 연결
+              window.open(`/reports/${record.id}`, '_blank');
+            }}
+          >
+            리포트 보기
+          </Button>
+        );
+      },
+    },
   ];
 
   return (
