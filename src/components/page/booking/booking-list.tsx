@@ -7,7 +7,6 @@ import { Button, Input, Modal, Select, Tag, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { Eye, RefreshCw, UserPlus } from "lucide-react";
-// import { useRouter } from "next/router"; // ❌ 오류의 주범! 삭제합니다.
 import React, { useCallback, useEffect, useState } from "react";
 
 // --- 인터페이스 정의 ---
@@ -33,7 +32,6 @@ interface IBooking {
 }
 
 const BookingList = () => {
-  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [data, setData] = useState<IBooking[]>([]);
   const [drivers, setDrivers] = useState<IDriver[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,7 +44,7 @@ const BookingList = () => {
   const [selectedDriver, setSelectedDriver] = useState<{ id: string, name: string } | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // API 주소 체크 (환경변수 없으면 4000번 강제)
+  // 💡 API 주소 설정 (백엔드 컨트롤러 구조에 맞게 세팅)
   const API_BASE = process.env.NEXT_PUBLIC_API_ENDPOINT || 'http://localhost:4000/api/v1';
 
   // 1. 신청 목록 가져오기
@@ -92,7 +90,7 @@ const BookingList = () => {
         body: JSON.stringify({ status: tempStatus, adminMemo: tempMemo })
       });
 
-      // 2. 진단사 배정 (상태가 ASSIGNED이거나 드라이버가 선택된 경우)
+      // 2. 진단사 배정
       if (selectedDriver) {
         await fetch(`${API_BASE}/external/request/${editingBooking.id}/assign`, {
           method: 'PATCH',
@@ -146,7 +144,7 @@ const BookingList = () => {
       render: (value: string) => <span className="font-bold text-blue-600">{value}</span>,
     },
     {
-      title: "배정 진단사", // ✅ 배정된 사람이 누구인지 바로 보이게!
+      title: "배정 진단사",
       dataIndex: "assignedDriverName",
       render: (value: string) => value ? <Tag icon={<UserPlus size={12} />} color="blue">{value}</Tag> : <span className="text-gray-300">미배정</span>,
     },
@@ -169,28 +167,22 @@ const BookingList = () => {
       key: "report",
       width: 120,
       align: "center",
-      render: (_, record) => {
-        // 진단 완료(COMPLETED) 상태일 때만 버튼을 활성화할지, 
-        // 아니면 관리자니까 작업 중에도 미리 볼 수 있게 할지 결정하면 됩니다.
-        const isCompleted = record.status === 'COMPLETED';
-
-        return (
-          <Button
-            size="small"
-            type="primary"
-            ghost
-            // 💡 팁: 관리자는 작업 중에도 보고 싶을 수 있으니 disabled를 아예 빼는 것도 방법입니다!
-            disabled={!isCompleted}
-            icon={<Eye size={14} />}
-            onClick={() => {
-              // ✅ 우리가 만든 리포트 페이지 경로(/reports/[id])로 연결
-              window.open(`/reports/${record.id}`, '_blank');
-            }}
-          >
-            리포트 보기
-          </Button>
-        );
-      },
+      render: (_, record) => (
+        <Button
+          size="small"
+          type="primary"
+          ghost
+          // 💡 관리자는 대기 중(PENDING)만 아니면 리포트를 미리 볼 수 있게 설정
+          disabled={record.status === 'PENDING' || record.status === 'CANCELLED'}
+          icon={<Eye size={14} />}
+          onClick={() => {
+            // ✅ 리포트 새 창 열기
+            window.open(`/reports/${record.id}`, '_blank');
+          }}
+        >
+          리포트 보기
+        </Button>
+      ),
     },
   ];
 
@@ -219,8 +211,8 @@ const BookingList = () => {
       >
         <div className="space-y-4 py-4">
           <div className="p-3 bg-gray-50 rounded-lg text-sm">
-            <p>딜러: {editingBooking?.dealerName} ({editingBooking?.contact})</p>
-            <p>주소: {editingBooking?.address}</p>
+            <p className="mb-1 font-medium">딜러: {editingBooking?.dealerName} ({editingBooking?.contact})</p>
+            <p className="text-gray-500">주소: {editingBooking?.address}</p>
           </div>
 
           <div>
@@ -246,7 +238,7 @@ const BookingList = () => {
 
           <div>
             <label className="block text-xs font-bold text-gray-400 mb-1">관리자 메모</label>
-            <Input.TextArea value={tempMemo} onChange={e => setTempMemo(e.target.value)} rows={3} />
+            <Input.TextArea value={tempMemo} onChange={e => setTempMemo(e.target.value)} rows={3} placeholder="진단사에게 전달할 내용을 입력하세요." />
           </div>
         </div>
       </Modal>
