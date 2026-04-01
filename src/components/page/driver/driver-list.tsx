@@ -12,8 +12,10 @@ interface IDriver {
   accountId: string;
   name: string;
   phone: string;
+  region: string;
+  experience: string;
   status: 'PENDING' | 'APPROVED' | 'ACTIVE' | 'BANNED' | 'REJECTED';
-  licenseImageUrl: string; // ✅ 자격증 이미지 경로
+  licenseImageUrl: string;
   createdAt: string;
 }
 
@@ -155,13 +157,26 @@ const DriverList = () => {
                 <p className="text-gray-400 text-xs">연락처</p>
                 <p className="font-semibold">{selectedDriver.phone}</p>
               </div>
+              <div>
+                <p className="text-gray-400 text-xs">활동 지역</p>
+                <p className="font-semibold">{selectedDriver.region || '-'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-xs">경력 사항</p>
+                <p className="font-semibold whitespace-pre-wrap">{selectedDriver.experience || '-'}</p>
+              </div>
             </div>
-            <Divider plain>자격증 확인</Divider>
+            <Divider plain>자격증 / 경력 사진</Divider>
             <div className="flex justify-center bg-gray-50 p-4 rounded-lg">
-              {/* 이미지 경로는 백엔드 URL + 파일경로 조합 */}
               <Image
                 alt="자격증 이미지"
-                src={`${process.env.NEXT_PUBLIC_API_ENDPOINT!.replace('/api/v1', '')}/${selectedDriver.licenseImageUrl}`}
+                src={
+                  selectedDriver.licenseImageUrl?.startsWith('https://')
+                    ? selectedDriver.licenseImageUrl
+                    : selectedDriver.licenseImageUrl
+                      ? `${process.env.NEXT_PUBLIC_API_ENDPOINT!.replace('/api/v1', '')}/${selectedDriver.licenseImageUrl}`
+                      : undefined
+                }
                 fallback="https://via.placeholder.com/400x250?text=No+Image"
                 className="max-h-[300px] object-contain shadow-md"
               />

@@ -1,5 +1,5 @@
 import { Divider } from "antd";
-import { Home, Monitor, Package2 } from "lucide-react";
+import { Home, Monitor, Package2, Star } from "lucide-react";
 import React from "react";
 import Menu, { IMenu } from "./nav";
 
@@ -25,12 +25,15 @@ const mainMenuData: IMenu[] = [
       {
         id: "driverList",
         name: "진단사 계정 관리",
-        link: {
-          // ✅ 포인트: 파일 경로랑 똑같이 맞춰주면 원페이지(SPA)처럼 뜹니다!
-          path: "/sample/product/DriverListPage"
-        },
+        link: { path: "/sample/product/DriverListPage" },
       },
     ],
+  },
+  {
+    id: "cs",
+    name: "CS / 리뷰",
+    icon: <Star className="w-5 h-5" />,
+    link: { path: "/sample/product/ReviewListPage" },
   },
 ];
 
