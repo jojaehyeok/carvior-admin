@@ -173,11 +173,10 @@ const BookingList = () => {
           type="primary"
           ghost
           // 💡 관리자는 대기 중(PENDING)만 아니면 리포트를 미리 볼 수 있게 설정
-          disabled={record.status === 'PENDING' || record.status === 'CANCELLED'}
+          disabled={record.status !== 'COMPLETED'}
           icon={<Eye size={14} />}
           onClick={() => {
-            // ✅ 리포트 새 창 열기
-            window.open(`/reports/${record.id}`, '_blank');
+            window.open(`/report/${record.id}`, '_blank');
           }}
         >
           리포트 보기
