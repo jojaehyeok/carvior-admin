@@ -25,10 +25,17 @@ const BookingSearch = () => {
   // 검색 버튼 클릭 시 URL 쿼리 파라미터 업데이트
   const handleFinish = useCallback(
     (formValue: any) => {
-      router.push({
-        pathname: router.pathname,
-        query: { ...router.query, ...formValue },
-      });
+      const query: Record<string, any> = { ...router.query, ...formValue };
+
+      // dayjs 배열(날짜범위)을 YYYY-MM-DD 문자열로 직렬화
+      if (Array.isArray(formValue.searchDatePeriod)) {
+        const [start, end] = formValue.searchDatePeriod;
+        query.dateStart = start ? start.format('YYYY-MM-DD') : undefined;
+        query.dateEnd = end ? end.format('YYYY-MM-DD') : undefined;
+        delete query.searchDatePeriod;
+      }
+
+      router.push({ pathname: router.pathname, query });
     },
     [router]
   );

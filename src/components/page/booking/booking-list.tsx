@@ -164,7 +164,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
 
   // BookingSearch가 URL 쿼리로 넘긴 조건을 읽어 클라이언트 필터링
   const filteredData = useMemo(() => {
-    const { searchType, searchText, status, adminMemo } = router.query;
+    const { searchType, searchText, status, adminMemo, searchDateType, dateStart, dateEnd } = router.query;
 
     return data.filter((item) => {
       // 검색어 필터
@@ -183,6 +183,14 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       // 관리자 메모 필터
       if (adminMemo) {
         if (!item.adminMemo?.toLowerCase().includes(String(adminMemo).toLowerCase())) return false;
+      }
+
+      // 날짜 필터
+      if (dateStart || dateEnd) {
+        const dateField = searchDateType === 'preferredDate' ? item.preferredDateTime : item.createdAt;
+        const itemDate = dayjs(dateField).format('YYYY-MM-DD');
+        if (dateStart && itemDate < String(dateStart)) return false;
+        if (dateEnd && itemDate > String(dateEnd)) return false;
       }
 
       return true;
