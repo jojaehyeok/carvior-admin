@@ -29,13 +29,14 @@ interface IBooking {
   source?: string;
   status: 'PENDING' | 'ASSIGNED' | 'COMPLETED' | 'CANCELLED';
   adminMemo?: string;
-  assignedDriverId?: string;
-  assignedDriverName?: string;
+  assignedDriverId?: string | null;
+  assignedDriverName?: string | null;
+  cancelledByDriverAt?: string | null; // 진단사 취소로 재대기된 시각
   // 오더 기록 필드
-  contractWriter?: string;       // 계약서 작성자
-  vehicleTransferred?: boolean;  // 차량 이전 여부
-  purchasePrice?: number | null; // 매입가 (만원)
-  isOldDealerPurchase?: boolean; // 구전 매입 여부
+  contractWriter?: string;
+  vehicleTransferred?: boolean;
+  purchasePrice?: number | null;
+  isOldDealerPurchase?: boolean;
   createdAt: ISO8601DateTime;
 }
 
@@ -124,20 +125,25 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setIsUpdating(true);
     try {
       // 상태 + 메모 + 오더 기록 통합 저장
+      // 배정 초기화: selectedDriver가 null이고 기존에 배정돼 있었으면 PENDING 복원
+      const wasAssigned = !!editingBooking.assignedDriverId;
+      const isUnassigning = wasAssigned && !selectedDriver;
+
       await fetch(`${API_BASE}/external/request/${editingBooking.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          status: tempStatus,
+          status: isUnassigning ? 'PENDING' : tempStatus,
           adminMemo: tempMemo,
           contractWriter: tempContractWriter,
           vehicleTransferred: tempVehicleTransferred,
           purchasePrice: tempPurchasePrice,
           isOldDealerPurchase: tempIsOldDealerPurchase,
+          ...(isUnassigning ? { assignedDriverId: null, assignedDriverName: null } : {}),
         })
       });
 
-      if (selectedDriver) {
+      if (selectedDriver && selectedDriver.id !== editingBooking.assignedDriverId) {
         await fetch(`${API_BASE}/external/request/${editingBooking.id}/assign`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -222,7 +228,17 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     {
       title: "배정 진단사",
       dataIndex: "assignedDriverName",
-      render: (value: string) => value ? <Tag icon={<UserPlus size={12} />} color="blue">{value}</Tag> : <span className="text-gray-300">미배정</span>,
+      render: (value: string, record: IBooking) => (
+        <div className="flex flex-col gap-1">
+          {value
+            ? <Tag icon={<UserPlus size={12} />} color="blue">{value}</Tag>
+            : <span className="text-gray-300">미배정</span>
+          }
+          {record.cancelledByDriverAt && (
+            <Tag color="volcano" className="text-xs">🔄 재대기중</Tag>
+          )}
+        </div>
+      ),
     },
     {
       title: "계약서 작성자",
@@ -329,13 +345,33 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           {/* 진단사 배정 */}
           <div>
             <label className="block text-xs font-bold text-gray-400 mb-1">진단사 배정</label>
-            <Select
-              className="w-full"
-              placeholder="진단사 선택"
-              value={selectedDriver?.id}
-              onChange={(val, opt: any) => setSelectedDriver({ id: val, name: opt.label })}
-              options={drivers.map(d => ({ value: d.accountId, label: d.name }))}
-            />
+            <div className="flex gap-2">
+              <Select
+                className="flex-1"
+                placeholder="진단사 선택"
+                value={selectedDriver?.id}
+                onChange={(val, opt: any) => setSelectedDriver({ id: val, name: opt.label })}
+                options={drivers.map(d => ({ value: d.accountId, label: d.name }))}
+                allowClear
+                onClear={() => setSelectedDriver(null)}
+              />
+              {selectedDriver && (
+                <Button
+                  danger
+                  onClick={() => {
+                    setSelectedDriver(null);
+                    setTempStatus('PENDING');
+                  }}
+                >
+                  배정 초기화
+                </Button>
+              )}
+            </div>
+            {editingBooking?.cancelledByDriverAt && (
+              <p className="text-xs text-orange-500 mt-1">
+                🔄 진단사 취소로 재대기 중 ({dayjs(editingBooking.cancelledByDriverAt).format('MM/DD HH:mm')})
+              </p>
+            )}
           </div>
 
           {/* 오더 기록 구분선 */}
