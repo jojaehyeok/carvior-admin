@@ -9,6 +9,10 @@ declare module "next-auth" {
     user: {
       id: string;
       login: string;
+      /** 'SUPER_ADMIN' | 'COMPANY_ADMIN' */
+      role: string;
+      /** 발주사 ID (예: 'anyone-motors'). SUPER_ADMIN이면 null */
+      company: string | null;
     } & DefaultSession["user"];
   }
 }
