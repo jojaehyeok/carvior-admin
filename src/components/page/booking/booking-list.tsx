@@ -8,7 +8,8 @@ import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { Eye, RefreshCw, UserPlus } from "lucide-react";
 import { useSession } from "next-auth/react";
-import React, { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 // --- 인터페이스 정의 ---
 interface IDriver {
@@ -45,6 +46,7 @@ interface BookingListProps {
 
 const BookingList = ({ companyFilter }: BookingListProps) => {
   const { data: session } = useSession();
+  const router = useRouter();
   const [data, setData] = useState<IBooking[]>([]);
   const [drivers, setDrivers] = useState<IDriver[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -160,6 +162,33 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     CANCELLED: { color: "red", label: "취소" },
   };
 
+  // BookingSearch가 URL 쿼리로 넘긴 조건을 읽어 클라이언트 필터링
+  const filteredData = useMemo(() => {
+    const { searchType, searchText, status, adminMemo } = router.query;
+
+    return data.filter((item) => {
+      // 검색어 필터
+      if (searchText && searchType) {
+        const text = String(searchText).toLowerCase();
+        const field = item[searchType as keyof IBooking];
+        if (!String(field ?? '').toLowerCase().includes(text)) return false;
+      }
+
+      // 상태 필터 (체크박스 복수 선택)
+      if (status) {
+        const statuses = Array.isArray(status) ? status : [status];
+        if (!statuses.includes(item.status)) return false;
+      }
+
+      // 관리자 메모 필터
+      if (adminMemo) {
+        if (!item.adminMemo?.toLowerCase().includes(String(adminMemo).toLowerCase())) return false;
+      }
+
+      return true;
+    });
+  }, [data, router.query]);
+
   const columns: ColumnsType<IBooking> = [
     {
       title: "관리",
@@ -247,13 +276,13 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   return (
     <div className="p-4 bg-white rounded-lg shadow-sm">
       <DefaultTableBtn className="justify-between mb-4">
-        <span className="text-gray-500">전체 {data.length}건</span>
+        <span className="text-gray-500">전체 {filteredData.length}건</span>
         <Button type="primary" icon={<RefreshCw size={14} />} onClick={fetchBookings} loading={isLoading}>새로고침</Button>
       </DefaultTableBtn>
 
       <DefaultTable<IBooking>
         columns={columns}
-        dataSource={data}
+        dataSource={filteredData}
         loading={isLoading}
         rowKey="id"
       />
