@@ -1,5 +1,5 @@
 import { Divider } from "antd";
-import { Home, Monitor, Package2, Star, FileText } from "lucide-react";
+import { Home, Monitor, Package2, Star } from "lucide-react";
 import { useSession } from "next-auth/react";
 import React from "react";
 import Menu, { IMenu } from "./nav";
@@ -40,12 +40,6 @@ const superAdminMenuData: IMenu[] = [
     icon: <Star className="w-5 h-5" />,
     link: { path: "/sample/product/ReviewListPage" },
   },
-  {
-    id: "settlement",
-    name: "정산 관리",
-    icon: <FileText className="w-5 h-5" />,
-    link: { path: "/sample/product/SettlementPage" },
-  },
 ];
 
 /** 애니원 모터스 관리자 메뉴 (자사 의뢰만) */
@@ -67,12 +61,6 @@ const anyoneMotorsMenuData: IMenu[] = [
         link: { path: "/sample/product/AnyoneMotorsBookingPage" },
       },
     ],
-  },
-  {
-    id: "settlement",
-    name: "정산 관리",
-    icon: <FileText className="w-5 h-5" />,
-    link: { path: "/sample/product/SettlementPage" },
   },
 ];
 
