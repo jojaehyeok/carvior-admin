@@ -28,6 +28,7 @@ interface IBooking {
   preferredDateTime: string;
   source?: string;
   status: 'PENDING' | 'ASSIGNED' | 'COMPLETED' | 'CANCELLED';
+  carHash?: string | null;
   adminMemo?: string;
   assignedDriverId?: string | null;
   assignedDriverName?: string | null;
@@ -287,9 +288,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           size="small"
           type="primary"
           ghost
-          disabled={record.status !== 'COMPLETED'}
+          disabled={record.status !== 'COMPLETED' || !record.carHash}
           icon={<Eye size={14} />}
-          onClick={() => window.open(`/report/${record.id}`, '_blank')}
+          onClick={() => window.open(`/report/${record.carHash}`, '_blank')}
         >
           리포트 보기
         </Button>
