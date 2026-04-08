@@ -4,6 +4,7 @@ import DefaultTable from "@/components/shared/ui/default-table";
 import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
 import { ISO8601DateTime } from "@/types/common";
 import { Button, Input, Modal, Select, Tag, message } from "antd";
+import { ArrowRightCircle } from "lucide-react";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { Eye, RefreshCw, UserPlus } from "lucide-react";
@@ -52,6 +53,12 @@ const ConsultationList = () => {
   const [selectedDriver, setSelectedDriver] = useState<{ id: string; name: string } | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
+  // 진단 접수 전환 모달
+  const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
+  const [convertCarNumber, setConvertCarNumber] = useState("");
+  const [convertCarOwner, setConvertCarOwner] = useState("");
+  const [isConverting, setIsConverting] = useState(false);
+
   const API_BASE = process.env.NEXT_PUBLIC_API_ENDPOINT || 'http://localhost:4000/api/v1';
 
   const fetchData = useCallback(async () => {
@@ -86,6 +93,32 @@ const ConsultationList = () => {
     setTempMemo(record.adminMemo || "");
     setSelectedDriver(record.assignedDriverId ? { id: record.assignedDriverId, name: record.assignedDriverName || "" } : null);
     setIsModalOpen(true);
+  };
+
+  const handleConvert = async () => {
+    if (!editing || !convertCarNumber.trim() || !convertCarOwner.trim()) {
+      message.warning("차량번호와 차량 소유자를 입력해주세요.");
+      return;
+    }
+    setIsConverting(true);
+    try {
+      const res = await fetch(`${API_BASE}/external/buyer-request/${editing.id}/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ carNumber: convertCarNumber.trim(), carOwner: convertCarOwner.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      message.success("진단 신청 목록에 접수되었습니다.");
+      setIsConvertModalOpen(false);
+      setIsModalOpen(false);
+      setConvertCarNumber("");
+      setConvertCarOwner("");
+      fetchData();
+    } catch {
+      message.error("전환 중 오류 발생");
+    } finally {
+      setIsConverting(false);
+    }
   };
 
   const handleUpdate = async () => {
@@ -250,6 +283,54 @@ const ConsultationList = () => {
               placeholder="메모를 입력하세요."
             />
           </div>
+
+          {/* 진단 접수 전환 */}
+          <div className="border-t pt-4">
+            <Button
+              icon={<ArrowRightCircle size={14} />}
+              onClick={() => setIsConvertModalOpen(true)}
+              disabled={editing?.status === 'COMPLETED'}
+            >
+              진단 신청으로 전환
+            </Button>
+            <p className="text-xs text-gray-400 mt-1">
+              차량번호 입력 후 전체 진단 신청 목록에 접수됩니다.
+            </p>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 진단 접수 전환 모달 */}
+      <Modal
+        title="진단 신청으로 전환"
+        open={isConvertModalOpen}
+        onOk={handleConvert}
+        onCancel={() => { setIsConvertModalOpen(false); setConvertCarNumber(""); setConvertCarOwner(""); }}
+        confirmLoading={isConverting}
+        okText="접수 생성"
+        cancelText="취소"
+        width={400}
+      >
+        <div className="space-y-4 py-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-400 mb-1">차량번호 *</label>
+            <Input
+              value={convertCarNumber}
+              onChange={e => setConvertCarNumber(e.target.value)}
+              placeholder="예: 12가 3456"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-400 mb-1">차량 소유자(판매자) *</label>
+            <Input
+              value={convertCarOwner}
+              onChange={e => setConvertCarOwner(e.target.value)}
+              placeholder="판매자 성명"
+            />
+          </div>
+          <p className="text-xs text-gray-400">
+            의뢰인: {editing?.buyerName} / 방문지: {editing?.address}
+          </p>
         </div>
       </Modal>
     </div>
