@@ -1,5 +1,5 @@
 import { Divider } from "antd";
-import { Home, MessageCircle, Monitor, Package2, Star } from "lucide-react";
+import { Home, MessageCircle, Monitor, Package2, ShoppingBag, Star } from "lucide-react";
 import { useSession } from "next-auth/react";
 import React from "react";
 import Menu, { IMenu } from "./nav";
@@ -39,6 +39,12 @@ const superAdminMenuData: IMenu[] = [
     name: "상담 신청",
     icon: <MessageCircle className="w-5 h-5" />,
     link: { path: "/sample/product/ConsultationListPage" },
+  },
+  {
+    id: "store",
+    name: "스토어 관리",
+    icon: <ShoppingBag className="w-5 h-5" />,
+    link: { path: "/sample/product/StoreManagementPage" },
   },
   {
     id: "cs",
