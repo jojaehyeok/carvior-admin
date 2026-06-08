@@ -303,71 +303,59 @@ const StoreList = () => {
     },
   ];
 
-  const regColumns: ColumnsType<IBooking> = [
+  const regColumns: ColumnsType<IStoreItem> = [
     {
-      title: '예약 ID', dataIndex: 'id', width: 90,
-      render: (v: number) => <span className="font-mono text-blue-600">#{v}</span>,
+      title: '차량번호', dataIndex: 'carNumber',
+      render: (v: string) => <span className="font-bold">{v}</span>,
     },
-    { title: '차량번호', dataIndex: 'carNumber', render: (v: string) => <span className="font-bold">{v}</span> },
-    { title: '차종',     dataIndex: 'carModel',  render: (v?: string) => v ?? '-' },
-    { title: '차주',     dataIndex: 'carOwner' },
+    { title: '차량명', dataIndex: 'titleKo' },
     {
       title: '판매가', key: 'price',
-      render: (_: any, r: IBooking) => {
-        const item = storeItems.find(i => i.bookingId === r.id);
-        if (!item) return '-';
+      render: (_: any, item: IStoreItem) => {
         if (item.hidePrice || item.status === 'sold') return <span className="text-gray-400 text-xs">가격 미표시</span>;
+        if (!item.priceKRW) return <span className="text-gray-300 text-xs">-</span>;
         return <span className="font-bold text-green-600">{fmtKRW(item.priceKRW)}</span>;
       },
     },
     {
-      title: '상태', key: 'status',
-      render: (_: any, r: IBooking) => {
-        const item = storeItems.find(i => i.bookingId === r.id);
-        if (!item) return null;
-        const sc = STATUS_CONFIG[item.status];
+      title: '상태', dataIndex: 'status',
+      render: (v: string) => {
+        const sc = STATUS_CONFIG[v] ?? { color: 'default', text: v };
         return <Tag color={sc.color}>{sc.text}</Tag>;
       },
     },
     {
-      title: '등록일', key: 'regDate',
-      render: (_: any, r: IBooking) => {
-        const item = storeItems.find(i => i.bookingId === r.id);
-        return item ? dayjs(item.registeredAt).format('YYYY-MM-DD') : '-';
-      },
+      title: '등록일', dataIndex: 'registeredAt',
+      render: (v: string) => dayjs(v).format('YYYY-MM-DD'),
     },
     {
       title: '액션', key: 'action', align: 'right', width: 180,
-      render: (_: any, r: IBooking) => {
-        const item = storeItems.find(i => i.bookingId === r.id);
-        if (!item) return null;
-        return (
-          <div className="flex items-center gap-2 justify-end">
-            <Button
-              size="small"
-              icon={<Eye size={13} />}
-              onClick={() => window.open(`https://carvior.store/buy/${r.id}`, '_blank')}
-            >
-              보기
-            </Button>
-            <Button
-              size="small"
-              icon={<Edit size={13} />}
-              onClick={() => openEditModal(item)}
-            >
-              수정
-            </Button>
-            <Button
-              size="small"
-              danger
-              icon={<Trash2 size={13} />}
-              onClick={() => handleDelete(item.id, item.titleKo)}
-            >
-              취소
-            </Button>
-          </div>
-        );
-      },
+      render: (_: any, item: IStoreItem) => (
+        <div className="flex items-center gap-2 justify-end">
+          <Button
+            size="small"
+            icon={<Eye size={13} />}
+            onClick={() => window.open(`https://carvior.store/buy/${item.id}`, '_blank')}
+          >
+            보기
+          </Button>
+          <Button
+            size="small"
+            icon={<Edit size={13} />}
+            onClick={() => openEditModal(item)}
+          >
+            수정
+          </Button>
+          <Button
+            size="small"
+            danger
+            icon={<Trash2 size={13} />}
+            onClick={() => handleDelete(item.id, item.titleKo)}
+          >
+            취소
+          </Button>
+        </div>
+      ),
     },
   ];
 
@@ -470,12 +458,21 @@ const StoreList = () => {
         <Button icon={<RefreshCw size={14} />} onClick={fetchData} loading={loading}>새로고침</Button>
       </DefaultTableBtn>
 
-      <DefaultTable<IBooking>
-        columns={activeTab === 'unregistered' ? unregColumns : regColumns}
-        dataSource={filtered}
-        loading={loading}
-        rowKey="id"
-      />
+      {activeTab === 'unregistered' ? (
+        <DefaultTable<IBooking>
+          columns={unregColumns}
+          dataSource={filtered}
+          loading={loading}
+          rowKey="id"
+        />
+      ) : (
+        <DefaultTable<IStoreItem>
+          columns={regColumns as any}
+          dataSource={storeItems}
+          loading={loading}
+          rowKey="id"
+        />
+      )}
 
       {/* ── 등록 모달 (CREATE) ── */}
       <Modal
