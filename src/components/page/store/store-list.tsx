@@ -51,7 +51,18 @@ interface IInspection {
   carModel?: string;
   mileage?: number;
   color?: string;
-  photos?: { exterior?: string[]; interior?: string[] };
+  images?: {
+    exterior?: string[];
+    interior?: string[];
+    engine?: string[];
+    wheel?: string[];
+    undercarriage?: string[];
+    damage?: string[];
+    extra?: string[];
+    dashboard?: string[];
+    registration?: string[];
+    vin?: string[];
+  };
   inspectionDetails?: { warningDesc?: string; leakDesc?: string; optionsDesc?: string; driveDesc?: string };
   completedAt?: string;
 }
@@ -165,7 +176,7 @@ const StoreList = () => {
       const values = await registerForm.validateFields();
       if (!values.priceKRW) { message.warning('판매가를 입력해주세요.'); return; }
       setRegistering(true);
-      const photos = inspection?.photos ?? {};
+      const imgs = inspection?.images ?? {};
       const body = {
         bookingId: selectedBooking.id,
         carNumber: selectedBooking.carNumber,
@@ -180,9 +191,16 @@ const StoreList = () => {
         status: 'active',
         hidePrice: false,
         photos: {
-          exterior:     photos.exterior ?? [],
-          interior:     photos.interior ?? [],
-          engine: [], wheel: [], undercarriage: [], damage: [], extra: [],
+          exterior:      imgs.exterior      ?? [],
+          interior:      imgs.interior      ?? [],
+          engine:        imgs.engine        ?? [],
+          wheel:         imgs.wheel         ?? [],
+          undercarriage: imgs.undercarriage ?? [],
+          damage:        imgs.damage        ?? [],
+          extra:         imgs.extra         ?? [],
+          dashboard:     imgs.dashboard     ?? [],
+          registration:  imgs.registration  ?? [],
+          vin:           imgs.vin           ?? [],
         },
         specs: [
           { label: 'Year',         value: String(values.year) },
@@ -487,11 +505,11 @@ const StoreList = () => {
       >
         {loadingInspection ? (
           <p className="text-center py-6 text-gray-400">진단 데이터 불러오는 중…</p>
-        ) : inspection?.photos?.exterior?.length ? (
+        ) : inspection?.images?.exterior?.length ? (
           <div className="mb-4">
             <p className="text-xs text-gray-400 mb-2">진단 사진 (외관)</p>
             <div className="flex gap-2 overflow-x-auto pb-1">
-              {inspection.photos.exterior.slice(0, 8).map((url, i) => (
+              {inspection.images.exterior.slice(0, 8).map((url: string, i: number) => (
                 <img key={i} src={url} alt="" className="w-24 h-16 object-cover rounded-lg border flex-shrink-0" />
               ))}
             </div>
