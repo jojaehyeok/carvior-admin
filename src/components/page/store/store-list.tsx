@@ -45,6 +45,7 @@ interface IStoreItem {
   status: 'active' | 'sold' | 'hidden' | 'pending';
   hidePrice?: boolean;
   registeredAt: string;
+  photos?: Record<string, string[]>;
 }
 
 interface IInspection {
