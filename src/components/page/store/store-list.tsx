@@ -42,7 +42,7 @@ interface IStoreItem {
   region?: string;
   adminMemo?: string;
   carNumber: string;
-  status: 'active' | 'sold' | 'hidden';
+  status: 'active' | 'sold' | 'hidden' | 'pending';
   hidePrice?: boolean;
   registeredAt: string;
 }
@@ -73,9 +73,10 @@ const TRANS_OPTIONS = ['자동', '수동'];
 const CATEGORY_OPTIONS = ['SUV', '세단', '해치백', '경차', '소형차', '준중형', '중형', '대형', 'RV', '밴'];
 
 const STATUS_CONFIG: Record<string, { color: string; text: string }> = {
-  active: { color: 'green',   text: '판매중'   },
-  sold:   { color: 'default', text: '거래완료' },
-  hidden: { color: 'orange',  text: '숨김'     },
+  active:  { color: 'green',   text: '판매중'     },
+  sold:    { color: 'default', text: '거래완료'   },
+  hidden:  { color: 'orange',  text: '숨김'       },
+  pending: { color: 'blue',    text: '입금확인중' },
 };
 
 function fmtKRW(n: number) {
@@ -87,7 +88,7 @@ const StoreList = () => {
   const [bookings,    setBookings]    = useState<IBooking[]>([]);
   const [storeItems,  setStoreItems]  = useState<IStoreItem[]>([]);
   const [loading,     setLoading]     = useState(true);
-  const [activeTab,   setActiveTab]   = useState<'unregistered' | 'registered'>('unregistered');
+  const [activeTab,   setActiveTab]   = useState<'unregistered' | 'registered' | 'selfregister'>('unregistered');
   const [search,      setSearch]      = useState('');
 
   // 등록 모달
@@ -124,6 +125,11 @@ const StoreList = () => {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const registeredIds = new Set(storeItems.map(i => i.bookingId));
+
+  // 셀프등록: bookingId가 실제 예약 ID와 매칭 안 되는 것 (Date.now() 값 사용)
+  const realBookingIds = new Set(bookings.map(b => b.id));
+  const selfRegistered = storeItems.filter(i => !realBookingIds.has(i.bookingId));
+  const dashboardItems = storeItems.filter(i => realBookingIds.has(i.bookingId));
 
   const filtered = bookings.filter(b => {
     const isReg = registeredIds.has(b.id);
@@ -476,10 +482,10 @@ const StoreList = () => {
         </div>
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
           <Statistic
-            title="미등록 매물"
-            value={Math.max(0, bookings.length - storeItems.length)}
+            title="셀프등록 (입금확인 필요)"
+            value={selfRegistered.filter(i => i.status === 'pending').length}
             loading={loading}
-            valueStyle={{ color: '#d97706' }}
+            valueStyle={{ color: '#1677ff' }}
           />
         </div>
       </div>
@@ -499,6 +505,13 @@ const StoreList = () => {
           >
             등록됨
           </Button>
+          <Button
+            type={activeTab === 'selfregister' ? 'primary' : 'default'}
+            onClick={() => setActiveTab('selfregister')}
+            style={activeTab !== 'selfregister' && selfRegistered.filter(i => i.status === 'pending').length > 0 ? { borderColor: '#1677ff', color: '#1677ff' } : {}}
+          >
+            셀프등록 {selfRegistered.filter(i => i.status === 'pending').length > 0 && `(${selfRegistered.filter(i => i.status === 'pending').length})`}
+          </Button>
           <Input
             placeholder="차량번호 / 차종 / 차주"
             value={search}
@@ -517,10 +530,17 @@ const StoreList = () => {
           loading={loading}
           rowKey="id"
         />
+      ) : activeTab === 'selfregister' ? (
+        <DefaultTable<IStoreItem>
+          columns={regColumns as any}
+          dataSource={selfRegistered}
+          loading={loading}
+          rowKey="id"
+        />
       ) : (
         <DefaultTable<IStoreItem>
           columns={regColumns as any}
-          dataSource={storeItems}
+          dataSource={dashboardItems}
           loading={loading}
           rowKey="id"
         />
@@ -586,9 +606,10 @@ const StoreList = () => {
             <Form.Item label="판매 상태" name="status" className="flex-1 mb-0">
               <Select
                 options={[
-                  { value: 'active', label: '판매중' },
-                  { value: 'sold',   label: '거래완료' },
-                  { value: 'hidden', label: '숨김' },
+                  { value: 'pending', label: '입금확인중' },
+                  { value: 'active',  label: '판매중' },
+                  { value: 'sold',    label: '거래완료' },
+                  { value: 'hidden',  label: '숨김' },
                 ]}
               />
             </Form.Item>
