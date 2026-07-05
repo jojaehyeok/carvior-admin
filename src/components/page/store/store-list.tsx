@@ -598,8 +598,78 @@ const StoreList = () => {
         confirmLoading={updating}
         okText="저장"
         cancelText="취소"
-        width={680}
+        width={760}
+        footer={(_, { OkBtn, CancelBtn }) => (
+          <div className="flex justify-between items-center">
+            <div className="flex gap-2">
+              {editingItem?.status === 'pending' && (
+                <>
+                  <Button
+                    type="primary"
+                    onClick={async () => {
+                      await fetch(`${CAVIOR_BASE}/api/admin/store-items?id=${editingItem.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'active' }),
+                      });
+                      message.success('승인되었습니다. 스토어에 노출됩니다.');
+                      setEditModal(false);
+                      fetchData();
+                    }}
+                  >
+                    ✅ 입금확인 후 승인
+                  </Button>
+                  <Button
+                    danger
+                    onClick={async () => {
+                      await fetch(`${CAVIOR_BASE}/api/admin/store-items?id=${editingItem.id}`, {
+                        method: 'DELETE',
+                      });
+                      message.success('거절 및 삭제 완료');
+                      setEditModal(false);
+                      fetchData();
+                    }}
+                  >
+                    ❌ 거절 (삭제)
+                  </Button>
+                </>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <CancelBtn />
+              <OkBtn />
+            </div>
+          </div>
+        )}
       >
+        {/* 셀프등록 사진 미리보기 */}
+        {editingItem?.photos && Object.keys(editingItem.photos).length > 0 && (
+          <div className="mb-4">
+            {Object.entries(editingItem.photos as Record<string, string[]>).map(([cat, urls]) =>
+              urls?.length ? (
+                <div key={cat} className="mb-3">
+                  <p className="text-xs text-gray-400 mb-1.5 font-bold uppercase">{cat}</p>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {urls.map((url: string, i: number) => (
+                      <a key={i} href={url} target="_blank" rel="noreferrer">
+                        <img src={url} alt="" className="w-28 h-20 object-cover rounded-lg border flex-shrink-0 hover:opacity-80 transition-opacity" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ) : null
+            )}
+            <div className="border-b border-gray-100 mb-4" />
+          </div>
+        )}
+
+        {/* adminMemo 표시 (셀프등록 연락처 등) */}
+        {editingItem?.adminMemo && (
+          <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-2 mb-4 text-xs text-blue-700">
+            {editingItem.adminMemo}
+          </div>
+        )}
+
         <Form form={editForm} layout="vertical" size="middle">
           {/* 상태 + 가격 미표시 */}
           <div className="flex gap-4 mb-2">
