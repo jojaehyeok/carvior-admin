@@ -176,7 +176,52 @@ const StoreList = () => {
       const values = await registerForm.validateFields();
       if (!values.priceKRW) { message.warning('판매가를 입력해주세요.'); return; }
       setRegistering(true);
+
       const imgs = inspection?.images ?? {};
+
+      // 블러 처리할 카테고리 (자동차등록증 제외)
+      const rawPhotos = {
+        exterior:      imgs.exterior      ?? [] as string[],
+        interior:      imgs.interior      ?? [] as string[],
+        engine:        imgs.engine        ?? [] as string[],
+        wheel:         imgs.wheel         ?? [] as string[],
+        undercarriage: imgs.undercarriage ?? [] as string[],
+        damage:        imgs.damage        ?? [] as string[],
+        extra:         imgs.extra         ?? [] as string[],
+        dashboard:     imgs.dashboard     ?? [] as string[],
+      };
+
+      const categoryOrder = Object.keys(rawPhotos) as (keyof typeof rawPhotos)[];
+      const allUrls = categoryOrder.flatMap(k => rawPhotos[k]);
+
+      let blurredUrls = allUrls;
+      if (allUrls.length > 0) {
+        message.loading({ content: `사진 블러 처리 중… (${allUrls.length}장)`, key: 'blur', duration: 0 });
+        try {
+          const blurRes = await fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ urls: allUrls }),
+          });
+          if (blurRes.ok) {
+            const data = await blurRes.json();
+            blurredUrls = data.urls ?? allUrls;
+          }
+        } catch {
+          console.warn('[Blur] 블러 처리 실패 — 원본 사진 사용');
+        }
+        message.destroy('blur');
+      }
+
+      // 블러 URL을 카테고리별로 재분류
+      let cursor = 0;
+      const blurredPhotos = {} as typeof rawPhotos;
+      for (const k of categoryOrder) {
+        const len = rawPhotos[k].length;
+        blurredPhotos[k] = blurredUrls.slice(cursor, cursor + len) as string[];
+        cursor += len;
+      }
+
       const body = {
         bookingId: selectedBooking.id,
         carNumber: selectedBooking.carNumber,
@@ -190,18 +235,7 @@ const StoreList = () => {
           : new Date().toISOString().split('T')[0],
         status: 'active',
         hidePrice: false,
-        photos: {
-          exterior:      imgs.exterior      ?? [],
-          interior:      imgs.interior      ?? [],
-          engine:        imgs.engine        ?? [],
-          wheel:         imgs.wheel         ?? [],
-          undercarriage: imgs.undercarriage ?? [],
-          damage:        imgs.damage        ?? [],
-          extra:         imgs.extra         ?? [],
-          dashboard:     imgs.dashboard     ?? [],
-          registration:  imgs.registration  ?? [],
-          vin:           imgs.vin           ?? [],
-        },
+        photos: blurredPhotos,
         specs: [
           { label: 'Year',         value: String(values.year) },
           { label: 'Mileage',      value: `${(values.mileage || 0).toLocaleString()} KM` },
