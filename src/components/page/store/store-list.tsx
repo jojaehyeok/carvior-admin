@@ -402,31 +402,16 @@ const StoreList = () => {
       const allUrls = categoryOrder.flatMap(k => photos[k] ?? []);
       if (!allUrls.length) { message.warning('처리할 사진이 없습니다.'); return; }
 
-      message.loading({ content: `번호판/얼굴 blur 처리 중… (${allUrls.length}장)`, key: 'blur', duration: 0 });
+      const categoryMap = categoryOrder.map(k => ({ category: k, count: (photos[k] ?? []).length }));
+
+      message.loading({ content: `번호판 blur 처리 시작… (${allUrls.length}장, 백그라운드 처리)`, key: 'blur', duration: 3 });
       const res = await fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls: allUrls }),
+        body: JSON.stringify({ urls: allUrls, storeItemId: item.id, categoryMap }),
       });
       if (!res.ok) throw new Error(`blur 응답 오류: ${res.status}`);
-      const data = await res.json();
-      const blurredUrls: string[] = data.urls ?? allUrls;
-
-      let cursor = 0;
-      const blurredPhotos: Record<string, string[]> = {};
-      for (const k of categoryOrder) {
-        const len = (photos[k] ?? []).length;
-        blurredPhotos[k] = blurredUrls.slice(cursor, cursor + len);
-        cursor += len;
-      }
-
-      await fetch(`${CAVIOR_BASE}/api/admin/store-items?id=${item.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ photos: blurredPhotos }),
-      });
-      message.success('번호판/얼굴 blur 완료');
-      fetchData();
+      message.success('블러 처리가 백그라운드에서 진행 중입니다. 1~2분 후 새로고침하세요.');
     } catch (e: any) {
       message.error(`blur 실패: ${e?.message ?? '알 수 없는 오류'}`);
     } finally {
