@@ -107,6 +107,7 @@ const StoreList = () => {
   const [editForm]  = Form.useForm();
 
   // 직접 등록 모달
+  const [blurringId,     setBlurringId]     = useState<string | null>(null);
   const [directModal,    setDirectModal]    = useState(false);
   const [directForm]  = Form.useForm();
   const [directing,      setDirecting]      = useState(false);
@@ -213,7 +214,7 @@ const StoreList = () => {
       if (allUrls.length > 0) {
         message.loading({ content: `사진 블러 처리 중… (${allUrls.length}장)`, key: 'blur', duration: 0 });
         try {
-          const blurRes = await fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
+          const blurRes = await fetch(`${CAVIOR_BASE}/api/admin/blur/photos`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ urls: allUrls }),
@@ -387,6 +388,52 @@ const StoreList = () => {
     }
   };
 
+  // ── BLUR: 번호판·얼굴 수동 블러 ──────────────────────────────────
+  const handleBlur = async (item: IStoreItem) => {
+    if (!item.photos || typeof item.photos !== 'object') {
+      message.warning('사진 데이터가 없습니다.');
+      return;
+    }
+    setBlurringId(item.id);
+    try {
+      const photos = item.photos as Record<string, string[]>;
+      const categoryOrder = Object.keys(photos);
+      const allUrls = categoryOrder.flatMap(k => photos[k] ?? []);
+      if (!allUrls.length) { message.warning('처리할 사진이 없습니다.'); return; }
+
+      message.loading({ content: `번호판/얼굴 blur 처리 중… (${allUrls.length}장)`, key: 'blur', duration: 0 });
+      const res = await fetch(`${CAVIOR_BASE}/api/admin/blur/photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls: allUrls }),
+      });
+      if (!res.ok) throw new Error(`blur 응답 오류: ${res.status}`);
+      const data = await res.json();
+      const blurredUrls: string[] = data.urls ?? allUrls;
+
+      let cursor = 0;
+      const blurredPhotos: Record<string, string[]> = {};
+      for (const k of categoryOrder) {
+        const len = (photos[k] ?? []).length;
+        blurredPhotos[k] = blurredUrls.slice(cursor, cursor + len);
+        cursor += len;
+      }
+
+      await fetch(`${CAVIOR_BASE}/api/admin/store-items?id=${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photos: blurredPhotos }),
+      });
+      message.success('번호판/얼굴 blur 완료');
+      fetchData();
+    } catch (e: any) {
+      message.error(`blur 실패: ${e?.message ?? '알 수 없는 오류'}`);
+    } finally {
+      setBlurringId(null);
+      message.destroy('blur');
+    }
+  };
+
   // ── DELETE: 등록 취소 ──────────────────────────────────────────
   const handleDelete = (id: string, title: string) => {
     Modal.confirm({
@@ -471,6 +518,13 @@ const StoreList = () => {
             onClick={() => openEditModal(item)}
           >
             수정
+          </Button>
+          <Button
+            size="small"
+            loading={blurringId === item.id}
+            onClick={() => handleBlur(item)}
+          >
+            번호판
           </Button>
           <Button
             size="small"
