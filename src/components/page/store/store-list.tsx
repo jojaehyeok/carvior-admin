@@ -217,7 +217,7 @@ const StoreList = () => {
       if (allUrls.length > 0) {
         message.loading({ content: `사진 블러 처리 중… (${allUrls.length}장)`, key: 'blur', duration: 0 });
         try {
-          const blurRes = await fetch(`${CAVIOR_BASE}/api/admin/blur/photos`, {
+          const blurRes = await fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ urls: allUrls }),
@@ -405,7 +405,7 @@ const StoreList = () => {
       if (!allUrls.length) { message.warning('처리할 사진이 없습니다.'); return; }
 
       message.loading({ content: `번호판/얼굴 blur 처리 중… (${allUrls.length}장)`, key: 'blur', duration: 0 });
-      const res = await fetch(`${CAVIOR_BASE}/api/admin/blur/photos`, {
+      const res = await fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ urls: allUrls }),
