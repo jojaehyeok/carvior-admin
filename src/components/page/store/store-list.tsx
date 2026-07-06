@@ -106,6 +106,14 @@ const StoreList = () => {
   const [updating,     setUpdating]     = useState(false);
   const [editForm]  = Form.useForm();
 
+  // 직접 등록 모달
+  const [directModal,    setDirectModal]    = useState(false);
+  const [directForm]  = Form.useForm();
+  const [directing,      setDirecting]      = useState(false);
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({
+    exterior: '', interior: '', engine: '', extra: '',
+  });
+
   // ── fetch ──────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -320,6 +328,65 @@ const StoreList = () => {
     }
   };
 
+  // ── DIRECT CREATE: 직접 등록 ──────────────────────────────────
+  const handleDirectRegister = async () => {
+    try {
+      const values = await directForm.validateFields();
+      if (!values.priceKRW) { message.warning('판매가를 입력해주세요.'); return; }
+      setDirecting(true);
+
+      // 사진 URL 파싱 (줄바꿈 or 쉼표 구분)
+      const parseUrls = (raw: string) =>
+        raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+
+      const photos: Record<string, string[]> = {};
+      for (const [cat, raw] of Object.entries(photoUrls)) {
+        const urls = parseUrls(raw);
+        if (urls.length) photos[cat] = urls;
+      }
+
+      const body = {
+        bookingId: Date.now(),
+        carNumber: values.carNumber ?? '',
+        ...values,
+        priceUSD: Math.round(values.priceKRW / EXCHANGE_RATE),
+        hasReport: values.hasReport ?? false,
+        location: 'Korea',
+        doors: 5, seats: 5,
+        inspectedAt: new Date().toISOString().split('T')[0],
+        status: 'active',
+        hidePrice: false,
+        photos,
+        specs: [
+          { label: 'Year',         value: String(values.year ?? '') },
+          { label: 'Mileage',      value: values.mileage ? `${Number(values.mileage).toLocaleString()} KM` : '' },
+          { label: 'Fuel',         value: values.fuel ?? '' },
+          { label: 'Transmission', value: values.transmission ?? '' },
+          { label: 'Color',        value: values.colorKo ?? '' },
+          { label: 'Displacement', value: values.displacement ?? '' },
+        ].filter(s => s.value),
+        options: [],
+      };
+
+      const res = await fetch(`${CAVIOR_BASE}/api/admin/store-items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { const err = await res.json(); message.error(err.error ?? '등록 실패'); return; }
+      message.success('직접 등록 완료! 스토어에 노출됩니다.');
+      setDirectModal(false);
+      directForm.resetFields();
+      setPhotoUrls({ exterior: '', interior: '', engine: '', extra: '' });
+      fetchData();
+    } catch (e: any) {
+      if (e?.errorFields) return;
+      message.error('등록 중 오류 발생');
+    } finally {
+      setDirecting(false);
+    }
+  };
+
   // ── DELETE: 등록 취소 ──────────────────────────────────────────
   const handleDelete = (id: string, title: string) => {
     Modal.confirm({
@@ -521,7 +588,21 @@ const StoreList = () => {
             style={{ width: 220 }}
           />
         </div>
-        <Button icon={<RefreshCw size={14} />} onClick={fetchData} loading={loading}>새로고침</Button>
+        <div className="flex gap-2">
+          <Button
+            type="primary"
+            style={{ background: '#7c3aed' }}
+            onClick={() => {
+              directForm.resetFields();
+              directForm.setFieldsValue({ fuel: '가솔린', transmission: '자동', category: 'SUV', region: '서울' });
+              setPhotoUrls({ exterior: '', interior: '', engine: '', extra: '' });
+              setDirectModal(true);
+            }}
+          >
+            + 직접 등록
+          </Button>
+          <Button icon={<RefreshCw size={14} />} onClick={fetchData} loading={loading}>새로고침</Button>
+        </div>
       </DefaultTableBtn>
 
       {activeTab === 'unregistered' ? (
@@ -690,6 +771,91 @@ const StoreList = () => {
           </div>
           <div className="border-b border-gray-100 mb-4" />
           <ItemFormFields />
+        </Form>
+      </Modal>
+      {/* ── 직접 등록 모달 ── */}
+      <Modal
+        title="직접 등록 — S3 사진 URL 붙여넣기"
+        open={directModal}
+        onOk={handleDirectRegister}
+        onCancel={() => setDirectModal(false)}
+        confirmLoading={directing}
+        okText="스토어에 등록"
+        cancelText="취소"
+        width={740}
+      >
+        <Form form={directForm} layout="vertical" size="middle">
+          <div className="grid grid-cols-2 gap-x-4">
+            <Form.Item label="차량번호" name="carNumber">
+              <Input placeholder="예: 12가3456" />
+            </Form.Item>
+            <Form.Item label="차량명 (한국어)" name="titleKo" rules={[{ required: true }]}>
+              <Input placeholder="예: 기아 더 뉴 쏘렌토" />
+            </Form.Item>
+            <Form.Item label="차량명 (영어)" name="titleEn">
+              <Input placeholder="예: Kia Sorento" />
+            </Form.Item>
+            <Form.Item label="트림" name="trim">
+              <Input placeholder="예: Noblesse" />
+            </Form.Item>
+            <Form.Item label="연식" name="year">
+              <InputNumber className="w-full" placeholder="2024" />
+            </Form.Item>
+            <Form.Item label="주행거리 (km)" name="mileage">
+              <InputNumber className="w-full" formatter={v => v ? `${Number(v).toLocaleString()}` : ''} />
+            </Form.Item>
+            <Form.Item label="연료" name="fuel">
+              <Select options={FUEL_OPTIONS.map(o => ({ value: o, label: o }))} />
+            </Form.Item>
+            <Form.Item label="변속기" name="transmission">
+              <Select options={TRANS_OPTIONS.map(o => ({ value: o, label: o }))} />
+            </Form.Item>
+            <Form.Item label="배기량" name="displacement">
+              <Input placeholder="예: 2,497cc" />
+            </Form.Item>
+            <Form.Item label="색상" name="colorKo">
+              <Input placeholder="예: 스노우 화이트 펄" />
+            </Form.Item>
+            <Form.Item label="카테고리" name="category">
+              <Select options={CATEGORY_OPTIONS.map(o => ({ value: o, label: o }))} />
+            </Form.Item>
+            <Form.Item label="지역" name="region">
+              <Input placeholder="예: 경기도" />
+            </Form.Item>
+            <Form.Item label="판매가 (원)" name="priceKRW" rules={[{ required: true }]} className="col-span-2">
+              <InputNumber
+                className="w-full"
+                placeholder="예: 36900000"
+                formatter={v => v ? `${Number(v).toLocaleString()}` : ''}
+              />
+            </Form.Item>
+            <Form.Item label="어드민 메모" name="adminMemo" className="col-span-2">
+              <Input.TextArea rows={2} placeholder="내부 참고 메모" />
+            </Form.Item>
+          </div>
+
+          <div className="border-t border-gray-100 pt-4 mt-2">
+            <p className="text-xs font-bold text-gray-500 mb-3">📷 S3 사진 URL (줄바꿈 또는 쉼표로 여러 장 입력)</p>
+            <div className="space-y-3">
+              {[
+                { key: 'exterior', label: '외관 사진 🚗' },
+                { key: 'interior', label: '내관 사진 💺' },
+                { key: 'engine',   label: '엔진 사진 🔧' },
+                { key: 'extra',    label: '기타 사진 📷' },
+              ].map(({ key, label }) => (
+                <div key={key}>
+                  <p className="text-xs text-gray-400 mb-1">{label}</p>
+                  <Input.TextArea
+                    rows={2}
+                    placeholder={`https://carvior-bucket.s3.ap-northeast-2.amazonaws.com/...`}
+                    value={photoUrls[key]}
+                    onChange={e => setPhotoUrls(prev => ({ ...prev, [key]: e.target.value }))}
+                    className="font-mono text-xs"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
         </Form>
       </Modal>
     </div>
