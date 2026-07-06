@@ -2,7 +2,7 @@
 
 import DefaultTable from "@/components/shared/ui/default-table";
 import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
-import { Button, Checkbox, Drawer, Form, Input, InputNumber, message, Modal, Select, Statistic, Tag } from "antd";
+import { Button, Checkbox, Form, Input, InputNumber, message, Modal, Select, Statistic, Tag } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { Edit, Eye, RefreshCw, Trash2 } from "lucide-react";
@@ -106,8 +106,6 @@ const StoreList = () => {
   const [updating,     setUpdating]     = useState(false);
   const [editForm]  = Form.useForm();
 
-  // 보기 Drawer
-  const [previewUrl,     setPreviewUrl]     = useState<string | null>(null);
 
   // 직접 등록 모달
   const [blurringId,     setBlurringId]     = useState<string | null>(null);
@@ -511,7 +509,7 @@ const StoreList = () => {
           <Button
             size="small"
             icon={<Eye size={13} />}
-            onClick={() => setPreviewUrl(`https://carvior.store/buy/${item.id}`)}
+            onClick={() => window.open(`https://carvior.store/buy/${item.id}`, 'preview', 'width=1200,height=850,scrollbars=yes,resizable=yes')}
           >
             보기
           </Button>
@@ -916,22 +914,6 @@ const StoreList = () => {
         </Form>
       </Modal>
 
-      {/* ── 보기 Drawer ── */}
-      <Drawer
-        title={previewUrl ? `매물 상세 — ${previewUrl.split('/').pop()}` : ''}
-        open={!!previewUrl}
-        onClose={() => setPreviewUrl(null)}
-        width="min(900px, 95vw)"
-        styles={{ body: { padding: 0 } }}
-      >
-        {previewUrl && (
-          <iframe
-            src={previewUrl}
-            style={{ width: '100%', height: '100%', border: 'none' }}
-            title="매물 상세"
-          />
-        )}
-      </Drawer>
     </div>
   );
 };
