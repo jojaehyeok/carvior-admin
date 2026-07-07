@@ -1,5 +1,5 @@
 import { getDefaultLayout, IDefaultLayoutPage, IPageHeader } from "@/components/layout/default-layout";
-import { Alert, Card, Input, Select, Skeleton, Table, Tag } from "antd";
+import { Alert, Card, Input, Skeleton, Table, Tag } from "antd";
 import { useEffect, useState } from "react";
 
 const CLASSIFY_API = "https://carvior.store/classify-api";
@@ -48,8 +48,11 @@ const ExportModelsPage: IDefaultLayoutPage = () => {
     if (country) params.append("country", country);
 
     fetch(`${CLASSIFY_API}/export/cars?${params}`)
-      .then(r => r.json())
-      .then(d => { setData(d); setError(false); })
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(d => {
+        if (d && Array.isArray(d.cars)) { setData(d); setError(false); }
+        else setError(true);
+      })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   };

@@ -22,8 +22,8 @@ const ExportUploadPage: IDefaultLayoutPage = () => {
 
   const fetchUploads = () => {
     fetch(`${CLASSIFY_API}/export/uploads`)
-      .then(r => r.json())
-      .then(setUploads)
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(d => { if (Array.isArray(d)) setUploads(d); })
       .catch(() => {});
   };
 

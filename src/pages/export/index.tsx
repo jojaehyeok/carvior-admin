@@ -25,8 +25,11 @@ const ExportDashboard: IDefaultLayoutPage = () => {
 
   useEffect(() => {
     fetch(`${CLASSIFY_API}/export/stats`)
-      .then(r => r.json())
-      .then(setStats)
+      .then(r => { if (!r.ok) throw new Error("not ok"); return r.json(); })
+      .then(d => {
+        if (d && typeof d.total_cars === "number") setStats(d);
+        else setError(true);
+      })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, []);

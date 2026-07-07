@@ -21,8 +21,8 @@ const ExportSettingsPage: IDefaultLayoutPage = () => {
 
   useEffect(() => {
     fetch(`${CLASSIFY_API}/export/settings`)
-      .then(r => r.json())
-      .then(setSettings)
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(d => { if (d && d.usd_rate !== undefined) setSettings(d); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
