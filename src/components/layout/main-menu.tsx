@@ -1,5 +1,5 @@
 import { Divider } from "antd";
-import { Home, MessageCircle, Monitor, Package2, ShoppingBag, Star } from "lucide-react";
+import { BarChart2, Home, MessageCircle, Monitor, Package2, ShoppingBag, Star } from "lucide-react";
 import { useSession } from "next-auth/react";
 import React from "react";
 import Menu, { IMenu } from "./nav";
@@ -51,6 +51,18 @@ const superAdminMenuData: IMenu[] = [
     name: "CS / 리뷰",
     icon: <Star className="w-5 h-5" />,
     link: { path: "/sample/product/ReviewListPage" },
+  },
+  {
+    id: "export",
+    name: "수출 분석",
+    icon: <BarChart2 className="w-5 h-5" />,
+    submenu: [
+      { id: "exportDashboard", name: "수출 대시보드", link: { path: "/export" } },
+      { id: "exportUpload", name: "데이터 업로드", link: { path: "/export/upload" } },
+      { id: "exportModels", name: "차량 데이터", link: { path: "/export/models" } },
+      { id: "exportSimulator", name: "매입가 시뮬레이터", link: { path: "/export/simulator" } },
+      { id: "exportSettings", name: "설정", link: { path: "/export/settings" } },
+    ],
   },
 ];
 
