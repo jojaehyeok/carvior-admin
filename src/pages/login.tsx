@@ -14,7 +14,7 @@ const LoginPage = () => {
 
         {/* 상단 로고 */}
         <div className="absolute top-10 left-10 flex items-center gap-2">
-          <img src="/logo.svg" style={{ height: '44px', width: 'auto' }} alt="chavata logo" />
+          <img src="/logo.png" style={{ height: '44px', width: 'auto' }} alt="chavata logo" />
           <span className="text-white text-2xl font-black tracking-tighter">차바타</span>
         </div>
 
@@ -67,7 +67,7 @@ const LoginPage = () => {
             {/* 로그인 헤더 */}
             <div className="flex flex-col items-center justify-center px-2 mt-8 sm:mt-0 mb-10">
               <div className="lg:hidden mb-6">
-                <img src="/logo.svg" style={{ height: '40px', width: 'auto' }} alt="logo" />
+                <img src="/logo.png" style={{ height: '40px', width: 'auto' }} alt="logo" />
               </div>
               <h2 className="text-4xl font-black leading-tight inter tracking-tighter text-blue-600">
                 CHAVATA
