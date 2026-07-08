@@ -31,7 +31,9 @@ export default class MyDocument extends Document {
   render() {
     return (
       <Html lang="ko">
-        <Head />
+        <Head>
+            <link rel="icon" type="image/png" href="/logo.png" />
+          </Head>
         <body>
           <Main />
           <NextScript />
