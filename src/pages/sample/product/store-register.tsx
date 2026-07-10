@@ -47,6 +47,7 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
   const [photoOrder, setPhotoOrder] = useState<Record<string, string[]>>({});
   const [blurring, setBlurring] = useState<Record<string, boolean>>({});
   const [lightbox, setLightbox] = useState<Lightbox | null>(null);
+  const [ocrInfo, setOcrInfo] = useState<{ vin?: string; ownerName?: string }>({});
 
   // drag state — ref so no re-render
   const dragSrc = useRef<{ cat: string; idx: number } | null>(null);
@@ -108,29 +109,19 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
     dragSrc.current = null;
   }, []);
 
-  // ── 카테고리 블러 ──────────────────────────────────────────────
-  const handleBlurCategory = useCallback(async (cat: string) => {
+  // ── 카테고리 블러 (서버가 setImmediate로 백그라운드 처리 → fire-and-forget) ──
+  const handleBlurCategory = useCallback((cat: string) => {
     const urls = photoOrder[cat] ?? [];
     if (!urls.length) return;
     setBlurring(prev => ({ ...prev, [cat]: true }));
-    try {
-      const res = await fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPhotoOrder(prev => ({ ...prev, [cat]: data.urls ?? urls }));
-        message.success(`${CAT_LABEL[cat] ?? cat} 블러 처리 완료`);
-      } else {
-        message.error('블러 처리 실패');
-      }
-    } catch {
-      message.error('블러 오류');
-    } finally {
-      setBlurring(prev => ({ ...prev, [cat]: false }));
-    }
+    fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ urls }),
+    })
+      .then(() => message.success(`${CAT_LABEL[cat] ?? cat} 블러 처리 요청 완료 (백그라운드)`))
+      .catch(() => message.error('블러 요청 실패'))
+      .finally(() => setBlurring(prev => ({ ...prev, [cat]: false })));
   }, [photoOrder]);
 
   // ── OCR ────────────────────────────────────────────────────────
@@ -164,12 +155,18 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
         };
         form.setFieldsValue({
           ...(data.carName      && { titleKo: data.carName }),
+          ...(data.carBrand     && { maker: data.carBrand }),
           ...(data.modelYear    && { year: Number(data.modelYear) }),
           ...(data.displacement && { displacement: data.displacement }),
           ...(data.mileage      && { mileage: Number(data.mileage) }),
-          ...(data.color        && { colorKo: data.color }),
           ...(data.fuelType && fuelMap[data.fuelType] && { fuel: fuelMap[data.fuelType] }),
         });
+        // VIN, 소유자는 읽기 전용 표시용으로만
+        setOcrInfo(prev => ({
+          ...prev,
+          ...(data.vin       && { vin: data.vin }),
+          ...(data.ownerName && { ownerName: data.ownerName }),
+        }));
         message.success('자동차등록증 OCR 자동입력 완료');
       } else {
         if (data.mileage) {
@@ -193,30 +190,17 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
       if (!values.priceKRW) { message.warning('판매가를 입력해주세요.'); return; }
       setRegistering(true);
 
+      // 블러: 서버 백그라운드 처리 (S3 동일 키 덮어씀) — fire-and-forget
       const allUrls = Object.values(photoOrder).flat();
-      let blurredUrls = allUrls;
       if (allUrls.length > 0) {
-        message.loading({ content: `블러 처리 중… (${allUrls.length}장)`, key: 'blur', duration: 0 });
-        try {
-          const blurRes = await fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ urls: allUrls }),
-          });
-          if (blurRes.ok) {
-            const bd = await blurRes.json();
-            blurredUrls = bd.urls ?? allUrls;
-          }
-        } catch { /* 원본 사용 */ }
-        message.destroy('blur');
+        fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls: allUrls }),
+        }).catch(() => {});
       }
 
-      let cursor = 0;
-      const blurredPhotos: Record<string, string[]> = {};
-      for (const [k, arr] of Object.entries(photoOrder)) {
-        blurredPhotos[k] = blurredUrls.slice(cursor, cursor + arr.length);
-        cursor += arr.length;
-      }
+      const blurredPhotos = { ...photoOrder };
 
       const body = {
         bookingId: booking!.id,
@@ -233,11 +217,11 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
         hidePrice: false,
         photos: blurredPhotos,
         specs: [
+          { label: 'Brand',        value: values.maker || '' },
           { label: 'Year',         value: String(values.year) },
           { label: 'Mileage',      value: `${(values.mileage || 0).toLocaleString()} KM` },
           { label: 'Fuel',         value: values.fuel },
           { label: 'Transmission', value: values.transmission },
-          { label: 'Color',        value: values.colorKo || values.color || '' },
           { label: 'Displacement', value: values.displacement || '' },
         ].filter(s => s.value),
         options: [],
@@ -441,13 +425,31 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
 
         {/* ── 오른쪽: 폼 ── */}
         <div className="flex-1 bg-white rounded-xl border border-gray-100 p-5 sticky top-4">
+          {/* 읽기 전용 차량 정보 */}
+          <div className="mb-4 bg-gray-50 rounded-lg px-3 py-2.5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+            <div>
+              <span className="text-gray-400">차량번호</span>
+              <p className="font-mono font-bold text-gray-800">{booking.carNumber}</p>
+            </div>
+            <div>
+              <span className="text-gray-400">소유자</span>
+              <p className="font-bold text-gray-800">{ocrInfo.ownerName ?? booking.carOwner ?? '—'}</p>
+            </div>
+            {ocrInfo.vin && (
+              <div className="col-span-2">
+                <span className="text-gray-400">차대번호 (VIN)</span>
+                <p className="font-mono text-[11px] text-gray-700 break-all">{ocrInfo.vin}</p>
+              </div>
+            )}
+          </div>
+
           <Form form={form} layout="vertical" size="middle">
             <div className="grid grid-cols-2 gap-x-4">
               <Form.Item label="차량명 (한국어)" name="titleKo" rules={[{ required: true }]} className="col-span-2">
                 <Input placeholder="예: 기아 더 뉴 쏘렌토" />
               </Form.Item>
-              <Form.Item label="차량명 (영어)" name="titleEn">
-                <Input placeholder="예: Kia Sorento" />
+              <Form.Item label="브랜드" name="maker">
+                <Input placeholder="예: Audi" />
               </Form.Item>
               <Form.Item label="트림" name="trim">
                 <Input placeholder="예: Noblesse" />
@@ -459,16 +461,13 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
                 <InputNumber className="w-full" formatter={v => v ? `${Number(v).toLocaleString()}` : ''} />
               </Form.Item>
               <Form.Item label="배기량" name="displacement">
-                <Input placeholder="예: 2,497cc" />
+                <Input placeholder="예: 1968cc" />
               </Form.Item>
               <Form.Item label="연료" name="fuel">
                 <Select options={FUEL_OPTIONS.map(o => ({ value: o, label: o }))} />
               </Form.Item>
               <Form.Item label="변속기" name="transmission">
                 <Select options={TRANS_OPTIONS.map(o => ({ value: o, label: o }))} />
-              </Form.Item>
-              <Form.Item label="색상 (한국어)" name="colorKo">
-                <Input placeholder="예: 스노우 화이트 펄" />
               </Form.Item>
               <Form.Item label="카테고리" name="category">
                 <Select options={CATEGORY_OPTIONS.map(o => ({ value: o, label: o }))} />
