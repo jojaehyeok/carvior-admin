@@ -6,6 +6,7 @@ import { Button, Checkbox, Form, Input, InputNumber, message, Modal, Select, Sta
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { Edit, Eye, RefreshCw, Trash2 } from "lucide-react";
+import { useRouter } from "next/router";
 import React, { useCallback, useEffect, useState } from "react";
 
 const CAVIOR_BASE = (process.env.NEXT_PUBLIC_API_ENDPOINT || 'https://carvior.store/api/v1').replace('/api/v1', '');
@@ -48,25 +49,6 @@ interface IStoreItem {
   photos?: Record<string, string[]>;
 }
 
-interface IInspection {
-  carModel?: string;
-  mileage?: number;
-  color?: string;
-  images?: {
-    exterior?: string[];
-    interior?: string[];
-    engine?: string[];
-    wheel?: string[];
-    undercarriage?: string[];
-    damage?: string[];
-    extra?: string[];
-    dashboard?: string[];
-    registration?: string[];
-    vin?: string[];
-  };
-  inspectionDetails?: { warningDesc?: string; leakDesc?: string; optionsDesc?: string; driveDesc?: string };
-  completedAt?: string;
-}
 
 const EXCHANGE_RATE = 1350;
 const FUEL_OPTIONS = ['가솔린', '디젤', '하이브리드', 'LPG', '전기'];
@@ -86,30 +68,18 @@ function fmtKRW(n: number) {
 }
 
 const StoreList = () => {
+  const router = useRouter();
   const [bookings,    setBookings]    = useState<IBooking[]>([]);
   const [storeItems,  setStoreItems]  = useState<IStoreItem[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [activeTab,   setActiveTab]   = useState<'unregistered' | 'registered' | 'selfregister'>('unregistered');
   const [search,      setSearch]      = useState('');
 
-  // 등록 모달
-  const [registerModal,    setRegisterModal]    = useState(false);
-  const [selectedBooking,  setSelectedBooking]  = useState<IBooking | null>(null);
-  const [inspection,       setInspection]       = useState<IInspection | null>(null);
-  const [loadingInspection, setLoadingInspection] = useState(false);
-  const [registering,      setRegistering]      = useState(false);
-  const [registerForm]  = Form.useForm();
-
   // 수정 모달
   const [editModal,    setEditModal]    = useState(false);
   const [editingItem,  setEditingItem]  = useState<IStoreItem | null>(null);
   const [updating,     setUpdating]     = useState(false);
   const [editForm]  = Form.useForm();
-
-
-  // 등록 모달 — 사진 순서 편집 & OCR
-  const [photoOrder, setPhotoOrder] = useState<Record<string, string[]>>({});
-  const [ocrLoading, setOcrLoading] = useState(false);
 
   // 직접 등록 모달
   const [blurringId,     setBlurringId]     = useState<string | null>(null);
@@ -158,194 +128,6 @@ const StoreList = () => {
     }
     return true;
   });
-
-  // ── CREATE: 등록 ───────────────────────────────────────────────
-  const PUBLIC_CATS = ['exterior','interior','engine','wheel','undercarriage','damage','extra','dashboard'] as const;
-
-  const openRegisterModal = async (booking: IBooking) => {
-    setSelectedBooking(booking);
-    setInspection(null);
-    setPhotoOrder({});
-    registerForm.resetFields();
-    registerForm.setFieldsValue({
-      titleKo: booking.carModel ?? '',
-      year: new Date().getFullYear(),
-      fuel: '가솔린',
-      transmission: '자동',
-      category: 'SUV',
-      region: booking.address?.split(' ')[0] ?? '',
-    });
-    setRegisterModal(true);
-    setLoadingInspection(true);
-    try {
-      const res = await fetch(`${CAVIOR_BASE}/api/admin/inspection?bookingId=${booking.id}`);
-      if (res.ok) {
-        const data: IInspection = await res.json();
-        setInspection(data);
-        registerForm.setFieldsValue({
-          titleKo: data.carModel ?? booking.carModel ?? '',
-          mileage: data.mileage,
-          color:   data.color,
-          colorKo: data.color,
-        });
-        // 공개 카테고리 사진만 순서 편집 대상으로 초기화 (등록증·차대번호 제외)
-        const imgs = data.images ?? {};
-        const order: Record<string, string[]> = {};
-        for (const cat of PUBLIC_CATS) {
-          const arr = (imgs as any)[cat];
-          if (arr?.length) order[cat] = [...arr];
-        }
-        setPhotoOrder(order);
-      }
-    } finally {
-      setLoadingInspection(false);
-    }
-  };
-
-  // 사진 순서 이동
-  const movePhoto = (cat: string, idx: number, dir: -1 | 1) => {
-    setPhotoOrder(prev => {
-      const arr = [...(prev[cat] ?? [])];
-      const to = idx + dir;
-      if (to < 0 || to >= arr.length) return prev;
-      [arr[idx], arr[to]] = [arr[to], arr[idx]];
-      return { ...prev, [cat]: arr };
-    });
-  };
-
-  // 사진 제외
-  const removePhoto = (cat: string, idx: number) => {
-    setPhotoOrder(prev => ({
-      ...prev,
-      [cat]: (prev[cat] ?? []).filter((_, i) => i !== idx),
-    }));
-  };
-
-  // OCR 자동 입력
-  const handleOcrFill = async () => {
-    const regPhotos = inspection?.images?.registration;
-    if (!regPhotos?.length) { message.warning('자동차등록증 사진이 없습니다.'); return; }
-    setOcrLoading(true);
-    try {
-      const res = await fetch(`${CAVIOR_BASE}/api/v1/external/ocr/registration`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: regPhotos[0] }),
-      });
-      if (!res.ok) { message.error('OCR 실패'); return; }
-      const data = await res.json();
-      const fuelMap: Record<string, string> = {
-        '가솔린': '가솔린', 'gasoline': '가솔린',
-        '디젤': '디젤', 'diesel': '디젤',
-        '하이브리드': '하이브리드', 'hybrid': '하이브리드',
-        'LPG': 'LPG', 'lpg': 'LPG', '전기': '전기', 'electric': '전기',
-      };
-      registerForm.setFieldsValue({
-        ...(data.carName      && { titleKo: data.carName }),
-        ...(data.modelYear    && { year: Number(data.modelYear) }),
-        ...(data.displacement && { displacement: data.displacement }),
-        ...(data.mileage      && { mileage: Number(data.mileage) }),
-        ...(data.color        && { colorKo: data.color }),
-        ...(data.fuelType     && fuelMap[data.fuelType] && { fuel: fuelMap[data.fuelType] }),
-      });
-      message.success('자동차등록증 OCR 자동입력 완료');
-    } catch {
-      message.error('OCR 오류 발생');
-    } finally {
-      setOcrLoading(false);
-    }
-  };
-
-  const handleRegister = async () => {
-    if (!selectedBooking) return;
-    try {
-      const values = await registerForm.validateFields();
-      if (!values.priceKRW) { message.warning('판매가를 입력해주세요.'); return; }
-      setRegistering(true);
-
-      // 관리자가 편집한 사진 순서 사용 (자동차등록증·차대번호 카테고리 제외)
-      const rawPhotos = {
-        exterior:      photoOrder.exterior      ?? [] as string[],
-        interior:      photoOrder.interior      ?? [] as string[],
-        engine:        photoOrder.engine        ?? [] as string[],
-        wheel:         photoOrder.wheel         ?? [] as string[],
-        undercarriage: photoOrder.undercarriage ?? [] as string[],
-        damage:        photoOrder.damage        ?? [] as string[],
-        extra:         photoOrder.extra         ?? [] as string[],
-        dashboard:     photoOrder.dashboard     ?? [] as string[],
-      };
-
-      const categoryOrder = Object.keys(rawPhotos) as (keyof typeof rawPhotos)[];
-      const allUrls = categoryOrder.flatMap(k => rawPhotos[k]);
-
-      let blurredUrls = allUrls;
-      if (allUrls.length > 0) {
-        message.loading({ content: `사진 블러 처리 중… (${allUrls.length}장)`, key: 'blur', duration: 0 });
-        try {
-          const blurRes = await fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ urls: allUrls }),
-          });
-          if (blurRes.ok) {
-            const data = await blurRes.json();
-            blurredUrls = data.urls ?? allUrls;
-          }
-        } catch {
-          console.warn('[Blur] 블러 처리 실패 — 원본 사진 사용');
-        }
-        message.destroy('blur');
-      }
-
-      // 블러 URL을 카테고리별로 재분류
-      let cursor = 0;
-      const blurredPhotos = {} as typeof rawPhotos;
-      for (const k of categoryOrder) {
-        const len = rawPhotos[k].length;
-        blurredPhotos[k] = blurredUrls.slice(cursor, cursor + len) as string[];
-        cursor += len;
-      }
-
-      const body = {
-        bookingId: selectedBooking.id,
-        carNumber: selectedBooking.carNumber,
-        ...values,
-        priceUSD: Math.round(values.priceKRW / EXCHANGE_RATE),
-        hasReport: true,
-        location: 'Korea',
-        doors: 5, seats: 5,
-        inspectedAt: inspection?.completedAt
-          ? new Date(inspection.completedAt).toISOString().split('T')[0]
-          : new Date().toISOString().split('T')[0],
-        status: 'active',
-        hidePrice: false,
-        photos: blurredPhotos,
-        specs: [
-          { label: 'Year',         value: String(values.year) },
-          { label: 'Mileage',      value: `${(values.mileage || 0).toLocaleString()} KM` },
-          { label: 'Fuel',         value: values.fuel },
-          { label: 'Transmission', value: values.transmission },
-          { label: 'Color',        value: values.colorKo || values.color || '' },
-          { label: 'Displacement', value: values.displacement || '' },
-        ].filter(s => s.value),
-        options: [],
-      };
-      const res = await fetch(`${CAVIOR_BASE}/api/admin/store-items`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) { const err = await res.json(); message.error(err.error ?? '등록 실패'); return; }
-      message.success('스토어에 등록되었습니다.');
-      setRegisterModal(false);
-      fetchData();
-    } catch (e: any) {
-      if (e?.errorFields) return;
-      message.error('등록 중 오류 발생');
-    } finally {
-      setRegistering(false);
-    }
-  };
 
   // ── UPDATE: 수정 ───────────────────────────────────────────────
   const openEditModal = (item: IStoreItem) => {
@@ -522,7 +304,11 @@ const StoreList = () => {
     {
       title: '액션', key: 'action', align: 'right',
       render: (_: any, record: IBooking) => (
-        <Button type="primary" size="small" onClick={() => openRegisterModal(record)}>
+        <Button
+          type="primary"
+          size="small"
+          onClick={() => router.push(`/sample/product/store-register?bookingId=${record.id}`)}
+        >
           스토어 등록
         </Button>
       ),
@@ -734,119 +520,6 @@ const StoreList = () => {
           rowKey="id"
         />
       )}
-
-      {/* ── 등록 모달 (CREATE) ── */}
-      <Modal
-        title={`스토어 등록 — ${selectedBooking?.carNumber}`}
-        open={registerModal}
-        onOk={handleRegister}
-        onCancel={() => setRegisterModal(false)}
-        confirmLoading={registering}
-        okText="스토어에 등록"
-        cancelText="취소"
-        width={820}
-      >
-        {loadingInspection ? (
-          <p className="text-center py-6 text-gray-400">진단 데이터 불러오는 중…</p>
-        ) : (
-          <>
-            {/* ① 개인정보 사진 확인 */}
-            {(() => {
-              const privacyPhotos = [
-                ...(inspection?.images?.registration ?? []).map(u => ({ url: u, cat: '자동차등록증' })),
-                ...(inspection?.images?.vin ?? []).map(u => ({ url: u, cat: '차대번호' })),
-              ];
-              return privacyPhotos.length > 0 ? (
-                <div className="mb-4 bg-red-50 border border-red-200 rounded-xl p-3">
-                  <p className="text-xs font-bold text-red-600 mb-2">⚠️ 개인정보 포함 사진 — 스토어 미노출 (참고용)</p>
-                  <div className="flex gap-2 overflow-x-auto pb-1">
-                    {privacyPhotos.map(({ url, cat }, i) => (
-                      <a key={i} href={url} target="_blank" rel="noreferrer" className="flex-shrink-0">
-                        <div className="relative">
-                          <img src={url} alt="" className="w-24 h-16 object-cover rounded-lg border border-red-200" />
-                          <span className="absolute bottom-0.5 left-0.5 text-[9px] bg-red-600 text-white px-1 rounded">{cat}</span>
-                        </div>
-                      </a>
-                    ))}
-                  </div>
-                  {inspection?.images?.registration?.[0] && (
-                    <button
-                      onClick={handleOcrFill}
-                      disabled={ocrLoading}
-                      className="mt-2 text-xs font-bold px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50 transition-colors"
-                    >
-                      {ocrLoading ? '인식 중…' : '📄 자동차등록증 OCR 자동입력'}
-                    </button>
-                  )}
-                </div>
-              ) : null;
-            })()}
-
-            {/* ② 공개 사진 순서 편집 */}
-            {Object.keys(photoOrder).length > 0 && (
-              <div className="mb-4">
-                <p className="text-xs font-bold text-gray-500 mb-2">📷 사진 순서 편집 (드래그 대신 ◀▶ 클릭, ✕ 제외)</p>
-                <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-                  {PUBLIC_CATS.filter(cat => (photoOrder[cat] ?? []).length > 0).map(cat => (
-                    <div key={cat}>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">{cat} ({photoOrder[cat]?.length}장)</p>
-                      <div className="flex gap-1.5 overflow-x-auto pb-1">
-                        {(photoOrder[cat] ?? []).map((url, i) => (
-                          <div key={i} className="relative flex-shrink-0 group">
-                            <a href={url} target="_blank" rel="noreferrer">
-                              <img src={url} alt="" className="w-20 h-14 object-cover rounded-lg border" />
-                            </a>
-                            {i === 0 && (
-                              <span className="absolute top-0.5 left-0.5 text-[8px] bg-green-600 text-white px-1 rounded">대표</span>
-                            )}
-                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded-lg transition-colors flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100">
-                              <button
-                                onClick={() => movePhoto(cat, i, -1)}
-                                disabled={i === 0}
-                                className="text-white text-xs bg-black/50 px-1 rounded disabled:opacity-30"
-                              >◀</button>
-                              <button
-                                onClick={() => removePhoto(cat, i)}
-                                className="text-white text-xs bg-red-600/80 px-1 rounded"
-                              >✕</button>
-                              <button
-                                onClick={() => movePhoto(cat, i, 1)}
-                                disabled={i === (photoOrder[cat]?.length ?? 0) - 1}
-                                className="text-white text-xs bg-black/50 px-1 rounded disabled:opacity-30"
-                              >▶</button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="border-t border-gray-100 pt-4">
-              <Form form={registerForm} layout="vertical" size="middle">
-                <ItemFormFields />
-                {inspection?.inspectionDetails && (
-                  <div className="bg-gray-50 rounded-lg p-4 mt-2 grid grid-cols-2 gap-3 text-sm">
-                    {Object.entries({
-                      '경고등': inspection.inspectionDetails.warningDesc,
-                      '누유':   inspection.inspectionDetails.leakDesc,
-                      '옵션':   inspection.inspectionDetails.optionsDesc,
-                      '주행':   inspection.inspectionDetails.driveDesc,
-                    }).filter(([, v]) => v).map(([k, v]) => (
-                      <div key={k}>
-                        <span className="text-gray-400 text-xs">{k}</span>
-                        <p className="text-gray-700 mt-0.5 text-xs line-clamp-2">{v}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Form>
-            </div>
-          </>
-        )}
-      </Modal>
 
       {/* ── 수정 모달 (UPDATE) ── */}
       <Modal
