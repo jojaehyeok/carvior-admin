@@ -1,22 +1,21 @@
 'use client';
 
 import { getDefaultLayout, IDefaultLayoutPage, IPageHeader } from "@/components/layout/default-layout";
-import {
-  Button, Checkbox, Form, Input, InputNumber, message, Select, Spin, Tag,
-} from "antd";
+import { Button, Checkbox, Form, Input, InputNumber, message, Select, Spin, Tag } from "antd";
 import { useRouter } from "next/router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const CAVIOR_BASE = (process.env.NEXT_PUBLIC_API_ENDPOINT || 'https://carvior.store/api/v1').replace('/api/v1', '');
 const EXCHANGE_RATE = 1350;
 const FUEL_OPTIONS = ['가솔린', '디젤', '하이브리드', 'LPG', '전기'];
 const TRANS_OPTIONS = ['자동', '수동'];
 const CATEGORY_OPTIONS = ['SUV', '세단', '해치백', '경차', '소형차', '준중형', '중형', '대형', 'RV', '밴'];
-const PUBLIC_CATS = ['exterior', 'interior', 'engine', 'wheel', 'undercarriage', 'damage', 'extra', 'dashboard'] as const;
+const PRIVATE_CATS = new Set(['registration', 'vin']);
 
 const CAT_LABEL: Record<string, string> = {
   exterior: '외관', interior: '내관', engine: '엔진', wheel: '휠',
   undercarriage: '하부', damage: '손상', extra: '기타', dashboard: '계기판',
+  options: '옵션',
 };
 
 interface IBooking {
@@ -31,6 +30,8 @@ interface IInspection {
   completedAt?: string;
 }
 
+interface Lightbox { photos: string[]; idx: number; }
+
 const pageHeader: IPageHeader = { title: "스토어 등록" };
 
 const StoreRegisterPage: IDefaultLayoutPage = () => {
@@ -42,8 +43,13 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
   const [inspection, setInspection] = useState<IInspection | null>(null);
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
-  const [ocrLoading, setOcrLoading] = useState<'registration' | 'insurance' | null>(null);
+  const [ocrLoading, setOcrLoading] = useState<string | null>(null);
   const [photoOrder, setPhotoOrder] = useState<Record<string, string[]>>({});
+  const [blurring, setBlurring] = useState<Record<string, boolean>>({});
+  const [lightbox, setLightbox] = useState<Lightbox | null>(null);
+
+  // drag state — ref so no re-render
+  const dragSrc = useRef<{ cat: string; idx: number } | null>(null);
 
   useEffect(() => {
     if (!bookingId) return;
@@ -65,44 +71,77 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
         region: b?.address?.split(' ')[0] ?? '',
         mileage: insp?.mileage,
         colorKo: insp?.color,
-        color: insp?.color,
       });
       if (insp?.images) {
         const order: Record<string, string[]> = {};
-        for (const cat of PUBLIC_CATS) {
-          const arr = (insp.images as any)[cat];
-          if (arr?.length) order[cat] = [...arr];
+        for (const [cat, arr] of Object.entries(insp.images)) {
+          if (!PRIVATE_CATS.has(cat) && Array.isArray(arr) && arr.length) {
+            order[cat] = [...arr];
+          }
         }
         setPhotoOrder(order);
       }
     }).finally(() => setLoading(false));
   }, [bookingId]);
 
-  const movePhoto = (cat: string, idx: number, dir: -1 | 1) => {
-    setPhotoOrder(prev => {
-      const arr = [...(prev[cat] ?? [])];
-      const to = idx + dir;
-      if (to < 0 || to >= arr.length) return prev;
-      [arr[idx], arr[to]] = [arr[to], arr[idx]];
-      return { ...prev, [cat]: arr };
-    });
-  };
-
-  const removePhoto = (cat: string, idx: number) => {
+  // ── 사진 조작 ──────────────────────────────────────────────────
+  const removePhoto = useCallback((cat: string, idx: number) => {
     setPhotoOrder(prev => ({
       ...prev,
       [cat]: (prev[cat] ?? []).filter((_, i) => i !== idx),
     }));
-  };
+  }, []);
 
-  const handleOcr = async (mode: 'registration' | 'insurance') => {
+  const onDragStart = useCallback((cat: string, idx: number) => {
+    dragSrc.current = { cat, idx };
+  }, []);
+
+  const onDrop = useCallback((cat: string, toIdx: number) => {
+    const src = dragSrc.current;
+    if (!src || src.cat !== cat || src.idx === toIdx) { dragSrc.current = null; return; }
+    setPhotoOrder(prev => {
+      const arr = [...(prev[cat] ?? [])];
+      const [item] = arr.splice(src.idx, 1);
+      arr.splice(toIdx, 0, item);
+      return { ...prev, [cat]: arr };
+    });
+    dragSrc.current = null;
+  }, []);
+
+  // ── 카테고리 블러 ──────────────────────────────────────────────
+  const handleBlurCategory = useCallback(async (cat: string) => {
+    const urls = photoOrder[cat] ?? [];
+    if (!urls.length) return;
+    setBlurring(prev => ({ ...prev, [cat]: true }));
+    try {
+      const res = await fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPhotoOrder(prev => ({ ...prev, [cat]: data.urls ?? urls }));
+        message.success(`${CAT_LABEL[cat] ?? cat} 블러 처리 완료`);
+      } else {
+        message.error('블러 처리 실패');
+      }
+    } catch {
+      message.error('블러 오류');
+    } finally {
+      setBlurring(prev => ({ ...prev, [cat]: false }));
+    }
+  }, [photoOrder]);
+
+  // ── OCR ────────────────────────────────────────────────────────
+  const handleOcr = useCallback(async (mode: 'registration' | 'dashboard') => {
     const imgs = inspection?.images ?? {};
     const photoUrl = mode === 'registration'
       ? (imgs.registration ?? [])[0]
-      : (imgs.extra ?? [])[0]; // 보험이력은 보통 extra에 업로드됨
+      : (photoOrder.dashboard ?? [])[0] ?? (imgs.dashboard ?? [])[0];
 
     if (!photoUrl) {
-      message.warning(mode === 'registration' ? '자동차등록증 사진이 없습니다.' : '보험이력 사진이 없습니다.');
+      message.warning(mode === 'registration' ? '자동차등록증 사진이 없습니다.' : '계기판 사진이 없습니다.');
       return;
     }
     setOcrLoading(mode);
@@ -129,40 +168,33 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
           ...(data.displacement && { displacement: data.displacement }),
           ...(data.mileage      && { mileage: Number(data.mileage) }),
           ...(data.color        && { colorKo: data.color }),
-          ...(data.fuelType     && fuelMap[data.fuelType] && { fuel: fuelMap[data.fuelType] }),
+          ...(data.fuelType && fuelMap[data.fuelType] && { fuel: fuelMap[data.fuelType] }),
         });
+        message.success('자동차등록증 OCR 자동입력 완료');
       } else {
-        // 보험이력: 주행거리만 업데이트
-        if (data.mileage) form.setFieldsValue({ mileage: Number(data.mileage) });
+        if (data.mileage) {
+          form.setFieldsValue({ mileage: Number(data.mileage) });
+          message.success(`계기판 OCR: 주행거리 ${Number(data.mileage).toLocaleString()} km`);
+        } else {
+          message.warning('계기판에서 주행거리를 인식하지 못했습니다.');
+        }
       }
-      message.success(`OCR 자동입력 완료 (${mode === 'registration' ? '자동차등록증' : '보험이력'})`);
     } catch {
       message.error('OCR 오류');
     } finally {
       setOcrLoading(null);
     }
-  };
+  }, [inspection, photoOrder, form]);
 
+  // ── 등록 ───────────────────────────────────────────────────────
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
       if (!values.priceKRW) { message.warning('판매가를 입력해주세요.'); return; }
       setRegistering(true);
 
-      const rawPhotos = {
-        exterior:      photoOrder.exterior      ?? [] as string[],
-        interior:      photoOrder.interior      ?? [] as string[],
-        engine:        photoOrder.engine        ?? [] as string[],
-        wheel:         photoOrder.wheel         ?? [] as string[],
-        undercarriage: photoOrder.undercarriage ?? [] as string[],
-        damage:        photoOrder.damage        ?? [] as string[],
-        extra:         photoOrder.extra         ?? [] as string[],
-        dashboard:     photoOrder.dashboard     ?? [] as string[],
-      };
-
-      const allUrls = Object.values(rawPhotos).flat();
+      const allUrls = Object.values(photoOrder).flat();
       let blurredUrls = allUrls;
-
       if (allUrls.length > 0) {
         message.loading({ content: `블러 처리 중… (${allUrls.length}장)`, key: 'blur', duration: 0 });
         try {
@@ -181,7 +213,7 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
 
       let cursor = 0;
       const blurredPhotos: Record<string, string[]> = {};
-      for (const [k, arr] of Object.entries(rawPhotos)) {
+      for (const [k, arr] of Object.entries(photoOrder)) {
         blurredPhotos[k] = blurredUrls.slice(cursor, cursor + arr.length);
         cursor += arr.length;
       }
@@ -216,7 +248,6 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-
       if (!res.ok) {
         const err = await res.json();
         message.error(err.message ?? err.error ?? '등록 실패');
@@ -232,27 +263,41 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <Spin size="large" tip="데이터 로딩 중…" />
-      </div>
-    );
-  }
+  // ── 라이트박스 키보드 ──────────────────────────────────────────
+  useEffect(() => {
+    if (!lightbox) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightbox(null);
+      if (e.key === 'ArrowRight') setLightbox(lb => lb && lb.idx < lb.photos.length - 1 ? { ...lb, idx: lb.idx + 1 } : lb);
+      if (e.key === 'ArrowLeft')  setLightbox(lb => lb && lb.idx > 0 ? { ...lb, idx: lb.idx - 1 } : lb);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [lightbox]);
 
+  // ── 표시할 카테고리 (동적) ─────────────────────────────────────
+  const publicCats = useMemo(
+    () => Object.keys(photoOrder).filter(cat => (photoOrder[cat] ?? []).length > 0),
+    [photoOrder],
+  );
+
+  // 개인정보 사진
+  const privacyPhotos = useMemo(() => [
+    ...(inspection?.images?.registration ?? []).map(u => ({ url: u, cat: '자동차등록증' })),
+    ...(inspection?.images?.vin ?? []).map(u => ({ url: u, cat: '차대번호' })),
+  ], [inspection]);
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-96"><Spin size="large" tip="로딩 중…" /></div>;
+  }
   if (!booking) {
     return (
       <div className="text-center py-20 text-gray-400">
-        <p>예약을 찾을 수 없습니다. (bookingId: {bookingId})</p>
+        <p>예약을 찾을 수 없습니다.</p>
         <Button className="mt-4" onClick={() => router.back()}>← 돌아가기</Button>
       </div>
     );
   }
-
-  const privacyPhotos = [
-    ...(inspection?.images?.registration ?? []).map(u => ({ url: u, cat: '자동차등록증' })),
-    ...(inspection?.images?.vin ?? []).map(u => ({ url: u, cat: '차대번호' })),
-  ];
 
   return (
     <div className="flex flex-col gap-4">
@@ -271,10 +316,10 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
         {/* ── 왼쪽: 사진 편집 ── */}
         <div className="w-[55%] flex flex-col gap-4">
 
-          {/* 개인정보 사진 */}
-          {privacyPhotos.length > 0 && (
+          {/* 개인정보 사진 + OCR 버튼 */}
+          {(privacyPhotos.length > 0 || inspection?.images?.registration?.length) && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-3">
                 <p className="text-xs font-bold text-red-600">⚠️ 개인정보 사진 — 스토어 미노출</p>
                 <div className="flex gap-2">
                   <Button
@@ -287,81 +332,98 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
                   </Button>
                   <Button
                     size="small"
-                    loading={ocrLoading === 'insurance'}
-                    onClick={() => handleOcr('insurance')}
+                    loading={ocrLoading === 'dashboard'}
+                    onClick={() => handleOcr('dashboard')}
                     style={{ borderColor: '#7c3aed', color: '#7c3aed' }}
                   >
-                    📋 보험이력 OCR
+                    📸 계기판 OCR
                   </Button>
                 </div>
               </div>
-              <div className="flex gap-2 flex-wrap">
-                {privacyPhotos.map(({ url, cat }, i) => (
-                  <a key={i} href={url} target="_blank" rel="noreferrer" className="flex-shrink-0">
-                    <div className="relative">
-                      <img src={url} alt="" className="w-28 h-20 object-cover rounded-lg border border-red-200 hover:opacity-80 transition-opacity" />
+              {privacyPhotos.length > 0 && (
+                <div className="flex gap-2 flex-wrap">
+                  {privacyPhotos.map(({ url, cat }, i) => (
+                    <div key={i}
+                      className="relative flex-shrink-0 cursor-pointer"
+                      onClick={() => setLightbox({ photos: privacyPhotos.map(p => p.url), idx: i })}
+                    >
+                      <img src={url} alt="" loading="lazy"
+                        className="w-28 h-20 object-cover rounded-lg border border-red-200 hover:opacity-80 transition-opacity" />
                       <span className="absolute bottom-1 left-1 text-[9px] bg-red-600 text-white px-1.5 py-0.5 rounded">{cat}</span>
                     </div>
-                  </a>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
-          {/* 공개 사진 순서 편집 */}
+          {/* 공개 사진 카테고리별 */}
           <div className="bg-white rounded-xl border border-gray-100 p-4">
-            <p className="text-xs font-bold text-gray-500 mb-3">📷 사진 순서 편집 — 첫 번째 사진이 대표사진</p>
-            {PUBLIC_CATS.filter(cat => (photoOrder[cat] ?? []).length > 0).length === 0 ? (
+            <p className="text-xs font-bold text-gray-500 mb-3">
+              📷 사진 편집 — <span className="font-normal text-gray-400">드래그로 순서 변경 · ✕로 제외 · 클릭하면 슬라이드 보기</span>
+            </p>
+            {publicCats.length === 0 ? (
               <p className="text-sm text-gray-300 py-8 text-center">진단 사진 없음</p>
             ) : (
-              <div className="space-y-4">
-                {PUBLIC_CATS.filter(cat => (photoOrder[cat] ?? []).length > 0).map(cat => (
-                  <div key={cat}>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <Tag color="default" className="text-[10px]">{CAT_LABEL[cat]}</Tag>
-                      <span className="text-[10px] text-gray-400">{photoOrder[cat]?.length}장</span>
-                    </div>
-                    <div className="flex gap-2 overflow-x-auto pb-1">
-                      {(photoOrder[cat] ?? []).map((url, i) => (
-                        <div key={i} className="relative flex-shrink-0 group">
-                          <a href={url} target="_blank" rel="noreferrer">
+              <div className="space-y-5">
+                {publicCats.map(cat => {
+                  const photos = photoOrder[cat] ?? [];
+                  return (
+                    <div key={cat}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Tag color="default" className="text-[10px] m-0">{CAT_LABEL[cat] ?? cat}</Tag>
+                          <span className="text-[10px] text-gray-400">{photos.length}장</span>
+                        </div>
+                        <Button
+                          size="small"
+                          loading={blurring[cat]}
+                          onClick={() => handleBlurCategory(cat)}
+                          className="text-[10px] h-6 px-2"
+                        >
+                          번호판 블러
+                        </Button>
+                      </div>
+                      <div className="flex gap-2 overflow-x-auto pb-1">
+                        {photos.map((url, i) => (
+                          <div
+                            key={`${cat}-${i}-${url.slice(-8)}`}
+                            className="relative flex-shrink-0 cursor-grab active:cursor-grabbing select-none"
+                            draggable
+                            onDragStart={() => onDragStart(cat, i)}
+                            onDragOver={e => e.preventDefault()}
+                            onDrop={() => onDrop(cat, i)}
+                          >
+                            {/* 사진 클릭 → 슬라이드 */}
                             <img
-                              src={url} alt=""
+                              src={url}
+                              alt=""
+                              loading="lazy"
+                              onClick={() => setLightbox({ photos, idx: i })}
                               className="w-28 h-20 object-cover rounded-lg border hover:opacity-90 transition-opacity"
                             />
-                          </a>
-                          {i === 0 && (
-                            <span className="absolute top-1 left-1 text-[8px] bg-green-600 text-white px-1.5 rounded-full">대표</span>
-                          )}
-                          {/* hover 컨트롤 */}
-                          <div className="absolute bottom-1 left-0 right-0 flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {/* 대표 뱃지 */}
+                            {i === 0 && (
+                              <span className="absolute top-1 left-1 text-[8px] bg-green-600 text-white px-1.5 rounded-full pointer-events-none">대표</span>
+                            )}
+                            {/* X 버튼 — 항상 표시 */}
                             <button
-                              onClick={() => movePhoto(cat, i, -1)}
-                              disabled={i === 0}
-                              className="text-white text-[10px] font-bold bg-black/60 px-1.5 py-0.5 rounded disabled:opacity-30"
-                            >◀</button>
-                            <button
-                              onClick={() => removePhoto(cat, i)}
-                              className="text-white text-[10px] font-bold bg-red-600/80 px-1.5 py-0.5 rounded"
-                            >✕</button>
-                            <button
-                              onClick={() => movePhoto(cat, i, 1)}
-                              disabled={i === (photoOrder[cat]?.length ?? 0) - 1}
-                              className="text-white text-[10px] font-bold bg-black/60 px-1.5 py-0.5 rounded disabled:opacity-30"
-                            >▶</button>
+                              onClick={e => { e.stopPropagation(); removePhoto(cat, i); }}
+                              className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[10px] font-bold flex items-center justify-center hover:bg-red-600 transition-colors leading-none"
+                            >×</button>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
 
           {/* 진단 메모 */}
           {inspection?.inspectionDetails && (
-            <div className="bg-gray-50 rounded-xl border border-gray-100 p-4 grid grid-cols-2 gap-3 text-sm">
+            <div className="bg-gray-50 rounded-xl border border-gray-100 p-4 grid grid-cols-2 gap-3">
               {Object.entries({
                 '경고등': inspection.inspectionDetails.warningDesc,
                 '누유':   inspection.inspectionDetails.leakDesc,
@@ -378,7 +440,7 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
         </div>
 
         {/* ── 오른쪽: 폼 ── */}
-        <div className="flex-1 bg-white rounded-xl border border-gray-100 p-5">
+        <div className="flex-1 bg-white rounded-xl border border-gray-100 p-5 sticky top-4">
           <Form form={form} layout="vertical" size="middle">
             <div className="grid grid-cols-2 gap-x-4">
               <Form.Item label="차량명 (한국어)" name="titleKo" rules={[{ required: true }]} className="col-span-2">
@@ -428,7 +490,6 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
                 <Input.TextArea rows={2} placeholder="내부 참고 메모 (외부 미노출)" />
               </Form.Item>
             </div>
-
             <div className="pt-2 border-t border-gray-100 mt-2">
               <Button
                 type="primary"
@@ -444,6 +505,49 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
           </Form>
         </div>
       </div>
+
+      {/* ── 라이트박스 ── */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
+          onClick={() => setLightbox(null)}
+        >
+          {/* 이미지 */}
+          <img
+            src={lightbox.photos[lightbox.idx]}
+            alt=""
+            className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+
+          {/* 닫기 */}
+          <button
+            onClick={() => setLightbox(null)}
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 text-white text-xl flex items-center justify-center transition-colors"
+          >×</button>
+
+          {/* 인덱스 */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/60 text-sm">
+            {lightbox.idx + 1} / {lightbox.photos.length}
+          </div>
+
+          {/* 이전 */}
+          {lightbox.idx > 0 && (
+            <button
+              onClick={e => { e.stopPropagation(); setLightbox(lb => lb ? { ...lb, idx: lb.idx - 1 } : lb); }}
+              className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/25 text-white text-2xl flex items-center justify-center transition-colors"
+            >‹</button>
+          )}
+
+          {/* 다음 */}
+          {lightbox.idx < lightbox.photos.length - 1 && (
+            <button
+              onClick={e => { e.stopPropagation(); setLightbox(lb => lb ? { ...lb, idx: lb.idx + 1 } : lb); }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/25 text-white text-2xl flex items-center justify-center transition-colors"
+            >›</button>
+          )}
+        </div>
+      )}
     </div>
   );
 };
