@@ -109,17 +109,10 @@ const StoreList = () => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // 미등록: 아직 storeItem 없는 완료된 예약
   const registeredIds = new Set(storeItems.map(i => i.bookingId));
-
-  // 셀프등록: bookingId가 Date.now() 타임스탬프 (수십억대) → 실제 예약 ID(수천 이하)와 구분
-  const TIMESTAMP_THRESHOLD = 10_000_000;
-  const selfRegistered = storeItems.filter(i => i.bookingId > TIMESTAMP_THRESHOLD);
-  const dashboardItems = storeItems.filter(i => i.bookingId <= TIMESTAMP_THRESHOLD);
-
   const filtered = bookings.filter(b => {
-    const isReg = registeredIds.has(b.id);
-    if (activeTab === 'unregistered' && isReg) return false;
-    if (activeTab === 'registered'   && !isReg) return false;
+    if (registeredIds.has(b.id)) return false;
     if (search) {
       const q = search.toLowerCase();
       return b.carNumber?.toLowerCase().includes(q)
@@ -127,6 +120,18 @@ const StoreList = () => {
           || b.carOwner?.toLowerCase().includes(q);
     }
     return true;
+  });
+
+  // 셀프등록: 고객 직접 등록 중 아직 입금 미확인 (pending)
+  const TIMESTAMP_THRESHOLD = 10_000_000;
+  const selfRegistered = storeItems.filter(i => i.bookingId > TIMESTAMP_THRESHOLD && i.status === 'pending');
+
+  // 등록됨: 모든 스토어 매물 (출처 무관, 검색 적용)
+  const registeredItems = storeItems.filter(i => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (i.carNumber ?? '').toLowerCase().includes(q)
+        || (i.titleKo ?? '').toLowerCase().includes(q);
   });
 
   // ── UPDATE: 수정 ───────────────────────────────────────────────
@@ -531,7 +536,7 @@ const StoreList = () => {
       ) : (
         <DefaultTable<IStoreItem>
           columns={regColumns as any}
-          dataSource={dashboardItems}
+          dataSource={registeredItems}
           loading={loading}
           rowKey="id"
         />
