@@ -111,10 +111,10 @@ const StoreList = () => {
 
   const registeredIds = new Set(storeItems.map(i => i.bookingId));
 
-  // 셀프등록: bookingId가 실제 예약 ID와 매칭 안 되는 것 (Date.now() 값 사용)
-  const realBookingIds = new Set(bookings.map(b => b.id));
-  const selfRegistered = storeItems.filter(i => !realBookingIds.has(i.bookingId));
-  const dashboardItems = storeItems.filter(i => realBookingIds.has(i.bookingId));
+  // 셀프등록: bookingId가 Date.now() 타임스탬프 (수십억대) → 실제 예약 ID(수천 이하)와 구분
+  const TIMESTAMP_THRESHOLD = 10_000_000;
+  const selfRegistered = storeItems.filter(i => i.bookingId > TIMESTAMP_THRESHOLD);
+  const dashboardItems = storeItems.filter(i => i.bookingId <= TIMESTAMP_THRESHOLD);
 
   const filtered = bookings.filter(b => {
     const isReg = registeredIds.has(b.id);

@@ -10,7 +10,6 @@ const EXCHANGE_RATE = 1350;
 const FUEL_OPTIONS = ['가솔린', '디젤', '하이브리드', 'LPG', '전기'];
 const TRANS_OPTIONS = ['자동', '수동'];
 const CATEGORY_OPTIONS = ['SUV', '세단', '해치백', '경차', '소형차', '준중형', '중형', '대형', 'RV', '밴'];
-const PRIVATE_CATS = new Set(['registration', 'vin']);
 
 const CAT_LABEL: Record<string, string> = {
   exterior: '외관', interior: '내관', engine: '엔진', wheel: '휠',
@@ -25,7 +24,15 @@ interface IBooking {
 
 interface IInspection {
   carModel?: string; mileage?: number; color?: string;
-  images?: Record<string, string[]>;
+  // 실제 엔티티 필드: photos (배열), regImage/vinImage/dashboardImage (단일 문자열)
+  photos?: {
+    exterior?: string[]; wheel?: string[]; undercarriage?: string[];
+    interior?: string[]; engine?: string[]; damage?: string[];
+    extra?: string[]; extraMemo?: string[];
+  };
+  regImage?: string;
+  vinImage?: string;
+  dashboardImage?: string;
   inspectionDetails?: { warningDesc?: string; leakDesc?: string; optionsDesc?: string; driveDesc?: string };
   completedAt?: string;
 }
@@ -73,13 +80,13 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
         mileage: insp?.mileage,
         colorKo: insp?.color,
       });
-      if (insp?.images) {
+      if (insp?.photos) {
         const order: Record<string, string[]> = {};
-        for (const [cat, arr] of Object.entries(insp.images)) {
-          if (!PRIVATE_CATS.has(cat) && Array.isArray(arr) && arr.length) {
-            order[cat] = [...arr];
-          }
+        for (const [cat, arr] of Object.entries(insp.photos)) {
+          if (Array.isArray(arr) && arr.length) order[cat] = [...arr];
         }
+        // 계기판 사진 (단일 URL → dashboard 카테고리)
+        if (insp.dashboardImage) order.dashboard = [insp.dashboardImage];
         setPhotoOrder(order);
       }
     }).finally(() => setLoading(false));
@@ -126,10 +133,9 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
 
   // ── OCR ────────────────────────────────────────────────────────
   const handleOcr = useCallback(async (mode: 'registration' | 'dashboard') => {
-    const imgs = inspection?.images ?? {};
     const photoUrl = mode === 'registration'
-      ? (imgs.registration ?? [])[0]
-      : (photoOrder.dashboard ?? [])[0] ?? (imgs.dashboard ?? [])[0];
+      ? inspection?.regImage ?? null
+      : (photoOrder.dashboard ?? [])[0] ?? inspection?.dashboardImage ?? null;
 
     if (!photoUrl) {
       message.warning(mode === 'registration' ? '자동차등록증 사진이 없습니다.' : '계기판 사진이 없습니다.');
@@ -265,10 +271,10 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
     [photoOrder],
   );
 
-  // 개인정보 사진
+  // 개인정보 사진 (단일 URL)
   const privacyPhotos = useMemo(() => [
-    ...(inspection?.images?.registration ?? []).map(u => ({ url: u, cat: '자동차등록증' })),
-    ...(inspection?.images?.vin ?? []).map(u => ({ url: u, cat: '차대번호' })),
+    ...(inspection?.regImage ? [{ url: inspection.regImage, cat: '자동차등록증' }] : []),
+    ...(inspection?.vinImage ? [{ url: inspection.vinImage, cat: '차대번호' }] : []),
   ], [inspection]);
 
   if (loading) {
@@ -301,7 +307,7 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
         <div className="w-[55%] flex flex-col gap-4">
 
           {/* 개인정보 사진 + OCR 버튼 */}
-          {(privacyPhotos.length > 0 || inspection?.images?.registration?.length) && (
+          {(privacyPhotos.length > 0 || inspection?.regImage) && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs font-bold text-red-600">⚠️ 개인정보 사진 — 스토어 미노출</p>
