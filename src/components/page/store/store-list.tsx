@@ -365,6 +365,22 @@ const StoreList = () => {
           >
             번호판
           </Button>
+          {item.status !== 'pending' && (
+            <Button
+              size="small"
+              onClick={async () => {
+                await fetch(`${CAVIOR_BASE}/api/admin/store-items?id=${item.id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ status: 'pending' }),
+                });
+                message.success('pending으로 복구되었습니다.');
+                fetchData();
+              }}
+            >
+              pending
+            </Button>
+          )}
           <Button
             size="small"
             danger
@@ -620,7 +636,13 @@ const StoreList = () => {
             </Form.Item>
           </div>
           <div className="border-b border-gray-100 mb-4" />
-          <ItemFormFields />
+          {editingItem?.status === 'active' ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-xs text-amber-700 font-semibold mb-4">
+              ⚠️ 게시된 매물은 상태 변경만 가능합니다. 내용 수정이 필요하면 먼저 pending으로 되돌리세요.
+            </div>
+          ) : (
+            <ItemFormFields />
+          )}
         </Form>
       </Modal>
       {/* ── 직접 등록 모달 ── */}
