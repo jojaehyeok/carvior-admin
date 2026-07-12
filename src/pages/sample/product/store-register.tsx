@@ -13,7 +13,7 @@ const CATEGORY_OPTIONS = ['SUV', '세단', '해치백', '경차', '소형차', '
 
 const CAT_LABEL: Record<string, string> = {
   exterior: '외관', interior: '내관', engine: '엔진', wheel: '휠',
-  undercarriage: '하부', damage: '손상', extra: '기타', dashboard: '계기판',
+  undercarriage: '하부', damage: '손상', extra: '옵션', dashboard: '계기판',
   options: '옵션',
 };
 
@@ -386,7 +386,7 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
         <div className="w-[55%] flex flex-col gap-4">
 
           {/* 개인정보 사진 + OCR 버튼 */}
-          {(privacyPhotos.length > 0 || inspection?.regImage) && (
+          {(privacyPhotos.length > 0 || inspection?.regImage || isEditMode) && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs font-bold text-red-600">⚠️ 개인정보 사진 — 스토어 미노출</p>
@@ -444,14 +444,16 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
                           <Tag color="default" className="text-[10px] m-0">{CAT_LABEL[cat] ?? cat}</Tag>
                           <span className="text-[10px] text-gray-400">{photos.length}장</span>
                         </div>
-                        <Button
-                          size="small"
-                          loading={blurring[cat]}
-                          onClick={() => handleBlurCategory(cat)}
-                          className="text-[10px] h-6 px-2"
-                        >
-                          번호판 블러
-                        </Button>
+                        {(cat === 'exterior' || cat === 'damage') && (
+                          <Button
+                            size="small"
+                            loading={blurring[cat]}
+                            onClick={() => handleBlurCategory(cat)}
+                            className="text-[10px] h-6 px-2"
+                          >
+                            번호판 블러
+                          </Button>
+                        )}
                       </div>
                       <div className="flex gap-2 overflow-x-auto pb-1">
                         {photos.map((url, i) => (
@@ -471,8 +473,8 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
                               onClick={() => setLightbox({ photos, idx: i })}
                               className="w-28 h-20 object-cover rounded-lg border hover:opacity-90 transition-opacity"
                             />
-                            {/* 대표 뱃지 */}
-                            {i === 0 && (
+                            {/* 대표 뱃지 — 외관 첫 번째 사진만 */}
+                            {cat === 'exterior' && i === 0 && (
                               <span className="absolute top-1 left-1 text-[8px] bg-green-600 text-white px-1.5 rounded-full pointer-events-none">대표</span>
                             )}
                             {/* X 버튼 — 항상 표시 */}
