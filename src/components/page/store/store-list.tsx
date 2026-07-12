@@ -359,7 +359,7 @@ const StoreList = () => {
           <Button
             size="small"
             icon={<Edit size={13} />}
-            onClick={() => openEditModal(item)}
+            onClick={() => router.push(`/sample/product/store-register?storeItemId=${item.id}`)}
           >
             수정
           </Button>

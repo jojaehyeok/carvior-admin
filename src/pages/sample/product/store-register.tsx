@@ -43,11 +43,13 @@ const pageHeader: IPageHeader = { title: "스토어 등록" };
 
 const StoreRegisterPage: IDefaultLayoutPage = () => {
   const router = useRouter();
-  const { bookingId } = router.query;
+  const { bookingId, storeItemId } = router.query;
+  const isEditMode = !!storeItemId;
   const [form] = Form.useForm();
 
   const [booking, setBooking] = useState<IBooking | null>(null);
   const [inspection, setInspection] = useState<IInspection | null>(null);
+  const [storeItem, setStoreItem] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
   const [ocrLoading, setOcrLoading] = useState<string | null>(null);
@@ -59,8 +61,9 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
   // drag state — ref so no re-render
   const dragSrc = useRef<{ cat: string; idx: number } | null>(null);
 
+  // ── 신규 등록 모드 (bookingId) ────────────────────────────────
   useEffect(() => {
-    if (!bookingId) return;
+    if (!bookingId || isEditMode) return;
     const bid = Number(bookingId);
     setLoading(true);
     Promise.all([
@@ -85,12 +88,58 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
         for (const [cat, arr] of Object.entries(insp.photos)) {
           if (Array.isArray(arr) && arr.length) order[cat] = [...arr];
         }
-        // 계기판 사진 (단일 URL → dashboard 카테고리)
         if (insp.dashboardImage) order.dashboard = [insp.dashboardImage];
         setPhotoOrder(order);
       }
     }).finally(() => setLoading(false));
-  }, [bookingId]);
+  }, [bookingId, isEditMode]);
+
+  // ── 수정 모드 (storeItemId) ────────────────────────────────────
+  useEffect(() => {
+    if (!storeItemId) return;
+    setLoading(true);
+    const sid = Number(storeItemId);
+    fetch(`${CAVIOR_BASE}/api/v1/admin/store-items/${sid}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(async (item) => {
+        if (!item) return;
+        setStoreItem(item);
+        form.setFieldsValue({
+          titleKo:      item.titleKo ?? '',
+          titleEn:      item.titleEn ?? '',
+          trim:         item.trim ?? '',
+          year:         item.year,
+          mileage:      item.mileage,
+          fuel:         item.fuel ?? '가솔린',
+          displacement: item.displacement ?? '',
+          transmission: item.transmission ?? '자동',
+          colorKo:      item.colorKo ?? '',
+          category:     item.category ?? 'SUV',
+          region:       item.region ?? '',
+          priceKRW:     item.priceKRW,
+          adminMemo:    item.adminMemo ?? '',
+          maker:        item.maker ?? '',
+          accident:     item.accident ?? false,
+          status:       item.status,
+        });
+        if (item.photos && typeof item.photos === 'object') {
+          setPhotoOrder(item.photos);
+        }
+        // 검차 기반 매물이면 inspection 로드 (OCR 가능하게)
+        const THRESHOLD = 10_000_000;
+        if (item.bookingId && item.bookingId <= THRESHOLD) {
+          try {
+            const [bookingList, insp] = await Promise.all([
+              fetch(`${CAVIOR_BASE}/api/admin/bookings`).then(r => r.ok ? r.json() : []),
+              fetch(`${CAVIOR_BASE}/api/admin/inspection?bookingId=${item.bookingId}`).then(r => r.ok ? r.json() : null),
+            ]);
+            setBooking(bookingList.find((x: IBooking) => x.id === item.bookingId) ?? null);
+            setInspection(insp);
+          } catch {}
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [storeItemId]);
 
   // ── 사진 조작 ──────────────────────────────────────────────────
   const removePhoto = useCallback((cat: string, idx: number) => {
@@ -189,14 +238,23 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
     }
   }, [inspection, photoOrder, form]);
 
-  // ── 등록 ───────────────────────────────────────────────────────
+  // ── 등록 / 수정 ────────────────────────────────────────────────
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
       if (!values.priceKRW) { message.warning('판매가를 입력해주세요.'); return; }
       setRegistering(true);
 
-      // 블러: 서버 백그라운드 처리 (S3 동일 키 덮어씀) — fire-and-forget
+      const specs = [
+        { label: 'Brand',        value: values.maker || '' },
+        { label: 'Year',         value: String(values.year ?? '') },
+        { label: 'Mileage',      value: values.mileage ? `${Number(values.mileage).toLocaleString()} KM` : '' },
+        { label: 'Fuel',         value: values.fuel ?? '' },
+        { label: 'Transmission', value: values.transmission ?? '' },
+        { label: 'Displacement', value: values.displacement || '' },
+      ].filter(s => s.value);
+
+      // 블러 fire-and-forget
       const allUrls = Object.values(photoOrder).flat();
       if (allUrls.length > 0) {
         fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
@@ -206,48 +264,55 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
         }).catch(() => {});
       }
 
-      const blurredPhotos = { ...photoOrder };
-
-      const body = {
-        bookingId: booking!.id,
-        carNumber: booking!.carNumber,
-        ...values,
-        priceUSD: Math.round(values.priceKRW / EXCHANGE_RATE),
-        hasReport: true,
-        location: 'Korea',
-        doors: 5, seats: 5,
-        inspectedAt: inspection?.completedAt
-          ? new Date(inspection.completedAt).toISOString().split('T')[0]
-          : new Date().toISOString().split('T')[0],
-        status: 'active',
-        hidePrice: false,
-        photos: blurredPhotos,
-        specs: [
-          { label: 'Brand',        value: values.maker || '' },
-          { label: 'Year',         value: String(values.year) },
-          { label: 'Mileage',      value: `${(values.mileage || 0).toLocaleString()} KM` },
-          { label: 'Fuel',         value: values.fuel },
-          { label: 'Transmission', value: values.transmission },
-          { label: 'Displacement', value: values.displacement || '' },
-        ].filter(s => s.value),
-        options: [],
-      };
-
-      const res = await fetch(`${CAVIOR_BASE}/api/admin/store-items`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        message.error(err.message ?? err.error ?? '등록 실패');
-        return;
+      if (isEditMode) {
+        // ── 수정 (PATCH) ──
+        const res = await fetch(`${CAVIOR_BASE}/api/admin/store-items?id=${storeItemId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...values, priceUSD: Math.round(values.priceKRW / EXCHANGE_RATE), photos: photoOrder, specs }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          message.error(err.message ?? err.error ?? '수정 실패');
+          return;
+        }
+        message.success('수정되었습니다.');
+        router.push('/sample/product/StoreManagementPage');
+      } else {
+        // ── 신규 등록 (POST) ──
+        const body = {
+          bookingId: booking!.id,
+          carNumber: booking!.carNumber,
+          ...values,
+          priceUSD: Math.round(values.priceKRW / EXCHANGE_RATE),
+          hasReport: true,
+          location: 'Korea',
+          doors: 5, seats: 5,
+          inspectedAt: inspection?.completedAt
+            ? new Date(inspection.completedAt).toISOString().split('T')[0]
+            : new Date().toISOString().split('T')[0],
+          status: 'active',
+          hidePrice: false,
+          photos: photoOrder,
+          specs,
+          options: [],
+        };
+        const res = await fetch(`${CAVIOR_BASE}/api/admin/store-items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          message.error(err.message ?? err.error ?? '등록 실패');
+          return;
+        }
+        message.success('스토어에 등록되었습니다.');
+        router.push('/sample/product/StoreManagementPage');
       }
-      message.success('스토어에 등록되었습니다.');
-      router.push('/sample/product/StoreManagementPage');
     } catch (e: any) {
       if (e?.errorFields) return;
-      message.error('등록 중 오류 발생');
+      message.error('오류 발생');
     } finally {
       setRegistering(false);
     }
@@ -280,10 +345,18 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
   if (loading) {
     return <div className="flex items-center justify-center h-96"><Spin size="large" tip="로딩 중…" /></div>;
   }
-  if (!booking) {
+  if (!isEditMode && !booking) {
     return (
       <div className="text-center py-20 text-gray-400">
         <p>예약을 찾을 수 없습니다.</p>
+        <Button className="mt-4" onClick={() => router.back()}>← 돌아가기</Button>
+      </div>
+    );
+  }
+  if (isEditMode && !storeItem) {
+    return (
+      <div className="text-center py-20 text-gray-400">
+        <p>매물을 찾을 수 없습니다.</p>
         <Button className="mt-4" onClick={() => router.back()}>← 돌아가기</Button>
       </div>
     );
@@ -296,9 +369,15 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
         <Button onClick={() => router.back()} size="small">← 목록</Button>
         <div>
           <h1 className="text-lg font-bold text-gray-900 leading-tight">
-            스토어 등록 — <span className="text-violet-600">{booking.carNumber}</span>
+            {isEditMode ? '매물 수정' : '스토어 등록'} — <span className="text-violet-600">
+              {isEditMode ? (storeItem?.carNumber ?? storeItem?.titleKo) : booking?.carNumber}
+            </span>
           </h1>
-          <p className="text-xs text-gray-400">{booking.carOwner} · {booking.carModel ?? '차종 미상'} · {booking.address?.split(' ').slice(0, 2).join(' ')}</p>
+          <p className="text-xs text-gray-400">
+            {isEditMode
+              ? storeItem?.titleKo
+              : `${booking?.carOwner} · ${booking?.carModel ?? '차종 미상'} · ${booking?.address?.split(' ').slice(0, 2).join(' ')}`}
+          </p>
         </div>
       </div>
 
@@ -435,11 +514,15 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
           <div className="mb-4 bg-gray-50 rounded-lg px-3 py-2.5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
             <div>
               <span className="text-gray-400">차량번호</span>
-              <p className="font-mono font-bold text-gray-800">{booking.carNumber}</p>
+              <p className="font-mono font-bold text-gray-800">
+                {isEditMode ? (storeItem?.carNumber ?? '—') : (booking?.carNumber ?? '—')}
+              </p>
             </div>
             <div>
               <span className="text-gray-400">소유자</span>
-              <p className="font-bold text-gray-800">{ocrInfo.ownerName ?? booking.carOwner ?? '—'}</p>
+              <p className="font-bold text-gray-800">
+                {ocrInfo.ownerName ?? (isEditMode ? '—' : booking?.carOwner ?? '—')}
+              </p>
             </div>
             {ocrInfo.vin && (
               <div className="col-span-2">
@@ -494,6 +577,18 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
               <Form.Item label="어드민 메모" name="adminMemo" className="col-span-2">
                 <Input.TextArea rows={2} placeholder="내부 참고 메모 (외부 미노출)" />
               </Form.Item>
+              {isEditMode && (
+                <Form.Item label="판매 상태" name="status" className="col-span-2">
+                  <Select
+                    options={[
+                      { value: 'active',  label: '판매중' },
+                      { value: 'pending', label: '검토중 (입금확인)' },
+                      { value: 'sold',    label: '거래완료' },
+                      { value: 'hidden',  label: '숨김' },
+                    ]}
+                  />
+                </Form.Item>
+              )}
             </div>
             <div className="pt-2 border-t border-gray-100 mt-2">
               <Button
@@ -504,7 +599,7 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
                 onClick={handleSubmit}
                 style={{ background: '#7c3aed', borderColor: '#7c3aed' }}
               >
-                스토어에 등록하기
+                {isEditMode ? '수정 저장' : '스토어에 등록하기'}
               </Button>
             </div>
           </Form>
