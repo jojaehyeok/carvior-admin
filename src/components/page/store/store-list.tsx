@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import DefaultTable from "@/components/shared/ui/default-table";
 import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
@@ -51,20 +51,20 @@ interface IStoreItem {
 
 
 const EXCHANGE_RATE = 1350;
-const FUEL_OPTIONS = ['媛?붾┛', '?붿젮', '?섏씠釉뚮━??, 'LPG', '?꾧린'];
-const TRANS_OPTIONS = ['?먮룞', '?섎룞'];
-const CATEGORY_OPTIONS = ['SUV', '?몃떒', '?댁튂諛?, '寃쎌감', '?뚰삎李?, '以以묓삎', '以묓삎', '???, 'RV', '諛?];
+const FUEL_OPTIONS = ['가솔린', '디젤', '하이브리드', 'LPG', '전기'];
+const TRANS_OPTIONS = ['자동', '수동'];
+const CATEGORY_OPTIONS = ['SUV', '세단', '해치백', '경차', '소형차', '준중형', '중형', '대형', 'RV', '밴'];
 
 const STATUS_CONFIG: Record<string, { color: string; text: string }> = {
-  active:  { color: 'green',   text: '?먮ℓ以?     },
-  sold:    { color: 'default', text: '嫄곕옒?꾨즺'   },
-  hidden:  { color: 'orange',  text: '?④?'       },
-  pending: { color: 'blue',    text: '?낃툑?뺤씤以? },
+  active:  { color: 'green',   text: '판매중'     },
+  sold:    { color: 'default', text: '거래완료'   },
+  hidden:  { color: 'orange',  text: '숨김'       },
+  pending: { color: 'blue',    text: '입금확인중' },
 };
 
 function fmtKRW(n: number) {
-  if (n >= 100_000_000) return `${(n / 100_000_000).toFixed(1)}??;
-  return `${Math.round(n / 10_000)}留뚯썝`;
+  if (n >= 100_000_000) return `${(n / 100_000_000).toFixed(1)}억`;
+  return `${Math.round(n / 10_000)}만원`;
 }
 
 const StoreList = () => {
@@ -75,13 +75,13 @@ const StoreList = () => {
   const [activeTab,   setActiveTab]   = useState<'unregistered' | 'registered' | 'selfregister'>('unregistered');
   const [search,      setSearch]      = useState('');
 
-  // ?섏젙 紐⑤떖
+  // 수정 모달
   const [editModal,    setEditModal]    = useState(false);
   const [editingItem,  setEditingItem]  = useState<IStoreItem | null>(null);
   const [updating,     setUpdating]     = useState(false);
   const [editForm]  = Form.useForm();
 
-  // 吏곸젒 ?깅줉 紐⑤떖
+  // 직접 등록 모달
   const [blurringId,     setBlurringId]     = useState<string | null>(null);
   const [directModal,    setDirectModal]    = useState(false);
   const [directForm]  = Form.useForm();
@@ -90,7 +90,7 @@ const StoreList = () => {
     exterior: '', interior: '', engine: '', extra: '',
   });
 
-  // ?? fetch ??????????????????????????????????????????????????????
+  // ── fetch ──────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -101,7 +101,7 @@ const StoreList = () => {
       setBookings(bRes.ok ? await bRes.json() : []);
       setStoreItems(sRes.ok ? await sRes.json() : []);
     } catch {
-      message.error('?곗씠??濡쒕뱶 ?ㅽ뙣');
+      message.error('데이터 로드 실패');
     } finally {
       setLoading(false);
     }
@@ -109,7 +109,7 @@ const StoreList = () => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 誘몃벑濡? ?꾩쭅 storeItem ?녿뒗 ?꾨즺???덉빟
+  // 미등록: 아직 storeItem 없는 완료된 예약
   const registeredIds = new Set(storeItems.map(i => i.bookingId));
   const filtered = bookings.filter(b => {
     if (registeredIds.has(b.id)) return false;
@@ -122,11 +122,11 @@ const StoreList = () => {
     return true;
   });
 
-  // ??꾨벑濡? 怨좉컼 吏곸젒 ?깅줉 以??꾩쭅 ?낃툑 誘명솗??(pending)
+  // 셀프등록: 고객 직접 등록 중 아직 입금 미확인 (pending)
   const TIMESTAMP_THRESHOLD = 10_000_000;
   const selfRegistered = storeItems.filter(i => i.bookingId > TIMESTAMP_THRESHOLD && i.status === 'pending');
 
-  // ?깅줉?? 紐⑤뱺 ?ㅽ넗??留ㅻЪ (異쒖쿂 臾닿?, 寃???곸슜)
+  // 등록됨: 모든 스토어 매물 (출처 무관, 검색 적용)
   const registeredItems = storeItems.filter(i => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -134,7 +134,7 @@ const StoreList = () => {
         || (i.titleKo ?? '').toLowerCase().includes(q);
   });
 
-  // ?? UPDATE: ?섏젙 ???????????????????????????????????????????????
+  // ── UPDATE: 수정 ───────────────────────────────────────────────
   const openEditModal = (item: IStoreItem) => {
     setEditingItem(item);
     editForm.setFieldsValue({
@@ -172,26 +172,26 @@ const StoreList = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
       });
-      if (!res.ok) { message.error('?섏젙 ?ㅽ뙣'); return; }
-      message.success('?섏젙?섏뿀?듬땲??');
+      if (!res.ok) { message.error('수정 실패'); return; }
+      message.success('수정되었습니다.');
       setEditModal(false);
       fetchData();
     } catch (e: any) {
       if (e?.errorFields) return;
-      message.error('?섏젙 以??ㅻ쪟 諛쒖깮');
+      message.error('수정 중 오류 발생');
     } finally {
       setUpdating(false);
     }
   };
 
-  // ?? DIRECT CREATE: 吏곸젒 ?깅줉 ??????????????????????????????????
+  // ── DIRECT CREATE: 직접 등록 ──────────────────────────────────
   const handleDirectRegister = async () => {
     try {
       const values = await directForm.validateFields();
-      if (!values.priceKRW) { message.warning('?먮ℓ媛瑜??낅젰?댁＜?몄슂.'); return; }
+      if (!values.priceKRW) { message.warning('판매가를 입력해주세요.'); return; }
       setDirecting(true);
 
-      // ?ъ쭊 URL ?뚯떛 (以꾨컮轅?or ?쇳몴 援щ텇)
+      // 사진 URL 파싱 (줄바꿈 or 쉼표 구분)
       const parseUrls = (raw: string) =>
         raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
 
@@ -229,24 +229,24 @@ const StoreList = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (!res.ok) { const err = await res.json(); message.error(err.error ?? '?깅줉 ?ㅽ뙣'); return; }
-      message.success('吏곸젒 ?깅줉 ?꾨즺! ?ㅽ넗?댁뿉 ?몄텧?⑸땲??');
+      if (!res.ok) { const err = await res.json(); message.error(err.error ?? '등록 실패'); return; }
+      message.success('직접 등록 완료! 스토어에 노출됩니다.');
       setDirectModal(false);
       directForm.resetFields();
       setPhotoUrls({ exterior: '', interior: '', engine: '', extra: '' });
       fetchData();
     } catch (e: any) {
       if (e?.errorFields) return;
-      message.error('?깅줉 以??ㅻ쪟 諛쒖깮');
+      message.error('등록 중 오류 발생');
     } finally {
       setDirecting(false);
     }
   };
 
-  // ?? BLUR: 踰덊샇?먃룹뼹援??섎룞 釉붾윭 ??????????????????????????????????
+  // ── BLUR: 번호판·얼굴 수동 블러 ──────────────────────────────────
   const handleBlur = async (item: IStoreItem) => {
     if (!item.photos || typeof item.photos !== 'object') {
-      message.warning('?ъ쭊 ?곗씠?곌? ?놁뒿?덈떎.');
+      message.warning('사진 데이터가 없습니다.');
       return;
     }
     setBlurringId(item.id);
@@ -254,67 +254,67 @@ const StoreList = () => {
       const photos = item.photos as Record<string, string[]>;
       const categoryOrder = Object.keys(photos);
       const allUrls = categoryOrder.flatMap(k => photos[k] ?? []);
-      if (!allUrls.length) { message.warning('泥섎━???ъ쭊???놁뒿?덈떎.'); return; }
+      if (!allUrls.length) { message.warning('처리할 사진이 없습니다.'); return; }
 
       const categoryMap = categoryOrder.map(k => ({ category: k, count: (photos[k] ?? []).length }));
 
-      message.loading({ content: `踰덊샇??blur 泥섎━ ?쒖옉??(${allUrls.length}?? 諛깃렇?쇱슫??泥섎━)`, key: 'blur', duration: 3 });
+      message.loading({ content: `번호판 blur 처리 시작… (${allUrls.length}장, 백그라운드 처리)`, key: 'blur', duration: 3 });
       const res = await fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ urls: allUrls, storeItemId: item.id, categoryMap }),
       });
-      if (!res.ok) throw new Error(`blur ?묐떟 ?ㅻ쪟: ${res.status}`);
-      message.success('釉붾윭 泥섎━媛 諛깃렇?쇱슫?쒖뿉??吏꾪뻾 以묒엯?덈떎. 1~2遺????덈줈怨좎묠?섏꽭??');
+      if (!res.ok) throw new Error(`blur 응답 오류: ${res.status}`);
+      message.success('블러 처리가 백그라운드에서 진행 중입니다. 1~2분 후 새로고침하세요.');
     } catch (e: any) {
-      message.error(`blur ?ㅽ뙣: ${e?.message ?? '?????녿뒗 ?ㅻ쪟'}`);
+      message.error(`blur 실패: ${e?.message ?? '알 수 없는 오류'}`);
     } finally {
       setBlurringId(null);
       message.destroy('blur');
     }
   };
 
-  // ?? DELETE: ?깅줉 痍⑥냼 ??????????????????????????????????????????
+  // ── DELETE: 등록 취소 ──────────────────────────────────────────
   const handleDelete = (id: string, title: string) => {
     Modal.confirm({
-      title: '?깅줉 痍⑥냼',
-      content: `"${title}" ??瑜? ?ㅽ넗?댁뿉????젣?섏떆寃좎뒿?덇퉴?`,
-      okText: '??젣', okType: 'danger', cancelText: '痍⑥냼',
+      title: '등록 취소',
+      content: `"${title}" 을(를) 스토어에서 삭제하시겠습니까?`,
+      okText: '삭제', okType: 'danger', cancelText: '취소',
       onOk: async () => {
         await fetch(`${CAVIOR_BASE}/api/admin/store-items?id=${id}`, { method: 'DELETE' });
         setStoreItems(prev => prev.filter(i => i.id !== id));
-        message.success('?깅줉??痍⑥냼?섏뿀?듬땲??');
+        message.success('등록이 취소되었습니다.');
       },
     });
   };
 
-  // ?? ?뚯씠釉?而щ읆 ????????????????????????????????????????????????
+  // ── 테이블 컬럼 ────────────────────────────────────────────────
   const unregColumns: ColumnsType<IBooking> = [
     {
-      title: '?덉빟 ID', dataIndex: 'id', width: 90,
+      title: '예약 ID', dataIndex: 'id', width: 90,
       render: (v: number) => <span className="font-mono text-blue-600">#{v}</span>,
     },
-    { title: '李⑤웾踰덊샇', dataIndex: 'carNumber', render: (v: string) => <span className="font-bold">{v}</span> },
-    { title: '李⑥쥌',     dataIndex: 'carModel',  render: (v?: string) => v ?? <span className="text-gray-300">-</span> },
-    { title: '李⑥＜',     dataIndex: 'carOwner' },
-    { title: '吏꾨떒??,   dataIndex: 'assignedDriverName', render: (v?: string) => v ?? <span className="text-gray-300">-</span> },
+    { title: '차량번호', dataIndex: 'carNumber', render: (v: string) => <span className="font-bold">{v}</span> },
+    { title: '차종',     dataIndex: 'carModel',  render: (v?: string) => v ?? <span className="text-gray-300">-</span> },
+    { title: '차주',     dataIndex: 'carOwner' },
+    { title: '진단사',   dataIndex: 'assignedDriverName', render: (v?: string) => v ?? <span className="text-gray-300">-</span> },
     {
-      title: '?꾨즺??, key: 'date',
+      title: '완료일', key: 'date',
       render: (_: any, r: IBooking) => dayjs(r.completedAt ?? r.updatedAt).format('YYYY-MM-DD'),
     },
     {
-      title: '吏??, dataIndex: 'address',
+      title: '지역', dataIndex: 'address',
       render: (v: string) => v?.split(' ')[0] ?? '-',
     },
     {
-      title: '?≪뀡', key: 'action', align: 'right',
+      title: '액션', key: 'action', align: 'right',
       render: (_: any, record: IBooking) => (
         <Button
           type="primary"
           size="small"
           onClick={() => router.push(`/store/register?bookingId=${record.id}`)}
         >
-          ?ㅽ넗???깅줉
+          스토어 등록
         </Button>
       ),
     },
@@ -322,31 +322,31 @@ const StoreList = () => {
 
   const regColumns: ColumnsType<IStoreItem> = [
     {
-      title: '李⑤웾踰덊샇', dataIndex: 'carNumber',
+      title: '차량번호', dataIndex: 'carNumber',
       render: (v: string) => <span className="font-bold">{v}</span>,
     },
-    { title: '李⑤웾紐?, dataIndex: 'titleKo' },
+    { title: '차량명', dataIndex: 'titleKo' },
     {
-      title: '?먮ℓ媛', key: 'price',
+      title: '판매가', key: 'price',
       render: (_: any, item: IStoreItem) => {
-        if (item.hidePrice || item.status === 'sold') return <span className="text-gray-400 text-xs">媛寃?誘명몴??/span>;
+        if (item.hidePrice || item.status === 'sold') return <span className="text-gray-400 text-xs">가격 미표시</span>;
         if (!item.priceKRW) return <span className="text-gray-300 text-xs">-</span>;
         return <span className="font-bold text-green-600">{fmtKRW(item.priceKRW)}</span>;
       },
     },
     {
-      title: '?곹깭', dataIndex: 'status',
+      title: '상태', dataIndex: 'status',
       render: (v: string) => {
         const sc = STATUS_CONFIG[v] ?? { color: 'default', text: v };
         return <Tag color={sc.color}>{sc.text}</Tag>;
       },
     },
     {
-      title: '?깅줉??, dataIndex: 'registeredAt',
+      title: '등록일', dataIndex: 'registeredAt',
       render: (v: string) => dayjs(v).format('YYYY-MM-DD'),
     },
     {
-      title: '?≪뀡', key: 'action', align: 'right', width: 180,
+      title: '액션', key: 'action', align: 'right', width: 180,
       render: (_: any, item: IStoreItem) => (
         <div className="flex items-center gap-2 justify-end">
           <Button
@@ -354,21 +354,22 @@ const StoreList = () => {
             icon={<Eye size={13} />}
             onClick={() => window.open(`https://carvior.store/buy/${item.id}`, 'preview', 'width=1200,height=850,scrollbars=yes,resizable=yes')}
           >
-            蹂닿린
+            보기
           </Button>
           <Button
             size="small"
             icon={<Edit size={13} />}
             onClick={() => router.push(`/store/register?storeItemId=${item.id}`)}
           >
-            ?섏젙
+            수정
           </Button>
           <Button
             size="small"
             loading={blurringId === item.id}
             onClick={() => handleBlur(item)}
           >
-            踰덊샇??          </Button>
+            번호판
+          </Button>
           {item.status !== 'pending' && (
             <Button
               size="small"
@@ -378,7 +379,7 @@ const StoreList = () => {
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ status: 'pending' }),
                 });
-                message.success('pending?쇰줈 蹂듦뎄?섏뿀?듬땲??');
+                message.success('pending으로 복구되었습니다.');
                 fetchData();
               }}
             >
@@ -391,79 +392,79 @@ const StoreList = () => {
             icon={<Trash2 size={13} />}
             onClick={() => handleDelete(item.id, item.titleKo)}
           >
-            痍⑥냼
+            취소
           </Button>
         </div>
       ),
     },
   ];
 
-  // ?? 怨듯넻 ???꾨뱶 ???????????????????????????????????????????????
+  // ── 공통 폼 필드 ───────────────────────────────────────────────
   const ItemFormFields = () => (
     <div className="grid grid-cols-2 gap-x-4">
-      <Form.Item label="李⑤웾紐?(?쒓뎅??" name="titleKo" rules={[{ required: true }]}>
-        <Input placeholder="?? 湲곗븘 ?????섎젋?? />
+      <Form.Item label="차량명 (한국어)" name="titleKo" rules={[{ required: true }]}>
+        <Input placeholder="예: 기아 더 뉴 쏘렌토" />
       </Form.Item>
-      <Form.Item label="李⑤웾紐?(?곸뼱)" name="titleEn">
-        <Input placeholder="?? Kia Sorento" />
+      <Form.Item label="차량명 (영어)" name="titleEn">
+        <Input placeholder="예: Kia Sorento" />
       </Form.Item>
-      <Form.Item label="?몃┝" name="trim">
-        <Input placeholder="?? Noblesse" />
+      <Form.Item label="트림" name="trim">
+        <Input placeholder="예: Noblesse" />
       </Form.Item>
-      <Form.Item label="?곗떇" name="year">
+      <Form.Item label="연식" name="year">
         <InputNumber className="w-full" />
       </Form.Item>
-      <Form.Item label="二쇳뻾嫄곕━ (km)" name="mileage">
+      <Form.Item label="주행거리 (km)" name="mileage">
         <InputNumber className="w-full" formatter={v => v ? `${Number(v).toLocaleString()}` : ''} />
       </Form.Item>
-      <Form.Item label="諛곌린?? name="displacement">
-        <Input placeholder="?? 2,497cc" />
+      <Form.Item label="배기량" name="displacement">
+        <Input placeholder="예: 2,497cc" />
       </Form.Item>
-      <Form.Item label="?곕즺" name="fuel">
+      <Form.Item label="연료" name="fuel">
         <Select options={FUEL_OPTIONS.map(o => ({ value: o, label: o }))} />
       </Form.Item>
-      <Form.Item label="蹂?띻린" name="transmission">
+      <Form.Item label="변속기" name="transmission">
         <Select options={TRANS_OPTIONS.map(o => ({ value: o, label: o }))} />
       </Form.Item>
-      <Form.Item label="?됱긽 (?쒓뎅??" name="colorKo">
-        <Input placeholder="?? ?ㅻ끂???붿씠???? />
+      <Form.Item label="색상 (한국어)" name="colorKo">
+        <Input placeholder="예: 스노우 화이트 펄" />
       </Form.Item>
-      <Form.Item label="移댄뀒怨좊━" name="category">
+      <Form.Item label="카테고리" name="category">
         <Select options={CATEGORY_OPTIONS.map(o => ({ value: o, label: o }))} />
       </Form.Item>
-      <Form.Item label="吏?? name="region">
-        <Input placeholder="?? 寃쎄린?? />
+      <Form.Item label="지역" name="region">
+        <Input placeholder="예: 경기도" />
       </Form.Item>
-      <Form.Item label="?ш퀬 ?대젰" name="accident" valuePropName="checked">
-        <Checkbox>?ш퀬 ?대젰 ?덉쓬</Checkbox>
+      <Form.Item label="사고 이력" name="accident" valuePropName="checked">
+        <Checkbox>사고 이력 있음</Checkbox>
       </Form.Item>
-      <Form.Item label="?먮ℓ媛 (??" name="priceKRW" rules={[{ required: true }]} className="col-span-2">
+      <Form.Item label="판매가 (원)" name="priceKRW" rules={[{ required: true }]} className="col-span-2">
         <InputNumber
           className="w-full"
-          placeholder="?? 36900000"
+          placeholder="예: 36900000"
           formatter={v => v ? `${Number(v).toLocaleString()}` : ''}
         />
       </Form.Item>
-      <Form.Item label="?대뱶誘?硫붾え" name="adminMemo" className="col-span-2">
-        <Input.TextArea rows={2} placeholder="?대? 李멸퀬 硫붾え (?몃? 誘몃끂異?" />
+      <Form.Item label="어드민 메모" name="adminMemo" className="col-span-2">
+        <Input.TextArea rows={2} placeholder="내부 참고 메모 (외부 미노출)" />
       </Form.Item>
     </div>
   );
 
-  // ?? render ?????????????????????????????????????????????????????
+  // ── render ─────────────────────────────────────────────────────
   return (
     <div>
-      {/* ?듦퀎 */}
+      {/* 통계 */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
-          <Statistic title="?꾨즺???덉빟" value={bookings.length} loading={loading} />
+          <Statistic title="완료된 예약" value={bookings.length} loading={loading} />
         </div>
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
-          <Statistic title="?ㅽ넗???깅줉" value={storeItems.length} loading={loading} valueStyle={{ color: '#16a34a' }} />
+          <Statistic title="스토어 등록" value={storeItems.length} loading={loading} valueStyle={{ color: '#16a34a' }} />
         </div>
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
           <Statistic
-            title="??꾨벑濡?(?낃툑?뺤씤 ?꾩슂)"
+            title="셀프등록 (입금확인 필요)"
             value={selfRegistered.filter(i => i.status === 'pending').length}
             loading={loading}
             valueStyle={{ color: '#1677ff' }}
@@ -471,28 +472,30 @@ const StoreList = () => {
         </div>
       </div>
 
-      {/* ??+ 寃??*/}
+      {/* 탭 + 검색 */}
       <DefaultTableBtn className="justify-between mb-4">
         <div className="flex gap-2">
           <Button
             type={activeTab === 'unregistered' ? 'primary' : 'default'}
             onClick={() => setActiveTab('unregistered')}
           >
-            誘몃벑濡?          </Button>
+            미등록
+          </Button>
           <Button
             type={activeTab === 'registered' ? 'primary' : 'default'}
             onClick={() => setActiveTab('registered')}
           >
-            ?깅줉??          </Button>
+            등록됨
+          </Button>
           <Button
             type={activeTab === 'selfregister' ? 'primary' : 'default'}
             onClick={() => setActiveTab('selfregister')}
             style={activeTab !== 'selfregister' && selfRegistered.filter(i => i.status === 'pending').length > 0 ? { borderColor: '#1677ff', color: '#1677ff' } : {}}
           >
-            ??꾨벑濡?{selfRegistered.filter(i => i.status === 'pending').length > 0 && `(${selfRegistered.filter(i => i.status === 'pending').length})`}
+            셀프등록 {selfRegistered.filter(i => i.status === 'pending').length > 0 && `(${selfRegistered.filter(i => i.status === 'pending').length})`}
           </Button>
           <Input
-            placeholder="李⑤웾踰덊샇 / 李⑥쥌 / 李⑥＜"
+            placeholder="차량번호 / 차종 / 차주"
             value={search}
             onChange={e => setSearch(e.target.value)}
             allowClear
@@ -505,14 +508,14 @@ const StoreList = () => {
             style={{ background: '#7c3aed' }}
             onClick={() => {
               directForm.resetFields();
-              directForm.setFieldsValue({ fuel: '媛?붾┛', transmission: '?먮룞', category: 'SUV', region: '?쒖슱' });
+              directForm.setFieldsValue({ fuel: '가솔린', transmission: '자동', category: 'SUV', region: '서울' });
               setPhotoUrls({ exterior: '', interior: '', engine: '', extra: '' });
               setDirectModal(true);
             }}
           >
-            + 吏곸젒 ?깅줉
+            + 직접 등록
           </Button>
-          <Button icon={<RefreshCw size={14} />} onClick={fetchData} loading={loading}>?덈줈怨좎묠</Button>
+          <Button icon={<RefreshCw size={14} />} onClick={fetchData} loading={loading}>새로고침</Button>
         </div>
       </DefaultTableBtn>
 
@@ -539,15 +542,15 @@ const StoreList = () => {
         />
       )}
 
-      {/* ?? ?섏젙 紐⑤떖 (UPDATE) ?? */}
+      {/* ── 수정 모달 (UPDATE) ── */}
       <Modal
-        title={`留ㅻЪ ?섏젙 ??${editingItem?.titleKo}`}
+        title={`매물 수정 — ${editingItem?.titleKo}`}
         open={editModal}
         onOk={handleUpdate}
         onCancel={() => setEditModal(false)}
         confirmLoading={updating}
-        okText="???
-        cancelText="痍⑥냼"
+        okText="저장"
+        cancelText="취소"
         width={760}
         footer={(_, { OkBtn, CancelBtn }) => (
           <div className="flex justify-between items-center">
@@ -562,12 +565,12 @@ const StoreList = () => {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ status: 'active' }),
                       });
-                      message.success('?뱀씤?섏뿀?듬땲?? ?ㅽ넗?댁뿉 ?몄텧?⑸땲??');
+                      message.success('승인되었습니다. 스토어에 노출됩니다.');
                       setEditModal(false);
                       fetchData();
                     }}
                   >
-                    ???낃툑?뺤씤 ???뱀씤
+                    ✅ 입금확인 후 승인
                   </Button>
                   <Button
                     danger
@@ -575,12 +578,12 @@ const StoreList = () => {
                       await fetch(`${CAVIOR_BASE}/api/admin/store-items?id=${editingItem.id}`, {
                         method: 'DELETE',
                       });
-                      message.success('嫄곗젅 諛???젣 ?꾨즺');
+                      message.success('거절 및 삭제 완료');
                       setEditModal(false);
                       fetchData();
                     }}
                   >
-                    ??嫄곗젅 (??젣)
+                    ❌ 거절 (삭제)
                   </Button>
                 </>
               )}
@@ -592,7 +595,7 @@ const StoreList = () => {
           </div>
         )}
       >
-        {/* ??꾨벑濡??ъ쭊 誘몃━蹂닿린 */}
+        {/* 셀프등록 사진 미리보기 */}
         {editingItem?.photos && Object.keys(editingItem.photos).length > 0 && (
           <div className="mb-4">
             {Object.entries(editingItem.photos as Record<string, string[]>).map(([cat, urls]) =>
@@ -613,7 +616,7 @@ const StoreList = () => {
           </div>
         )}
 
-        {/* adminMemo ?쒖떆 (??꾨벑濡??곕씫泥??? */}
+        {/* adminMemo 표시 (셀프등록 연락처 등) */}
         {editingItem?.adminMemo && (
           <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-2 mb-4 text-xs text-blue-700">
             {editingItem.adminMemo}
@@ -621,101 +624,101 @@ const StoreList = () => {
         )}
 
         <Form form={editForm} layout="vertical" size="middle">
-          {/* ?곹깭 + 媛寃?誘명몴??*/}
+          {/* 상태 + 가격 미표시 */}
           <div className="flex gap-4 mb-2">
-            <Form.Item label="?먮ℓ ?곹깭" name="status" className="flex-1 mb-0">
+            <Form.Item label="판매 상태" name="status" className="flex-1 mb-0">
               <Select
                 options={[
-                  { value: 'pending', label: '?낃툑?뺤씤以? },
-                  { value: 'active',  label: '?먮ℓ以? },
-                  { value: 'sold',    label: '嫄곕옒?꾨즺' },
-                  { value: 'hidden',  label: '?④?' },
+                  { value: 'pending', label: '입금확인중' },
+                  { value: 'active',  label: '판매중' },
+                  { value: 'sold',    label: '거래완료' },
+                  { value: 'hidden',  label: '숨김' },
                 ]}
               />
             </Form.Item>
-            <Form.Item label="媛寃?誘명몴?? name="hidePrice" valuePropName="checked" className="mb-0 pt-7">
-              <Checkbox>嫄곕옒?꾨즺 ??媛寃??④린湲?/Checkbox>
+            <Form.Item label="가격 미표시" name="hidePrice" valuePropName="checked" className="mb-0 pt-7">
+              <Checkbox>거래완료 시 가격 숨기기</Checkbox>
             </Form.Item>
           </div>
           <div className="border-b border-gray-100 mb-4" />
           {editingItem?.status === 'active' ? (
             <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-xs text-amber-700 font-semibold mb-4">
-              ?좑툘 寃뚯떆??留ㅻЪ? ?곹깭 蹂寃쎈쭔 媛?ν빀?덈떎. ?댁슜 ?섏젙???꾩슂?섎㈃ 癒쇱? pending?쇰줈 ?섎룎由ъ꽭??
+              ⚠️ 게시된 매물은 상태 변경만 가능합니다. 내용 수정이 필요하면 먼저 pending으로 되돌리세요.
             </div>
           ) : (
             <ItemFormFields />
           )}
         </Form>
       </Modal>
-      {/* ?? 吏곸젒 ?깅줉 紐⑤떖 ?? */}
+      {/* ── 직접 등록 모달 ── */}
       <Modal
-        title="吏곸젒 ?깅줉 ??S3 ?ъ쭊 URL 遺숈뿬?ｊ린"
+        title="직접 등록 — S3 사진 URL 붙여넣기"
         open={directModal}
         onOk={handleDirectRegister}
         onCancel={() => setDirectModal(false)}
         confirmLoading={directing}
-        okText="?ㅽ넗?댁뿉 ?깅줉"
-        cancelText="痍⑥냼"
+        okText="스토어에 등록"
+        cancelText="취소"
         width={740}
       >
         <Form form={directForm} layout="vertical" size="middle">
           <div className="grid grid-cols-2 gap-x-4">
-            <Form.Item label="李⑤웾踰덊샇" name="carNumber">
-              <Input placeholder="?? 12媛3456" />
+            <Form.Item label="차량번호" name="carNumber">
+              <Input placeholder="예: 12가3456" />
             </Form.Item>
-            <Form.Item label="李⑤웾紐?(?쒓뎅??" name="titleKo" rules={[{ required: true }]}>
-              <Input placeholder="?? 湲곗븘 ?????섎젋?? />
+            <Form.Item label="차량명 (한국어)" name="titleKo" rules={[{ required: true }]}>
+              <Input placeholder="예: 기아 더 뉴 쏘렌토" />
             </Form.Item>
-            <Form.Item label="李⑤웾紐?(?곸뼱)" name="titleEn">
-              <Input placeholder="?? Kia Sorento" />
+            <Form.Item label="차량명 (영어)" name="titleEn">
+              <Input placeholder="예: Kia Sorento" />
             </Form.Item>
-            <Form.Item label="?몃┝" name="trim">
-              <Input placeholder="?? Noblesse" />
+            <Form.Item label="트림" name="trim">
+              <Input placeholder="예: Noblesse" />
             </Form.Item>
-            <Form.Item label="?곗떇" name="year">
+            <Form.Item label="연식" name="year">
               <InputNumber className="w-full" placeholder="2024" />
             </Form.Item>
-            <Form.Item label="二쇳뻾嫄곕━ (km)" name="mileage">
+            <Form.Item label="주행거리 (km)" name="mileage">
               <InputNumber className="w-full" formatter={v => v ? `${Number(v).toLocaleString()}` : ''} />
             </Form.Item>
-            <Form.Item label="?곕즺" name="fuel">
+            <Form.Item label="연료" name="fuel">
               <Select options={FUEL_OPTIONS.map(o => ({ value: o, label: o }))} />
             </Form.Item>
-            <Form.Item label="蹂?띻린" name="transmission">
+            <Form.Item label="변속기" name="transmission">
               <Select options={TRANS_OPTIONS.map(o => ({ value: o, label: o }))} />
             </Form.Item>
-            <Form.Item label="諛곌린?? name="displacement">
-              <Input placeholder="?? 2,497cc" />
+            <Form.Item label="배기량" name="displacement">
+              <Input placeholder="예: 2,497cc" />
             </Form.Item>
-            <Form.Item label="?됱긽" name="colorKo">
-              <Input placeholder="?? ?ㅻ끂???붿씠???? />
+            <Form.Item label="색상" name="colorKo">
+              <Input placeholder="예: 스노우 화이트 펄" />
             </Form.Item>
-            <Form.Item label="移댄뀒怨좊━" name="category">
+            <Form.Item label="카테고리" name="category">
               <Select options={CATEGORY_OPTIONS.map(o => ({ value: o, label: o }))} />
             </Form.Item>
-            <Form.Item label="吏?? name="region">
-              <Input placeholder="?? 寃쎄린?? />
+            <Form.Item label="지역" name="region">
+              <Input placeholder="예: 경기도" />
             </Form.Item>
-            <Form.Item label="?먮ℓ媛 (??" name="priceKRW" rules={[{ required: true }]} className="col-span-2">
+            <Form.Item label="판매가 (원)" name="priceKRW" rules={[{ required: true }]} className="col-span-2">
               <InputNumber
                 className="w-full"
-                placeholder="?? 36900000"
+                placeholder="예: 36900000"
                 formatter={v => v ? `${Number(v).toLocaleString()}` : ''}
               />
             </Form.Item>
-            <Form.Item label="?대뱶誘?硫붾え" name="adminMemo" className="col-span-2">
-              <Input.TextArea rows={2} placeholder="?대? 李멸퀬 硫붾え" />
+            <Form.Item label="어드민 메모" name="adminMemo" className="col-span-2">
+              <Input.TextArea rows={2} placeholder="내부 참고 메모" />
             </Form.Item>
           </div>
 
           <div className="border-t border-gray-100 pt-4 mt-2">
-            <p className="text-xs font-bold text-gray-500 mb-3">?벜 S3 ?ъ쭊 URL (以꾨컮轅??먮뒗 ?쇳몴濡??щ윭 ???낅젰)</p>
+            <p className="text-xs font-bold text-gray-500 mb-3">📷 S3 사진 URL (줄바꿈 또는 쉼표로 여러 장 입력)</p>
             <div className="space-y-3">
               {[
-                { key: 'exterior', label: '?멸? ?ъ쭊 ?슅' },
-                { key: 'interior', label: '?닿? ?ъ쭊 ?뮱' },
-                { key: 'engine',   label: '?붿쭊 ?ъ쭊 ?뵩' },
-                { key: 'extra',    label: '湲고? ?ъ쭊 ?벜' },
+                { key: 'exterior', label: '외관 사진 🚗' },
+                { key: 'interior', label: '내관 사진 💺' },
+                { key: 'engine',   label: '엔진 사진 🔧' },
+                { key: 'extra',    label: '기타 사진 📷' },
               ].map(({ key, label }) => (
                 <div key={key}>
                   <p className="text-xs text-gray-400 mb-1">{label}</p>
@@ -738,4 +741,3 @@ const StoreList = () => {
 };
 
 export default React.memo(StoreList);
-
