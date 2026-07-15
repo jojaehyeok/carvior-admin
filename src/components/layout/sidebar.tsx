@@ -1,5 +1,4 @@
 import { ChevronLeft, MenuIcon } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import React from "react";
 import style from "./default-layout.module.css";
@@ -18,7 +17,8 @@ const Sidebar = ({ isShowSidebar, hideSidebar }: ISidebarProps) => {
         <div className="flex">
           <div className="shrink-0">
             <Link href="/" className="flex items-center justify-center w-12 h-12 rounded-lg overflow-hidden">
-              <Image src="/logo.png" alt="Cavior" width={48} height={48} className="object-contain" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo-icon.svg" alt="카비어" width={40} height={40} className="object-contain" />
             </Link>
           </div>
           <div className="ml-1 grow">

@@ -20,22 +20,22 @@ const superAdminMenuData: IMenu[] = [
       {
         id: "bookingList",
         name: "전체 진단 신청목록",
-        link: { path: "/sample/product/BookingListPage" },
+        link: { path: "/diagnosis/bookings" },
       },
       {
         id: "anyoneMotorsList",
         name: "애니원 모터스",
-        link: { path: "/sample/product/AnyoneMotorsBookingPage" },
+        link: { path: "/diagnosis/anyone-motors" },
       },
       {
         id: "driverList",
         name: "진단사 계정 관리",
-        link: { path: "/sample/product/DriverListPage" },
+        link: { path: "/diagnosis/drivers" },
       },
       {
         id: "driverSchedule",
         name: "진단사 스케줄 관리",
-        link: { path: "/sample/product/DriverSchedulePage" },
+        link: { path: "/diagnosis/schedule" },
       },
     ],
   },
@@ -43,19 +43,19 @@ const superAdminMenuData: IMenu[] = [
     id: "consultation",
     name: "상담 신청",
     icon: <MessageCircle className="w-5 h-5" />,
-    link: { path: "/sample/product/ConsultationListPage" },
+    link: { path: "/diagnosis/consultations" },
   },
   {
     id: "store",
     name: "스토어 관리",
     icon: <ShoppingBag className="w-5 h-5" />,
-    link: { path: "/sample/product/StoreManagementPage" },
+    link: { path: "/store/management" },
   },
   {
     id: "cs",
     name: "CS / 리뷰",
     icon: <Star className="w-5 h-5" />,
-    link: { path: "/sample/product/ReviewListPage" },
+    link: { path: "/review" },
   },
   {
     id: "settings",
@@ -65,7 +65,7 @@ const superAdminMenuData: IMenu[] = [
       {
         id: "adminAccount",
         name: "관리자 계정 관리",
-        link: { path: "/sample/product/AdminAccountPage" },
+        link: { path: "/admin/accounts" },
       },
     ],
   },
@@ -99,7 +99,7 @@ const anyoneMotorsMenuData: IMenu[] = [
       {
         id: "anyoneMotorsList",
         name: "진단 신청목록",
-        link: { path: "/sample/product/AnyoneMotorsBookingPage" },
+        link: { path: "/diagnosis/anyone-motors" },
       },
     ],
   },
