@@ -1,6 +1,5 @@
-import DefaultLayout from "@/components/layout/default-layout";
-import { Button, Checkbox, InputNumber, message, Select, Spin, Tag } from "antd";
-import { NextPage } from "next";
+import { getDefaultLayout, IDefaultLayoutPage } from "@/components/layout/default-layout";
+import { Button, InputNumber, message, Select, Spin, Tag } from "antd";
 import { useCallback, useEffect, useState } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_ENDPOINT;
@@ -38,7 +37,7 @@ interface Driver {
   vehicleTypes?: string[];
 }
 
-const DriverSchedulePage: NextPage = () => {
+const DriverSchedulePage: IDefaultLayoutPage = () => {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Driver | null>(null);
@@ -274,5 +273,5 @@ const DriverSchedulePage: NextPage = () => {
   );
 };
 
-DriverSchedulePage.getLayout = (page) => <DefaultLayout>{page}</DefaultLayout>;
+DriverSchedulePage.getLayout = getDefaultLayout;
 export default DriverSchedulePage;
