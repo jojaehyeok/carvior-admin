@@ -32,6 +32,11 @@ const superAdminMenuData: IMenu[] = [
         name: "진단사 계정 관리",
         link: { path: "/sample/product/DriverListPage" },
       },
+      {
+        id: "driverSchedule",
+        name: "진단사 스케줄 관리",
+        link: { path: "/sample/product/DriverSchedulePage" },
+      },
     ],
   },
   {
