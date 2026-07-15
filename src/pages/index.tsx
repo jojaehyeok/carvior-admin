@@ -1,5 +1,6 @@
 import { getDefaultLayout, IDefaultLayoutPage, IPageHeader } from "@/components/layout/default-layout";
 import { useAuth } from "@/lib/auth/auth-provider";
+import Link from "next/link";
 import { Divider, Skeleton, Tag } from "antd";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -292,9 +293,9 @@ const IndexPage: IDefaultLayoutPage = () => {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
               <p className="text-sm font-bold text-gray-700">최근 진단 신청</p>
-              <a href="/diagnosis/bookings" className="text-xs text-violet-600 font-semibold hover:underline">
+              <Link href="/diagnosis/bookings" className="text-xs text-violet-600 font-semibold hover:underline">
                 전체 보기 →
-              </a>
+              </Link>
             </div>
             <div className="divide-y divide-gray-50">
               {(s?.booking.recent ?? []).length === 0 ? (
