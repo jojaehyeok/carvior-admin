@@ -1,5 +1,5 @@
 import { Divider } from "antd";
-import { BarChart2, Home, Map, MessageCircle, Monitor, Package2, Settings, ShoppingBag, Star } from "lucide-react";
+import { BarChart2, Home, MessageCircle, Monitor, Package2, Settings, ShoppingBag, Star } from "lucide-react";
 import { useSession } from "next-auth/react";
 import React from "react";
 import Menu, { IMenu } from "./nav";
@@ -39,7 +39,7 @@ const superAdminMenuData: IMenu[] = [
       },
       {
         id: "driverMap",
-        name: "📍 실시간 지도 배정",
+        name: "[데모] 실시간 지도 배정",
         link: { path: "/diagnosis/map" },
       },
     ],
