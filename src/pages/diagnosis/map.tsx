@@ -13,6 +13,28 @@ interface DriverLoc {
   lng: number | null;
   lastSeenAt: string | null;
   regions: string[] | null;
+  availableDays: number[] | null;
+  availableStartTime: string | null;
+  availableEndTime: string | null;
+}
+
+// 진단사가 설정한 가용 시간(요일+시간대) 기준으로 "지금 활성 상태"인지 판단.
+// 스케줄을 아직 설정 안 한 진단사는 최근 3시간 내 GPS 갱신 여부로 폴백.
+function isActiveNow(d: DriverLoc): boolean {
+  const now = new Date();
+  if (d.availableDays && d.availableDays.length > 0) {
+    if (!d.availableDays.includes(now.getDay())) return false;
+    if (d.availableStartTime && d.availableEndTime) {
+      const cur = now.getHours() * 60 + now.getMinutes();
+      const [sh, sm] = d.availableStartTime.split(":").map(Number);
+      const [eh, em] = d.availableEndTime.split(":").map(Number);
+      const start = sh * 60 + sm;
+      const end = eh * 60 + em;
+      return start <= end ? cur >= start && cur <= end : cur >= start || cur <= end;
+    }
+    return true;
+  }
+  return !!(d.lastSeenAt && Date.now() - new Date(d.lastSeenAt).getTime() < 3 * 60 * 60 * 1000);
 }
 
 interface Booking {
@@ -103,12 +125,15 @@ const MapPage: IDefaultLayoutPage = () => {
   const [demoTarget, setDemoTarget] = useState<DriverLoc | null>(null);
   const [activeTab, setActiveTab] = useState<"bookings" | "drivers">("bookings");
 
-  const onlineDrivers = drivers.filter((d) => d.lat != null && d.lng != null);
+  // 활성 진단사 = 가용 시간(요일+시간대)에 지금이 포함되는 진단사 (GPS 최신 여부와 무관)
+  const activeDrivers = drivers.filter(isActiveNow);
+  // 지도에 핀을 찍을 수 있는 진단사 (마지막으로 알려진 위치 보유)
+  const mappableActiveDrivers = activeDrivers.filter((d) => d.lat != null && d.lng != null);
 
-  // 선택된 신청 기준 거리순 진단사 목록
+  // 선택된 신청 기준 거리순 진단사 목록 (활성 + 위치 있는 진단사만)
   const nearbyDrivers = useMemo(() => {
     if (!selectedBooking?.lat || !selectedBooking?.lng) return [];
-    return onlineDrivers
+    return mappableActiveDrivers
       .map((d) => ({ driver: d, km: distanceKm(selectedBooking.lat!, selectedBooking.lng!, d.lat!, d.lng!) }))
       .sort((a, b) => a.km - b.km);
   }, [selectedBooking, drivers]);
@@ -201,8 +226,7 @@ const MapPage: IDefaultLayoutPage = () => {
     Object.values(driverMarkers.current).forEach((m: any) => m.remove());
     driverMarkers.current = {};
 
-    drivers.forEach((d) => {
-      if (!d.lat || !d.lng) return;
+    mappableActiveDrivers.forEach((d) => {
       const isSelected = selectedDriver?.id === d.id;
       const icon = L.divIcon({
         className: "",
@@ -387,7 +411,7 @@ const MapPage: IDefaultLayoutPage = () => {
                 : "text-gray-400 hover:text-gray-600"
             }`}
           >
-            활성 진단사 ({onlineDrivers.length}/{drivers.length})
+            활성 진단사 ({activeDrivers.length}/{drivers.length})
           </button>
         </div>
 
@@ -441,7 +465,7 @@ const MapPage: IDefaultLayoutPage = () => {
                       <div className="px-4 py-2 bg-orange-50/50 border-b border-gray-50">
                         <p className="text-[10px] font-bold text-gray-400 mb-1.5">근처 진단사 (거리순)</p>
                         {nearbyDrivers.length === 0 ? (
-                          <p className="text-[10px] text-gray-400">온라인 진단사가 없습니다</p>
+                          <p className="text-[10px] text-gray-400">위치가 확인된 활성 진단사가 없습니다</p>
                         ) : (
                           nearbyDrivers.slice(0, 5).map(({ driver: d, km }) => (
                             <div
@@ -470,16 +494,16 @@ const MapPage: IDefaultLayoutPage = () => {
                 );
               })
             )
-          ) : onlineDrivers.length === 0 ? (
+          ) : activeDrivers.length === 0 ? (
             <div className="p-6 text-center text-sm text-gray-400">
               <Users className="w-8 h-8 mx-auto mb-2 text-gray-200" />
-              온라인 진단사가 없습니다
+              지금 가용 시간인 진단사가 없습니다
             </div>
           ) : (
-            onlineDrivers.map((d) => {
+            activeDrivers.map((d: DriverLoc) => {
               const isSelected = selectedDriver?.id === d.id;
-              const km = selectedBooking?.lat && selectedBooking?.lng
-                ? distanceKm(selectedBooking.lat, selectedBooking.lng, d.lat!, d.lng!)
+              const km = selectedBooking?.lat && selectedBooking?.lng && d.lat != null && d.lng != null
+                ? distanceKm(selectedBooking.lat, selectedBooking.lng, d.lat, d.lng)
                 : null;
               return (
                 <div
@@ -491,12 +515,18 @@ const MapPage: IDefaultLayoutPage = () => {
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-bold text-gray-900">{d.name}</span>
-                    {km != null && (
+                    {km != null ? (
                       <span className="text-[10px] text-orange-500 font-semibold">신청지까지 {formatDistance(km)}</span>
-                    )}
+                    ) : d.lat == null ? (
+                      <span className="text-[10px] text-gray-400">위치 없음</span>
+                    ) : null}
                   </div>
                   <p className="text-xs text-gray-500 truncate">{(d.regions ?? []).join(", ") || "지역 미설정"}</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{timeDiff(d.lastSeenAt)}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    {d.availableStartTime && d.availableEndTime
+                      ? `가용 ${d.availableStartTime}~${d.availableEndTime} · 마지막 위치 ${timeDiff(d.lastSeenAt)}`
+                      : timeDiff(d.lastSeenAt)}
+                  </p>
                   {selectedBooking && (
                     <button
                       onClick={(e) => { e.stopPropagation(); handleAssign(selectedBooking, d); }}
