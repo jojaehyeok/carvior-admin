@@ -1,7 +1,7 @@
 import { getDefaultLayout, IDefaultLayoutPage } from "@/components/layout/default-layout";
 import { Button, message, Select, Spin, Tag } from "antd";
-import { useEffect, useRef, useState } from "react";
-import { MapPin, Navigation, RefreshCw, UserCheck, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MapPin, Navigation, RefreshCw, Users, X } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_ENDPOINT;
 
@@ -35,6 +35,20 @@ declare global {
 const STATUS_COLOR: Record<string, string> = {
   PENDING: "orange", ASSIGNED: "blue", COMPLETED: "green", CANCELLED: "red",
 };
+
+function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDistance(km: number) {
+  return km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(1)}km`;
+}
 
 function timeDiff(iso: string | null) {
   if (!iso) return "위치 없음";
@@ -87,6 +101,17 @@ const MapPage: IDefaultLayoutPage = () => {
   const [assigning, setAssigning] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
   const [demoTarget, setDemoTarget] = useState<DriverLoc | null>(null);
+  const [activeTab, setActiveTab] = useState<"bookings" | "drivers">("bookings");
+
+  const onlineDrivers = drivers.filter((d) => d.lat != null && d.lng != null);
+
+  // 선택된 신청 기준 거리순 진단사 목록
+  const nearbyDrivers = useMemo(() => {
+    if (!selectedBooking?.lat || !selectedBooking?.lng) return [];
+    return onlineDrivers
+      .map((d) => ({ driver: d, km: distanceKm(selectedBooking.lat!, selectedBooking.lng!, d.lat!, d.lng!) }))
+      .sort((a, b) => a.km - b.km);
+  }, [selectedBooking, drivers]);
 
   // Leaflet CSS + JS 로드
   useEffect(() => {
@@ -209,7 +234,7 @@ const MapPage: IDefaultLayoutPage = () => {
       const marker = L.marker([d.lat, d.lng], { icon })
         .addTo(map)
         .on("click", () => {
-          if (selectedBooking) setSelectedDriver(d);
+          setSelectedDriver(d);
         });
 
       marker.bindPopup(`
@@ -293,20 +318,20 @@ const MapPage: IDefaultLayoutPage = () => {
     bookingMarkers.current[selectedBooking.id]?.openPopup();
   }, [selectedBooking]);
 
-  const handleAssign = async () => {
-    if (!selectedBooking || !selectedDriver) return;
+  const handleAssign = async (booking = selectedBooking, driver = selectedDriver) => {
+    if (!booking || !driver) return;
     setAssigning(true);
     try {
-      const res = await fetch(`${API}/external/request/${selectedBooking.id}/assign`, {
+      const res = await fetch(`${API}/external/request/${booking.id}/assign`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: String(selectedDriver.id),
-          name: selectedDriver.name,
+          id: String(driver.id),
+          name: driver.name,
         }),
       });
       if (!res.ok) throw new Error();
-      message.success(`${selectedBooking.carNumber} → ${selectedDriver.name} 배정 완료`);
+      message.success(`${booking.carNumber} → ${driver.name} 배정 완료`);
       setSelectedBooking(null);
       setSelectedDriver(null);
       fetchData();
@@ -317,13 +342,23 @@ const MapPage: IDefaultLayoutPage = () => {
     }
   };
 
+  const focusDriver = (d: DriverLoc) => {
+    setSelectedDriver(d);
+    if (d.lat != null && d.lng != null && leafletMap.current) {
+      leafletMap.current.setView([d.lat, d.lng], 14, { animate: true });
+      driverMarkers.current[d.id]?.openPopup();
+    }
+  };
+
   return (
     <div className="flex h-[calc(100vh-120px)] gap-0 overflow-hidden rounded-2xl border border-gray-100 shadow-sm">
       {/* 왼쪽 패널 */}
       <div className="w-72 flex-shrink-0 bg-white border-r border-gray-100 flex flex-col">
         {/* 헤더 */}
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-          <p className="text-sm font-bold text-gray-800">배정 전 신청</p>
+          <p className="text-sm font-bold text-gray-800">
+            {activeTab === "bookings" ? "배정 전 신청" : "활성 진단사"}
+          </p>
           <button
             onClick={() => { setLoading(true); fetchData(); }}
             className="p-1.5 text-gray-400 hover:text-violet-600 rounded-lg hover:bg-violet-50 transition-colors"
@@ -332,70 +367,144 @@ const MapPage: IDefaultLayoutPage = () => {
           </button>
         </div>
 
-        {/* 범례 */}
-        <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-[#7c3aed]" />
-            <span className="text-[10px] text-gray-500">진단사</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-[#ea580c]" />
-            <span className="text-[10px] text-gray-500">검차신청</span>
-          </div>
-          <div className="flex items-center gap-1.5 ml-auto">
-            <UserCheck className="w-3 h-3 text-violet-600" />
-            <span className="text-[10px] text-violet-700 font-semibold">
-              {drivers.filter((d) => d.lat).length}/{drivers.length}명 온라인
-            </span>
-          </div>
+        {/* 탭 */}
+        <div className="flex border-b border-gray-100">
+          <button
+            onClick={() => setActiveTab("bookings")}
+            className={`flex-1 py-2 text-xs font-semibold transition-colors ${
+              activeTab === "bookings"
+                ? "text-orange-600 border-b-2 border-orange-500"
+                : "text-gray-400 hover:text-gray-600"
+            }`}
+          >
+            배정 전 신청 {bookings.length > 0 && `(${bookings.length})`}
+          </button>
+          <button
+            onClick={() => setActiveTab("drivers")}
+            className={`flex-1 py-2 text-xs font-semibold transition-colors ${
+              activeTab === "drivers"
+                ? "text-violet-600 border-b-2 border-violet-500"
+                : "text-gray-400 hover:text-gray-600"
+            }`}
+          >
+            활성 진단사 ({onlineDrivers.length}/{drivers.length})
+          </button>
         </div>
 
-        {/* 신청 목록 */}
+        {/* 목록 */}
         <div className="flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="flex justify-center py-10"><Spin /></div>
-          ) : bookings.length === 0 ? (
+          {activeTab === "bookings" ? (
+            loading ? (
+              <div className="flex justify-center py-10"><Spin /></div>
+            ) : bookings.length === 0 ? (
+              <div className="p-6 text-center text-sm text-gray-400">
+                <MapPin className="w-8 h-8 mx-auto mb-2 text-gray-200" />
+                대기 중인 신청이 없습니다
+              </div>
+            ) : (
+              bookings.map((b) => {
+                const isSelected = selectedBooking?.id === b.id;
+                return (
+                  <div key={b.id}>
+                    <div
+                      onClick={() => {
+                        setSelectedBooking(isSelected ? null : b);
+                        setSelectedDriver(null);
+                      }}
+                      className={`px-4 py-3 border-b border-gray-50 cursor-pointer transition-colors ${
+                        isSelected ? "bg-orange-50 border-l-2 border-l-orange-400" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-bold text-gray-900">{b.carNumber}</span>
+                        <div className="flex items-center gap-1">
+                          {b.lat ? (
+                            <span className="text-[9px] text-green-500 font-semibold">📍지도</span>
+                          ) : geocoding ? (
+                            <span className="text-[9px] text-gray-400">변환중…</span>
+                          ) : null}
+                          <Tag color={STATUS_COLOR[b.status]} className="text-[10px] m-0">
+                            {b.status === "PENDING" ? "대기" : b.status}
+                          </Tag>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 truncate">{b.address}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        {new Date(b.createdAt).toLocaleDateString("ko-KR", {
+                          month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                        })}
+                      </p>
+                    </div>
+
+                    {/* 근처 진단사 - 바로 배정 */}
+                    {isSelected && (
+                      <div className="px-4 py-2 bg-orange-50/50 border-b border-gray-50">
+                        <p className="text-[10px] font-bold text-gray-400 mb-1.5">근처 진단사 (거리순)</p>
+                        {nearbyDrivers.length === 0 ? (
+                          <p className="text-[10px] text-gray-400">온라인 진단사가 없습니다</p>
+                        ) : (
+                          nearbyDrivers.slice(0, 5).map(({ driver: d, km }) => (
+                            <div
+                              key={d.id}
+                              className="flex items-center justify-between py-1.5 cursor-pointer group"
+                              onClick={() => focusDriver(d)}
+                            >
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <div className="w-2 h-2 rounded-full bg-[#7c3aed] flex-shrink-0" />
+                                <span className="text-xs text-gray-700 truncate group-hover:text-violet-700">{d.name}</span>
+                                <span className="text-[10px] text-gray-400 flex-shrink-0">{formatDistance(km)}</span>
+                              </div>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleAssign(b, d); }}
+                                disabled={assigning}
+                                className="text-[10px] font-semibold text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-md px-2 py-1 flex-shrink-0"
+                              >
+                                배정
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )
+          ) : onlineDrivers.length === 0 ? (
             <div className="p-6 text-center text-sm text-gray-400">
-              <MapPin className="w-8 h-8 mx-auto mb-2 text-gray-200" />
-              대기 중인 신청이 없습니다
+              <Users className="w-8 h-8 mx-auto mb-2 text-gray-200" />
+              온라인 진단사가 없습니다
             </div>
           ) : (
-            bookings.map((b) => {
-              const isSelected = selectedBooking?.id === b.id;
+            onlineDrivers.map((d) => {
+              const isSelected = selectedDriver?.id === d.id;
+              const km = selectedBooking?.lat && selectedBooking?.lng
+                ? distanceKm(selectedBooking.lat, selectedBooking.lng, d.lat!, d.lng!)
+                : null;
               return (
                 <div
-                  key={b.id}
-                  onClick={() => {
-                    setSelectedBooking(isSelected ? null : b);
-                    setSelectedDriver(null);
-                  }}
+                  key={d.id}
+                  onClick={() => focusDriver(d)}
                   className={`px-4 py-3 border-b border-gray-50 cursor-pointer transition-colors ${
-                    isSelected ? "bg-orange-50 border-l-2 border-l-orange-400" : "hover:bg-gray-50"
+                    isSelected ? "bg-violet-50 border-l-2 border-l-violet-400" : "hover:bg-gray-50"
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-bold text-gray-900">{b.carNumber}</span>
-                    <div className="flex items-center gap-1">
-                      {b.lat ? (
-                        <span className="text-[9px] text-green-500 font-semibold">📍지도</span>
-                      ) : geocoding ? (
-                        <span className="text-[9px] text-gray-400">변환중…</span>
-                      ) : null}
-                      <Tag color={STATUS_COLOR[b.status]} className="text-[10px] m-0">
-                        {b.status === "PENDING" ? "대기" : b.status}
-                      </Tag>
-                    </div>
+                    <span className="text-sm font-bold text-gray-900">{d.name}</span>
+                    {km != null && (
+                      <span className="text-[10px] text-orange-500 font-semibold">신청지까지 {formatDistance(km)}</span>
+                    )}
                   </div>
-                  <p className="text-xs text-gray-500 truncate">{b.address}</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">
-                    {new Date(b.createdAt).toLocaleDateString("ko-KR", {
-                      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-                    })}
-                  </p>
-                  {isSelected && (
-                    <p className="text-[10px] text-orange-600 font-semibold mt-1">
-                      → 지도에서 진단사 핀을 클릭해 배정하세요
-                    </p>
+                  <p className="text-xs text-gray-500 truncate">{(d.regions ?? []).join(", ") || "지역 미설정"}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{timeDiff(d.lastSeenAt)}</p>
+                  {selectedBooking && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleAssign(selectedBooking, d); }}
+                      disabled={assigning}
+                      className="mt-1.5 text-[10px] font-semibold text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-md px-2 py-1"
+                    >
+                      {selectedBooking.carNumber} 배정
+                    </button>
                   )}
                 </div>
               );
@@ -456,7 +565,7 @@ const MapPage: IDefaultLayoutPage = () => {
             <Button
               type="primary"
               loading={assigning}
-              onClick={handleAssign}
+              onClick={() => handleAssign()}
               style={{ background: "#7c3aed", border: "none" }}
             >
               배정 확정
@@ -473,7 +582,7 @@ const MapPage: IDefaultLayoutPage = () => {
         {/* 안내 메시지 */}
         {selectedBooking && !selectedDriver && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-violet-600 text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg z-[1000]">
-            지도에서 진단사 핀(보라색)을 클릭해 배정하세요
+왼쪽 근처 진단사 목록에서 배정하거나, 지도의 보라색 핀을 클릭하세요
           </div>
         )}
       </div>

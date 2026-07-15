@@ -5,6 +5,7 @@ import { useRouter } from "next/router";
 import { useCallback, useEffect, useState } from "react";
 import MainMenu from "./main-menu";
 import MenuBtn from "./menu-btn";
+import NewBookingAnnouncer from "./new-booking-announcer";
 import PageHeader from "./page-header";
 import Profile from "./profile";
 import Sidebar from "./sidebar";
@@ -50,6 +51,7 @@ const DefaultLayout = ({ Page, ...props }: IDefaultLayoutProps) => {
 
   return (
     <div>
+      <NewBookingAnnouncer />
       <Sidebar isShowSidebar={isShowSidebar} hideSidebar={hideSidebar} />
 
       {/* mobile navigation */}
