@@ -32,7 +32,8 @@ export default class MyDocument extends Document {
     return (
       <Html lang="ko">
         <Head>
-            <link rel="icon" type="image/png" href="/logo.png" />
+            <link rel="icon" type="image/svg+xml" href="/logo-icon.svg" />
+          <link rel="icon" type="image/png" href="/logo.png" />
           </Head>
         <body>
           <Main />

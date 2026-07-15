@@ -1,19 +1,19 @@
 {
-  "name": "Admin UI",
-  "short_name": "Admin UI",
+  "name": "카비어 어드민",
+  "short_name": "카비어",
   "icons": [
     {
-      "src": "/android-chrome-192x192.png",
+      "src": "/logo.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/android-chrome-512x512.png",
+      "src": "/logo.png",
       "sizes": "512x512",
       "type": "image/png"
     }
   ],
-  "theme_color": "#ffffff",
+  "theme_color": "#7C3AED",
   "background_color": "#ffffff",
   "display": "standalone"
 }
