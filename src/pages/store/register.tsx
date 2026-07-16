@@ -25,18 +25,15 @@ interface IBooking {
 }
 
 interface IInspection {
-  carModel?: string; mileage?: number; color?: string;
-  // 실제 엔티티 필드: photos (배열), regImage/vinImage/dashboardImage (단일 문자열)
-  photos?: {
+  completedAt?: string;
+  car_info?: { number?: string; type?: string; mileage?: number; color?: string; repairCost?: number };
+  evaluation?: { warningDesc?: string; leakDesc?: string; optionsDesc?: string; driveDesc?: string; memo?: string };
+  images?: {
     exterior?: string[]; wheel?: string[]; undercarriage?: string[];
     interior?: string[]; engine?: string[]; damage?: string[];
     extra?: string[]; extraMemo?: string[];
+    dashboard?: string[]; registration?: string[]; vin?: string[];
   };
-  regImage?: string;
-  vinImage?: string;
-  dashboardImage?: string;
-  inspectionDetails?: { warningDesc?: string; leakDesc?: string; optionsDesc?: string; driveDesc?: string };
-  completedAt?: string;
 }
 
 interface Lightbox { photos: string[]; idx: number; }
@@ -75,22 +72,23 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
       const b = bookings.find((x: IBooking) => x.id === bid) ?? null;
       setBooking(b);
       setInspection(insp);
+      const carType = insp?.car_info?.type;
       form.setFieldsValue({
-        titleKo: insp?.carModel ?? b?.carModel ?? '',
+        titleKo: (carType && carType !== '알수없음' ? carType : undefined) ?? b?.carModel ?? '',
         year: new Date().getFullYear(),
         fuel: '가솔린',
         transmission: '자동',
         category: 'SUV',
         region: b?.address?.split(' ')[0] ?? '',
-        mileage: insp?.mileage,
-        colorKo: insp?.color,
+        mileage: insp?.car_info?.mileage,
+        colorKo: insp?.car_info?.color || undefined,
       });
-      if (insp?.photos) {
+      if (insp?.images) {
         const order: Record<string, string[]> = {};
-        for (const [cat, arr] of Object.entries(insp.photos)) {
+        for (const [cat, arr] of Object.entries(insp.images)) {
+          if (['registration', 'vin'].includes(cat)) continue; // 개인정보 사진은 별도 처리
           if (Array.isArray(arr) && arr.length) order[cat] = [...arr];
         }
-        if (insp.dashboardImage) order.dashboard = [insp.dashboardImage];
         setPhotoOrder(order);
       }
     }).finally(() => setLoading(false));
@@ -185,8 +183,8 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
   // ── OCR ────────────────────────────────────────────────────────
   const handleOcr = useCallback(async (mode: 'registration' | 'dashboard') => {
     const photoUrl = mode === 'registration'
-      ? inspection?.regImage ?? null
-      : (photoOrder.dashboard ?? [])[0] ?? inspection?.dashboardImage ?? null;
+      ? inspection?.images?.registration?.[0] ?? null
+      : (photoOrder.dashboard ?? [])[0] ?? inspection?.images?.dashboard?.[0] ?? null;
 
     if (!photoUrl) {
       message.warning(mode === 'registration' ? '자동차등록증 사진이 없습니다.' : '계기판 사진이 없습니다.');
@@ -340,8 +338,8 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
 
   // 개인정보 사진 (단일 URL)
   const privacyPhotos = useMemo(() => [
-    ...(inspection?.regImage ? [{ url: inspection.regImage, cat: '자동차등록증' }] : []),
-    ...(inspection?.vinImage ? [{ url: inspection.vinImage, cat: '차대번호' }] : []),
+    ...(inspection?.images?.registration?.[0] ? [{ url: inspection.images.registration[0], cat: '자동차등록증' }] : []),
+    ...(inspection?.images?.vin?.[0] ? [{ url: inspection.images.vin[0], cat: '차대번호' }] : []),
   ], [inspection]);
 
   if (loading) {
@@ -388,7 +386,7 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
         <div className="w-[55%] flex flex-col gap-4">
 
           {/* 개인정보 사진 + OCR 버튼 */}
-          {(privacyPhotos.length > 0 || inspection?.regImage || isEditMode) && (
+          {(privacyPhotos.length > 0 || inspection?.images?.registration?.[0] || isEditMode) && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs font-bold text-red-600">⚠️ 개인정보 사진 — 스토어 미노출</p>
@@ -495,13 +493,13 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
           </div>
 
           {/* 진단 메모 */}
-          {inspection?.inspectionDetails && (
+          {inspection?.evaluation && (
             <div className="bg-gray-50 rounded-xl border border-gray-100 p-4 grid grid-cols-2 gap-3">
               {Object.entries({
-                '경고등': inspection.inspectionDetails.warningDesc,
-                '누유':   inspection.inspectionDetails.leakDesc,
-                '옵션':   inspection.inspectionDetails.optionsDesc,
-                '주행':   inspection.inspectionDetails.driveDesc,
+                '경고등': inspection.evaluation.warningDesc,
+                '누유':   inspection.evaluation.leakDesc,
+                '옵션':   inspection.evaluation.optionsDesc,
+                '주행':   inspection.evaluation.driveDesc,
               }).filter(([, v]) => v).map(([k, v]) => (
                 <div key={k}>
                   <p className="text-[10px] text-gray-400 font-bold mb-0.5">{k}</p>
