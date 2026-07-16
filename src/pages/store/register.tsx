@@ -6,6 +6,8 @@ import { useRouter } from "next/router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const CAVIOR_BASE = (process.env.NEXT_PUBLIC_API_ENDPOINT || 'https://carvior.store/api/v1').replace('/api/v1', '');
+const INTERNAL_KEY = process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? '';
+const INTERNAL_HEADERS = { 'x-internal-key': INTERNAL_KEY };
 const EXCHANGE_RATE = 1350;
 const FUEL_OPTIONS = ['가솔린', '디젤', '하이브리드', 'LPG', '전기'];
 const TRANS_OPTIONS = ['자동', '수동'];
@@ -67,8 +69,8 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
     const bid = Number(bookingId);
     setLoading(true);
     Promise.all([
-      fetch(`${CAVIOR_BASE}/api/admin/bookings`).then(r => r.ok ? r.json() : []),
-      fetch(`${CAVIOR_BASE}/api/admin/inspection?bookingId=${bid}`).then(r => r.ok ? r.json() : null),
+      fetch(`${CAVIOR_BASE}/api/admin/bookings`, { headers: INTERNAL_HEADERS }).then(r => r.ok ? r.json() : []),
+      fetch(`${CAVIOR_BASE}/api/admin/inspection?bookingId=${bid}`, { headers: INTERNAL_HEADERS }).then(r => r.ok ? r.json() : null),
     ]).then(([bookings, insp]: [IBooking[], IInspection | null]) => {
       const b = bookings.find((x: IBooking) => x.id === bid) ?? null;
       setBooking(b);
@@ -99,7 +101,7 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
     if (!storeItemId) return;
     setLoading(true);
     const sid = Number(storeItemId);
-    fetch(`${CAVIOR_BASE}/api/v1/admin/store-items/${sid}`)
+    fetch(`${CAVIOR_BASE}/api/v1/admin/store-items/${sid}`, { headers: INTERNAL_HEADERS })
       .then(r => r.ok ? r.json() : null)
       .then(async (item) => {
         if (!item) return;
@@ -130,8 +132,8 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
         if (item.bookingId && item.bookingId <= THRESHOLD) {
           try {
             const [bookingList, insp] = await Promise.all([
-              fetch(`${CAVIOR_BASE}/api/admin/bookings`).then(r => r.ok ? r.json() : []),
-              fetch(`${CAVIOR_BASE}/api/admin/inspection?bookingId=${item.bookingId}`).then(r => r.ok ? r.json() : null),
+              fetch(`${CAVIOR_BASE}/api/admin/bookings`, { headers: INTERNAL_HEADERS }).then(r => r.ok ? r.json() : []),
+              fetch(`${CAVIOR_BASE}/api/admin/inspection?bookingId=${item.bookingId}`, { headers: INTERNAL_HEADERS }).then(r => r.ok ? r.json() : null),
             ]);
             setBooking(bookingList.find((x: IBooking) => x.id === item.bookingId) ?? null);
             setInspection(insp);
@@ -268,7 +270,7 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
         // ── 수정 (PATCH) ──
         const res = await fetch(`${CAVIOR_BASE}/api/admin/store-items?id=${storeItemId}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...INTERNAL_HEADERS },
           body: JSON.stringify({ ...values, priceUSD: Math.round(values.priceKRW / EXCHANGE_RATE), photos: photoOrder, specs }),
         });
         if (!res.ok) {

@@ -52,7 +52,7 @@ const superAdminMenuData: IMenu[] = [
   },
   {
     id: "store",
-    name: "스토어 관리",
+    name: "스마트옥션 관리",
     icon: <ShoppingBag className="w-5 h-5" />,
     link: { path: "/store/management" },
   },

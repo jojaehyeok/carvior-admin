@@ -6,10 +6,14 @@ import { ISO8601DateTime } from "@/types/common";
 import { Button, Checkbox, Input, InputNumber, Modal, Select, Tag, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
-import { Eye, RefreshCw, UserPlus } from "lucide-react";
+import { Eye, PenSquare, RefreshCw, UserPlus } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+
+const CAVIOR_BASE = (process.env.NEXT_PUBLIC_API_ENDPOINT || 'https://carvior.store/api/v1').replace('/api/v1', '');
+const INTERNAL_KEY = process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? '';
+const INTERNAL_HEADERS = { 'x-internal-key': INTERNAL_KEY };
 
 // --- 인터페이스 정의 ---
 interface IDriver {
@@ -52,6 +56,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [data, setData] = useState<IBooking[]>([]);
   const [drivers, setDrivers] = useState<IDriver[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // bookingId → storeItemId (스마트옥션 매물로 이미 등록됐는지 확인용)
+  const [storeItemMap, setStoreItemMap] = useState<Record<number, string>>({});
 
   // --- 상세/수정 모달 상태 ---
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -102,10 +108,26 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     }
   }, [API_BASE]);
 
+  // 3. 스마트옥션 매물 등록 여부 확인용 (bookingId → storeItemId)
+  const fetchStoreItemMap = useCallback(async () => {
+    try {
+      const res = await fetch(`${CAVIOR_BASE}/api/admin/store-items`, { headers: INTERNAL_HEADERS });
+      const items = res.ok ? await res.json() : [];
+      const map: Record<number, string> = {};
+      (Array.isArray(items) ? items : []).forEach((item: { bookingId?: number; id: string }) => {
+        if (item.bookingId) map[item.bookingId] = item.id;
+      });
+      setStoreItemMap(map);
+    } catch {
+      // 매물 등록 상태 확인 실패해도 예약 목록 자체는 정상 표시
+    }
+  }, []);
+
   useEffect(() => {
     fetchBookings();
     fetchDrivers();
-  }, [fetchBookings, fetchDrivers]);
+    fetchStoreItemMap();
+  }, [fetchBookings, fetchDrivers, fetchStoreItemMap]);
 
   // --- 모달 열기 ---
   const openModal = (record: IBooking) => {
@@ -295,6 +317,29 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           리포트 보기
         </Button>
       ),
+    },
+    {
+      title: "스마트옥션 매물",
+      key: "storeItem",
+      width: 130,
+      align: "center",
+      render: (_, record) => {
+        const storeItemId = storeItemMap[record.id];
+        return (
+          <Button
+            size="small"
+            type={storeItemId ? "default" : "primary"}
+            style={storeItemId ? undefined : { background: "#7c3aed", borderColor: "#7c3aed" }}
+            disabled={record.status !== 'COMPLETED'}
+            icon={<PenSquare size={14} />}
+            onClick={() => router.push(
+              storeItemId ? `/store/register?storeItemId=${storeItemId}` : `/store/register?bookingId=${record.id}`
+            )}
+          >
+            {storeItemId ? "매물 수정" : "매물 등록"}
+          </Button>
+        );
+      },
     },
   ];
 

@@ -2,7 +2,7 @@ import { getDefaultLayout, IDefaultLayoutPage, IPageHeader } from "@/components/
 import StoreList from "@/components/page/store/store-list";
 
 const pageHeader: IPageHeader = {
-  title: "스토어 매물 관리",
+  title: "스마트옥션 매물 관리",
 };
 
 const StoreManagementPage: IDefaultLayoutPage = () => {

@@ -10,6 +10,8 @@ import { useRouter } from "next/router";
 import React, { useCallback, useEffect, useState } from "react";
 
 const CAVIOR_BASE = (process.env.NEXT_PUBLIC_API_ENDPOINT || 'https://carvior.store/api/v1').replace('/api/v1', '');
+const INTERNAL_KEY = process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? '';
+const INTERNAL_HEADERS = { 'x-internal-key': INTERNAL_KEY };
 
 interface IBooking {
   id: number;
@@ -88,8 +90,8 @@ const StoreList = () => {
     setLoading(true);
     try {
       const [bRes, sRes] = await Promise.all([
-        fetch(`${CAVIOR_BASE}/api/admin/bookings`),
-        fetch(`${CAVIOR_BASE}/api/admin/store-items`),
+        fetch(`${CAVIOR_BASE}/api/admin/bookings`, { headers: INTERNAL_HEADERS }),
+        fetch(`${CAVIOR_BASE}/api/admin/store-items`, { headers: INTERNAL_HEADERS }),
       ]);
       setBookings(bRes.ok ? await bRes.json() : []);
       setStoreItems(sRes.ok ? await sRes.json() : []);
