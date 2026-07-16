@@ -6,7 +6,7 @@ import { ISO8601DateTime } from "@/types/common";
 import { Button, Checkbox, Input, InputNumber, Modal, Select, Tag, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
-import { Eye, PenSquare, RefreshCw, UserPlus } from "lucide-react";
+import { Eye, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -58,6 +58,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [isLoading, setIsLoading] = useState(true);
   // bookingId → storeItemId (스마트옥션 매물로 이미 등록됐는지 확인용)
   const [storeItemMap, setStoreItemMap] = useState<Record<number, string>>({});
+
+  // --- 진단사 재촬영/수정 요청 모달 ---
+  const [requestTarget, setRequestTarget] = useState<IBooking | null>(null);
+  const [requestCategory, setRequestCategory] = useState<string | undefined>(undefined);
+  const [requestMessage, setRequestMessage] = useState("");
+  const [requesting, setRequesting] = useState(false);
 
   // --- 상세/수정 모달 상태 ---
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -128,6 +134,33 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     fetchDrivers();
     fetchStoreItemMap();
   }, [fetchBookings, fetchDrivers, fetchStoreItemMap]);
+
+  // --- 진단사 재촬영/수정 요청 (SMS) ---
+  const openRequestModal = (record: IBooking) => {
+    setRequestTarget(record);
+    setRequestCategory(undefined);
+    setRequestMessage("");
+  };
+
+  const handleSendRequest = async () => {
+    if (!requestTarget) return;
+    setRequesting(true);
+    try {
+      const res = await fetch(`${API_BASE}/external/inspection/${requestTarget.id}/request-update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...INTERNAL_HEADERS },
+        body: JSON.stringify({ message: requestMessage, category: requestCategory }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || '요청 실패');
+      message.success(`${data.driverName ?? '진단사'}에게 재촬영/수정 요청 SMS를 보냈습니다.`);
+      setRequestTarget(null);
+    } catch (e: any) {
+      message.error(e.message || '재촬영 요청 중 오류가 발생했습니다.');
+    } finally {
+      setRequesting(false);
+    }
+  };
 
   // --- 모달 열기 ---
   const openModal = (record: IBooking) => {
@@ -341,6 +374,23 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         );
       },
     },
+    {
+      title: "재촬영 요청",
+      key: "requestUpdate",
+      width: 120,
+      align: "center",
+      render: (_, record) => (
+        <Button
+          size="small"
+          danger
+          disabled={record.status !== 'COMPLETED' || !record.assignedDriverId}
+          icon={<MessageSquare size={14} />}
+          onClick={() => openRequestModal(record)}
+        >
+          재촬영 요청
+        </Button>
+      ),
+    },
   ];
 
   return (
@@ -469,6 +519,56 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             <label className="block text-xs font-bold text-gray-400 mb-1">관리자 메모</label>
             <Input.TextArea value={tempMemo} onChange={e => setTempMemo(e.target.value)} rows={3} placeholder="진단사에게 전달할 내용을 입력하세요." />
           </div>
+        </div>
+      </Modal>
+
+      {/* 진단사 재촬영/수정 요청 모달 */}
+      <Modal
+        title={`재촬영/수정 요청 — ${requestTarget?.carNumber}`}
+        open={!!requestTarget}
+        onOk={handleSendRequest}
+        onCancel={() => setRequestTarget(null)}
+        confirmLoading={requesting}
+        okText="SMS 보내기"
+        okButtonProps={{ danger: true }}
+        cancelText="취소"
+      >
+        <div className="py-2 space-y-3">
+          <p className="text-xs text-gray-500">
+            배정 진단사: <span className="font-bold">{requestTarget?.assignedDriverName ?? '-'}</span>
+          </p>
+          <div>
+            <label className="block text-xs font-bold text-gray-400 mb-1">사진 카테고리 (선택)</label>
+            <Select
+              className="w-full"
+              allowClear
+              placeholder="어느 부분인지 선택"
+              value={requestCategory}
+              onChange={setRequestCategory}
+              options={[
+                { value: '외관', label: '외관' },
+                { value: '실내', label: '실내' },
+                { value: '엔진룸', label: '엔진룸' },
+                { value: '휠', label: '휠' },
+                { value: '하부', label: '하부' },
+                { value: '계기판', label: '계기판' },
+                { value: '손상', label: '손상' },
+                { value: '기타', label: '기타' },
+              ]}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-400 mb-1">전달할 내용 (선택)</label>
+            <Input.TextArea
+              value={requestMessage}
+              onChange={e => setRequestMessage(e.target.value)}
+              rows={3}
+              placeholder="예: 2번째 사진이 흐릿해서 재촬영이 필요해요. (비워두면 기본 안내문구로 발송)"
+            />
+          </div>
+          <p className="text-[11px] text-gray-400">
+            "확인하기" 링크를 누르면 진단사가 바로 진단 리포트를 볼 수 있어요.
+          </p>
         </div>
       </Modal>
     </div>
