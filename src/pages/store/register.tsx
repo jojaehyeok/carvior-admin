@@ -165,19 +165,26 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
     dragSrc.current = null;
   }, []);
 
-  // ── 카테고리 블러 (서버가 setImmediate로 백그라운드 처리 → fire-and-forget) ──
-  const handleBlurCategory = useCallback((cat: string) => {
+  // ── 카테고리 블러 (등록 전 미리보기 — 결과를 기다렸다가 화면에 바로 반영) ──
+  const handleBlurCategory = useCallback(async (cat: string) => {
     const urls = photoOrder[cat] ?? [];
     if (!urls.length) return;
     setBlurring(prev => ({ ...prev, [cat]: true }));
-    fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ urls }),
-    })
-      .then(() => message.success(`${CAT_LABEL[cat] ?? cat} 블러 처리 요청 완료 (백그라운드)`))
-      .catch(() => message.error('블러 요청 실패'))
-      .finally(() => setBlurring(prev => ({ ...prev, [cat]: false })));
+    try {
+      const res = await fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls }),
+      });
+      const data = await res.json();
+      if (!res.ok || !Array.isArray(data.urls)) throw new Error(data.message || '블러 실패');
+      setPhotoOrder(prev => ({ ...prev, [cat]: data.urls }));
+      message.success(`${CAT_LABEL[cat] ?? cat} 번호판 블러 완료 — 등록 시 이 사진이 사용됩니다.`);
+    } catch {
+      message.error('블러 처리 실패');
+    } finally {
+      setBlurring(prev => ({ ...prev, [cat]: false }));
+    }
   }, [photoOrder]);
 
   // ── OCR ────────────────────────────────────────────────────────
