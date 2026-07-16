@@ -3,6 +3,7 @@ import { Button, Form, Input, message, Modal, Popconfirm, Spin, Table, Tag } fro
 import { useCallback, useEffect, useState } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_ENDPOINT;
+const INTERNAL_KEY = process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? '';
 
 interface AdminUser {
   id: number;
@@ -85,7 +86,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
     try {
       const res = await fetch(`${API}/users/${id}/role`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-internal-key": INTERNAL_KEY },
         body: JSON.stringify({ role: "user" }),
       });
       if (!res.ok) throw new Error("권한 변경 실패");
