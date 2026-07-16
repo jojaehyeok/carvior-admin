@@ -567,7 +567,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             />
           </div>
           <p className="text-[11px] text-gray-400">
-            "확인하기" 링크를 누르면 진단사가 바로 진단 리포트를 볼 수 있어요.
+            &ldquo;확인하기&rdquo; 링크를 누르면 진단사가 바로 진단 리포트를 볼 수 있어요.
           </p>
         </div>
       </Modal>
