@@ -84,6 +84,7 @@ const StoreList = () => {
   const [editForm]  = Form.useForm();
 
   const [blurringId, setBlurringId] = useState<string | null>(null);
+  const [pausingId, setPausingId] = useState<string | null>(null);
 
   // ── fetch ──────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -210,6 +211,44 @@ const StoreList = () => {
     }
   };
 
+  // ── 경매 중단: 진행중(active) 매물을 다시 검수 상태로 되돌림 ──────────
+  // 라이브 경매 중에 정보를 몰래 바꾸면 이미 그 정보를 보고 입찰한 딜러들 입장에서
+  // "무효 입찰"이 되어버리므로, 활성 매물은 수정 자체를 막고 반드시 이 절차를 거치게 함.
+  // 되돌릴 때 auctionStartAt/auctionEndAt도 같이 지워서 재승인 시 새 경매창을 받게 함.
+  const handlePauseAuction = async (item: IStoreItem) => {
+    let bidCount = 0;
+    try {
+      const res = await fetch(`${CAVIOR_BASE}/api/v1/external/store-items/${item.id}/bids`, { headers: INTERNAL_HEADERS });
+      if (res.ok) { const bids = await res.json(); bidCount = Array.isArray(bids) ? bids.length : 0; }
+    } catch { /* 조회 실패해도 경고 없이 진행 가능하게 둠 */ }
+
+    Modal.confirm({
+      title: '경매 중단',
+      content: bidCount > 0
+        ? `이미 ${bidCount}건의 입찰이 들어와 있습니다. 지금 중단하면 해당 입찰들은 이전 정보 기준이라 무효가 됩니다. 그래도 중단하고 재검수 상태로 되돌릴까요?`
+        : '이 매물을 경매에서 내리고 재검수(pending) 상태로 되돌릴까요? 수정 후 다시 승인해야 게시됩니다.',
+      okText: '중단',
+      okButtonProps: { danger: true },
+      cancelText: '취소',
+      onOk: async () => {
+        setPausingId(item.id);
+        try {
+          await fetch(`${CAVIOR_BASE}/api/admin/store-items?id=${item.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'pending', auctionStartAt: null, auctionEndAt: null }),
+          });
+          message.success('경매를 중단하고 재검수 상태로 되돌렸습니다.');
+          fetchData();
+        } catch {
+          message.error('경매 중단에 실패했습니다.');
+        } finally {
+          setPausingId(null);
+        }
+      },
+    });
+  };
+
   // ── DELETE: 등록 취소 ──────────────────────────────────────────
   const handleDelete = (id: string, title: string) => {
     Modal.confirm({
@@ -295,6 +334,8 @@ const StoreList = () => {
           <Button
             size="small"
             icon={<Edit size={13} />}
+            disabled={item.status === 'active'}
+            title={item.status === 'active' ? '경매 진행중에는 수정할 수 없습니다 — 먼저 경매를 중단해주세요' : undefined}
             onClick={() => router.push(`/store/register?storeItemId=${item.id}`)}
           >
             수정
@@ -306,7 +347,16 @@ const StoreList = () => {
           >
             번호판
           </Button>
-          {item.status !== 'pending' && (
+          {item.status === 'active' ? (
+            <Button
+              size="small"
+              danger
+              loading={pausingId === item.id}
+              onClick={() => handlePauseAuction(item)}
+            >
+              🔻 경매 중단
+            </Button>
+          ) : item.status !== 'pending' && (
             <Button
               size="small"
               onClick={async () => {

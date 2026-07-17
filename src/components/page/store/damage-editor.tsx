@@ -37,7 +37,7 @@ const ORIGINAL_W = 2109;
 const ORIGINAL_H = 4001;
 const SYMBOL_STYLE: Record<string, { label: string; bg: string }> = {
   X: { label: "교환", bg: "#ef4444" },
-  W: { label: "판금/도장", bg: "#3b82f6" },
+  W: { label: "용접", bg: "#3b82f6" },
   M: { label: "탈부착", bg: "#eab308" },
   A: { label: "흠집", bg: "#3b82f6" },
   U: { label: "요철", bg: "#a855f7" },
@@ -46,7 +46,8 @@ const SYMBOL_STYLE: Record<string, { label: string; bg: string }> = {
   P: { label: "도장필요", bg: "#ec4899" },
   B: { label: "판금", bg: "#8b5cf6" },
 };
-const SYMBOL_ORDER = ["X", "W", "M", "A", "U", "T", "C", "P", "B"];
+// 실제로는 X(교환)/W(용접)/B(판금) 3가지만 사용 — 나머지는 과거 데이터 표시 호환용으로만 남겨둠
+const SYMBOL_ORDER = ["X", "W", "B"];
 
 export default function DamageEditorModal({
   open,
