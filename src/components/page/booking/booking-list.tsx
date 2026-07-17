@@ -17,9 +17,11 @@ const INTERNAL_HEADERS = { 'x-internal-key': INTERNAL_KEY };
 
 // --- 인터페이스 정의 ---
 interface IDriver {
+  id: number;
   accountId: string;
   name: string;
   status: string;
+  phone?: string;
 }
 
 interface IBooking {
@@ -59,10 +61,11 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // bookingId → storeItemId (스마트옥션 매물로 이미 등록됐는지 확인용)
   const [storeItemMap, setStoreItemMap] = useState<Record<number, string>>({});
 
-  // --- 진단사 재촬영/수정 요청 모달 ---
+  // --- 진단사/매니저 수정 요청 모달 ---
   const [requestTarget, setRequestTarget] = useState<IBooking | null>(null);
   const [requestCategory, setRequestCategory] = useState<string | undefined>(undefined);
   const [requestMessage, setRequestMessage] = useState("");
+  const [requestRecipientId, setRequestRecipientId] = useState<number | undefined>(undefined);
   const [requesting, setRequesting] = useState(false);
 
   // --- 상세/수정 모달 상태 ---
@@ -135,28 +138,32 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     fetchStoreItemMap();
   }, [fetchBookings, fetchDrivers, fetchStoreItemMap]);
 
-  // --- 진단사 재촬영/수정 요청 (SMS) ---
+  // --- 진단사/매니저 수정 요청 (SMS) ---
   const openRequestModal = (record: IBooking) => {
     setRequestTarget(record);
     setRequestCategory(undefined);
     setRequestMessage("");
+    // 기본값: 원래 배정된 진단사. 필요하면 매니저 등 다른 대상으로 바꿀 수 있음
+    const assigned = drivers.find(d => d.accountId === record.assignedDriverId);
+    setRequestRecipientId(assigned?.id);
   };
 
   const handleSendRequest = async () => {
     if (!requestTarget) return;
+    if (!requestRecipientId) { message.warning('받는 사람(진단사/매니저)을 선택해주세요.'); return; }
     setRequesting(true);
     try {
       const res = await fetch(`${API_BASE}/external/inspection/${requestTarget.id}/request-update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...INTERNAL_HEADERS },
-        body: JSON.stringify({ message: requestMessage, category: requestCategory }),
+        body: JSON.stringify({ message: requestMessage, category: requestCategory, recipientDriverId: requestRecipientId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || '요청 실패');
-      message.success(`${data.driverName ?? '진단사'}에게 재촬영/수정 요청 SMS를 보냈습니다.`);
+      message.success(`${data.driverName ?? '담당자'}에게 수정 요청 SMS를 보냈습니다.`);
       setRequestTarget(null);
     } catch (e: any) {
-      message.error(e.message || '재촬영 요청 중 오류가 발생했습니다.');
+      message.error(e.message || '수정 요청 중 오류가 발생했습니다.');
     } finally {
       setRequesting(false);
     }
@@ -334,21 +341,32 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       render: (value: ISO8601DateTime) => dayjs(value).format("YYYY-MM-DD"),
     },
     {
-      title: "진단 리포트",
-      key: "report",
-      width: 120,
+      title: "진단 리포트 / 수정",
+      key: "reportAndEdit",
+      width: 220,
       align: "center",
       render: (_, record) => (
-        <Button
-          size="small"
-          type="primary"
-          ghost
-          disabled={record.status !== 'COMPLETED' || !record.carHash}
-          icon={<Eye size={14} />}
-          onClick={() => window.open(`/report/${record.carHash}`, '_blank')}
-        >
-          리포트 보기
-        </Button>
+        <div className="flex items-center justify-center gap-1.5">
+          <Button
+            size="small"
+            type="primary"
+            ghost
+            disabled={record.status !== 'COMPLETED' || !record.carHash}
+            icon={<Eye size={14} />}
+            onClick={() => window.open(`/report/${record.carHash}`, '_blank')}
+          >
+            리포트 보기
+          </Button>
+          <Button
+            size="small"
+            danger
+            disabled={record.status !== 'COMPLETED'}
+            icon={<MessageSquare size={14} />}
+            onClick={() => openRequestModal(record)}
+          >
+            수정 요청
+          </Button>
+        </div>
       ),
     },
     {
@@ -373,23 +391,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           </Button>
         );
       },
-    },
-    {
-      title: "재촬영 요청",
-      key: "requestUpdate",
-      width: 120,
-      align: "center",
-      render: (_, record) => (
-        <Button
-          size="small"
-          danger
-          disabled={record.status !== 'COMPLETED' || !record.assignedDriverId}
-          icon={<MessageSquare size={14} />}
-          onClick={() => openRequestModal(record)}
-        >
-          재촬영 요청
-        </Button>
-      ),
     },
   ];
 
@@ -522,9 +523,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         </div>
       </Modal>
 
-      {/* 진단사 재촬영/수정 요청 모달 */}
+      {/* 진단사/매니저 수정 요청 모달 */}
       <Modal
-        title={`재촬영/수정 요청 — ${requestTarget?.carNumber}`}
+        title={`수정 요청 — ${requestTarget?.carNumber}`}
         open={!!requestTarget}
         onOk={handleSendRequest}
         onCancel={() => setRequestTarget(null)}
@@ -534,9 +535,21 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         cancelText="취소"
       >
         <div className="py-2 space-y-3">
-          <p className="text-xs text-gray-500">
-            배정 진단사: <span className="font-bold">{requestTarget?.assignedDriverName ?? '-'}</span>
-          </p>
+          <div>
+            <label className="block text-xs font-bold text-gray-400 mb-1">받는 사람</label>
+            <Select
+              className="w-full"
+              placeholder="진단사 또는 진단매니저 선택"
+              value={requestRecipientId}
+              onChange={setRequestRecipientId}
+              options={drivers.map(d => ({
+                value: d.id,
+                label: d.accountId === requestTarget?.assignedDriverId ? `${d.name} (배정 진단사)` : d.name,
+              }))}
+              showSearch
+              optionFilterProp="label"
+            />
+          </div>
           <div>
             <label className="block text-xs font-bold text-gray-400 mb-1">사진 카테고리 (선택)</label>
             <Select
@@ -567,7 +580,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             />
           </div>
           <p className="text-[11px] text-gray-400">
-            &ldquo;확인하기&rdquo; 링크를 누르면 진단사가 바로 진단 리포트를 볼 수 있어요.
+            링크 없이 짧은 안내 SMS만 발송돼요 — 받는 사람이 앱에서 직접 &ldquo;진단 내역 보기 → 수정하기&rdquo;로 들어가서 확인해야 해요.
           </p>
         </div>
       </Modal>
