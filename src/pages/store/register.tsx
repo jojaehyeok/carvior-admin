@@ -4,6 +4,8 @@ import { getDefaultLayout, IDefaultLayoutPage, IPageHeader } from "@/components/
 import { Button, Checkbox, Form, Input, InputNumber, message, Select, Spin, Tag } from "antd";
 import { useRouter } from "next/router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import DamageEditorModal from "@/components/page/store/damage-editor";
+import ManualBlurEditorModal from "@/components/page/store/manual-blur-editor";
 
 const CAVIOR_BASE = (process.env.NEXT_PUBLIC_API_ENDPOINT || 'https://carvior.store/api/v1').replace('/api/v1', '');
 const INTERNAL_KEY = process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? '';
@@ -28,6 +30,7 @@ interface IInspection {
   completedAt?: string;
   car_info?: { number?: string; type?: string; mileage?: number; color?: string; repairCost?: number };
   evaluation?: { warningDesc?: string; leakDesc?: string; optionsDesc?: string; driveDesc?: string; memo?: string };
+  damages?: string[][];
   images?: {
     exterior?: string[]; wheel?: string[]; undercarriage?: string[];
     interior?: string[]; engine?: string[]; damage?: string[];
@@ -56,9 +59,17 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
   const [blurring, setBlurring] = useState<Record<string, boolean>>({});
   const [lightbox, setLightbox] = useState<Lightbox | null>(null);
   const [ocrInfo, setOcrInfo] = useState<{ vin?: string; ownerName?: string }>({});
+  const [damageEditorOpen, setDamageEditorOpen] = useState(false);
+  const [blurEditTarget, setBlurEditTarget] = useState<{ cat: string; idx: number; url: string } | null>(null);
+  const [addingPhoto, setAddingPhoto] = useState<string | null>(null);
+  const photoInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // drag state — ref so no re-render
   const dragSrc = useRef<{ cat: string; idx: number } | null>(null);
+
+  // 진단 연계 매물이면 booking/inspection 로드 시점이 등록모드/수정모드마다 달라서 통일
+  const effectiveBookingId = booking?.id ?? storeItem?.bookingId;
+  const effectiveCarNumber = booking?.carNumber ?? storeItem?.carNumber;
 
   // ── 신규 등록 모드 (bookingId) ────────────────────────────────
   useEffect(() => {
@@ -163,6 +174,40 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
       return { ...prev, [cat]: arr };
     });
     dragSrc.current = null;
+  }, []);
+
+  // ── 사진 추가 업로드 ────────────────────────────────────────────
+  const handleAddPhoto = useCallback(async (cat: string, file: File) => {
+    if (!effectiveBookingId) { message.error('예약 정보를 먼저 불러온 뒤 사진을 추가해주세요.'); return; }
+    setAddingPhoto(cat);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('requestId', String(effectiveBookingId));
+      formData.append('category', cat);
+      formData.append('carNumber', effectiveCarNumber ?? '');
+      const res = await fetch(`${CAVIOR_BASE}/api/v1/external/inspection/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) throw new Error();
+      setPhotoOrder(prev => ({ ...prev, [cat]: [...(prev[cat] ?? []), data.url] }));
+      message.success('사진을 추가했습니다.');
+    } catch {
+      message.error('사진 업로드에 실패했습니다.');
+    } finally {
+      setAddingPhoto(null);
+    }
+  }, [effectiveBookingId, effectiveCarNumber]);
+
+  // ── 개별 사진 수동 블러 적용 반영 ───────────────────────────────
+  const handleManualBlurApplied = useCallback((cat: string, idx: number, newUrl: string) => {
+    setPhotoOrder(prev => {
+      const arr = [...(prev[cat] ?? [])];
+      arr[idx] = newUrl;
+      return { ...prev, [cat]: arr };
+    });
   }, []);
 
   // ── 카테고리 블러 (등록 전 미리보기 — 결과를 기다렸다가 화면에 바로 반영) ──
@@ -435,9 +480,16 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
 
           {/* 공개 사진 카테고리별 */}
           <div className="bg-white rounded-xl border border-gray-100 p-4">
-            <p className="text-xs font-bold text-gray-500 mb-3">
-              📷 사진 편집 — <span className="font-normal text-gray-400">드래그로 순서 변경 · ✕로 제외 · 클릭하면 슬라이드 보기</span>
-            </p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-bold text-gray-500">
+                📷 사진 편집 — <span className="font-normal text-gray-400">드래그로 순서 변경 · ✕로 제외 · 클릭하면 슬라이드 보기</span>
+              </p>
+              {inspection && (
+                <Button size="small" onClick={() => setDamageEditorOpen(true)}>
+                  🔧 손상부위 수정
+                </Button>
+              )}
+            </div>
             {publicCats.length === 0 ? (
               <p className="text-sm text-gray-300 py-8 text-center">진단 사진 없음</p>
             ) : (
@@ -451,16 +503,37 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
                           <Tag color="default" className="text-[10px] m-0">{CAT_LABEL[cat] ?? cat}</Tag>
                           <span className="text-[10px] text-gray-400">{photos.length}장</span>
                         </div>
-                        {(cat === 'exterior' || cat === 'damage') && (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            ref={el => { photoInputRefs.current[cat] = el; }}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              if (file) handleAddPhoto(cat, file);
+                              e.target.value = '';
+                            }}
+                          />
                           <Button
                             size="small"
-                            loading={blurring[cat]}
-                            onClick={() => handleBlurCategory(cat)}
+                            loading={addingPhoto === cat}
+                            onClick={() => photoInputRefs.current[cat]?.click()}
                             className="text-[10px] h-6 px-2"
                           >
-                            번호판 블러
+                            ➕ 추가
                           </Button>
-                        )}
+                          {(cat === 'exterior' || cat === 'damage') && (
+                            <Button
+                              size="small"
+                              loading={blurring[cat]}
+                              onClick={() => handleBlurCategory(cat)}
+                              className="text-[10px] h-6 px-2"
+                            >
+                              번호판 블러
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <div className="flex gap-2 overflow-x-auto pb-1">
                         {photos.map((url, i) => (
@@ -484,6 +557,12 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
                             {cat === 'exterior' && i === 0 && (
                               <span className="absolute top-1 left-1 text-[8px] bg-green-600 text-white px-1.5 rounded-full pointer-events-none">대표</span>
                             )}
+                            {/* 수동 블러 버튼 — 자동인식이 놓친 얼굴·번호판을 직접 지정 */}
+                            <button
+                              onClick={e => { e.stopPropagation(); setBlurEditTarget({ cat, idx: i, url }); }}
+                              className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center hover:bg-blue-600 transition-colors leading-none"
+                              title="수동 블러 처리"
+                            >🔧</button>
                             {/* X 버튼 — 항상 표시 */}
                             <button
                               onClick={e => { e.stopPropagation(); removePhoto(cat, i); }}
@@ -656,6 +735,25 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
             >›</button>
           )}
         </div>
+      )}
+
+      {damageEditorOpen && effectiveBookingId && (
+        <DamageEditorModal
+          open={damageEditorOpen}
+          bookingId={effectiveBookingId}
+          initialDamages={inspection?.damages ?? []}
+          onClose={() => setDamageEditorOpen(false)}
+          onSaved={(damages) => setInspection(prev => prev ? { ...prev, damages } : prev)}
+        />
+      )}
+
+      {blurEditTarget && (
+        <ManualBlurEditorModal
+          open={!!blurEditTarget}
+          imageUrl={blurEditTarget.url}
+          onClose={() => setBlurEditTarget(null)}
+          onApplied={(newUrl) => handleManualBlurApplied(blurEditTarget.cat, blurEditTarget.idx, newUrl)}
+        />
       )}
     </div>
   );
