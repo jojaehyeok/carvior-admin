@@ -58,10 +58,10 @@ const TRANS_OPTIONS = ['자동', '수동'];
 const CATEGORY_OPTIONS = ['SUV', '세단', '해치백', '경차', '소형차', '준중형', '중형', '대형', 'RV', '밴'];
 
 const STATUS_CONFIG: Record<string, { color: string; text: string }> = {
-  active:  { color: 'green',   text: '판매중'     },
-  sold:    { color: 'default', text: '거래완료'   },
-  hidden:  { color: 'orange',  text: '숨김'       },
-  pending: { color: 'blue',    text: '입금확인중' },
+  active:  { color: 'green',   text: '판매중'          },
+  sold:    { color: 'default', text: '거래완료'        },
+  hidden:  { color: 'orange',  text: '숨김'            },
+  pending: { color: 'blue',    text: '검토중 (입금확인)' },
 };
 
 function fmtKRW(n: number) {
@@ -494,7 +494,7 @@ const StoreList = () => {
                       fetchData();
                     }}
                   >
-                    ✅ 입금확인 후 승인
+                    ✅ 승인 (매물 노출)
                   </Button>
                   <Button
                     danger
