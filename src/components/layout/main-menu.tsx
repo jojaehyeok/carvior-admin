@@ -77,6 +77,11 @@ const superAdminMenuData: IMenu[] = [
         name: "딜러 승인 관리",
         link: { path: "/admin/dealers" },
       },
+      {
+        id: "complianceRecords",
+        name: "매매정보 보관 기록(3년)",
+        link: { path: "/admin/compliance" },
+      },
     ],
   },
   {
