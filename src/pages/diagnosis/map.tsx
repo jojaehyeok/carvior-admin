@@ -127,16 +127,32 @@ const MapPage: IDefaultLayoutPage = () => {
 
   // 활성 진단사 = 가용 시간(요일+시간대)에 지금이 포함되는 진단사 (GPS 최신 여부와 무관)
   const activeDrivers = drivers.filter(isActiveNow);
-  // 지도에 핀을 찍을 수 있는 진단사 (마지막으로 알려진 위치 보유)
-  const mappableActiveDrivers = activeDrivers.filter((d) => d.lat != null && d.lng != null);
+  // 지도에 핀을 찍을 수 있는 진단사 전체 — 가용시간 밖이어도 배정 가능해야 하므로 활성 여부와 무관하게 전부 포함
+  const mappableDrivers = drivers.filter((d) => d.lat != null && d.lng != null);
 
-  // 선택된 신청 기준 거리순 진단사 목록 (활성 + 위치 있는 진단사만)
+  // 선택된 신청 기준 진단사 목록 — 전체 진단사 대상, 활성 진단사만 우선순위를 위로 (거리는 각 그룹 내에서만 정렬)
   const nearbyDrivers = useMemo(() => {
     if (!selectedBooking?.lat || !selectedBooking?.lng) return [];
-    return mappableActiveDrivers
-      .map((d) => ({ driver: d, km: distanceKm(selectedBooking.lat!, selectedBooking.lng!, d.lat!, d.lng!) }))
-      .sort((a, b) => a.km - b.km);
+    return mappableDrivers
+      .map((d) => ({ driver: d, km: distanceKm(selectedBooking.lat!, selectedBooking.lng!, d.lat!, d.lng!), active: isActiveNow(d) }))
+      .sort((a, b) => (a.active === b.active ? a.km - b.km : a.active ? -1 : 1));
   }, [selectedBooking, drivers]);
+
+  // 오른쪽 "전체 진단사" 탭 목록 — 활성 진단사가 위로 오도록 정렬(위치 없어도 목록엔 노출, 배정은 항상 가능)
+  const allDriversSorted = useMemo(() => {
+    return [...drivers].sort((a, b) => {
+      const aActive = isActiveNow(a);
+      const bActive = isActiveNow(b);
+      if (aActive !== bActive) return aActive ? -1 : 1;
+      if (selectedBooking?.lat && selectedBooking?.lng && a.lat != null && a.lng != null && b.lat != null && b.lng != null) {
+        return (
+          distanceKm(selectedBooking.lat, selectedBooking.lng, a.lat, a.lng) -
+          distanceKm(selectedBooking.lat, selectedBooking.lng, b.lat, b.lng)
+        );
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [drivers, selectedBooking]);
 
   // Leaflet CSS + JS 로드
   useEffect(() => {
@@ -226,13 +242,14 @@ const MapPage: IDefaultLayoutPage = () => {
     Object.values(driverMarkers.current).forEach((m: any) => m.remove());
     driverMarkers.current = {};
 
-    mappableActiveDrivers.forEach((d) => {
+    mappableDrivers.forEach((d) => {
       const isSelected = selectedDriver?.id === d.id;
+      const active = isActiveNow(d);
       const icon = L.divIcon({
         className: "",
         html: `
           <div style="
-            background:${isSelected ? "#ef4444" : "#7c3aed"};
+            background:${isSelected ? "#ef4444" : active ? "#7c3aed" : "#9ca3af"};
             color:#fff;width:36px;height:36px;border-radius:50%;
             display:flex;align-items:center;justify-content:center;
             font-weight:700;font-size:12px;
@@ -381,7 +398,7 @@ const MapPage: IDefaultLayoutPage = () => {
         {/* 헤더 */}
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
           <p className="text-sm font-bold text-gray-800">
-            {activeTab === "bookings" ? "배정 전 신청" : "활성 진단사"}
+            {activeTab === "bookings" ? "배정 전 신청" : "전체 진단사"}
           </p>
           <button
             onClick={() => { setLoading(true); fetchData(); }}
@@ -411,7 +428,7 @@ const MapPage: IDefaultLayoutPage = () => {
                 : "text-gray-400 hover:text-gray-600"
             }`}
           >
-            활성 진단사 ({activeDrivers.length}/{drivers.length})
+            전체 진단사 ({activeDrivers.length}/{drivers.length} 활성)
           </button>
         </div>
 
@@ -463,19 +480,20 @@ const MapPage: IDefaultLayoutPage = () => {
                     {/* 근처 진단사 - 바로 배정 */}
                     {isSelected && (
                       <div className="px-4 py-2 bg-orange-50/50 border-b border-gray-50">
-                        <p className="text-[10px] font-bold text-gray-400 mb-1.5">근처 진단사 (거리순)</p>
+                        <p className="text-[10px] font-bold text-gray-400 mb-1.5">근처 진단사 (활성 우선 · 거리순)</p>
                         {nearbyDrivers.length === 0 ? (
-                          <p className="text-[10px] text-gray-400">위치가 확인된 활성 진단사가 없습니다</p>
+                          <p className="text-[10px] text-gray-400">위치가 확인된 진단사가 없습니다</p>
                         ) : (
-                          nearbyDrivers.slice(0, 5).map(({ driver: d, km }) => (
+                          nearbyDrivers.slice(0, 5).map(({ driver: d, km, active }) => (
                             <div
                               key={d.id}
                               className="flex items-center justify-between py-1.5 cursor-pointer group"
                               onClick={() => focusDriver(d)}
                             >
                               <div className="flex items-center gap-1.5 min-w-0">
-                                <div className="w-2 h-2 rounded-full bg-[#7c3aed] flex-shrink-0" />
+                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${active ? "bg-[#7c3aed]" : "bg-gray-300"}`} />
                                 <span className="text-xs text-gray-700 truncate group-hover:text-violet-700">{d.name}</span>
+                                {!active && <span className="text-[9px] text-gray-400 flex-shrink-0">업무외</span>}
                                 <span className="text-[10px] text-gray-400 flex-shrink-0">{formatDistance(km)}</span>
                               </div>
                               <button
@@ -494,14 +512,15 @@ const MapPage: IDefaultLayoutPage = () => {
                 );
               })
             )
-          ) : activeDrivers.length === 0 ? (
+          ) : allDriversSorted.length === 0 ? (
             <div className="p-6 text-center text-sm text-gray-400">
               <Users className="w-8 h-8 mx-auto mb-2 text-gray-200" />
-              지금 가용 시간인 진단사가 없습니다
+              등록된 진단사가 없습니다
             </div>
           ) : (
-            activeDrivers.map((d: DriverLoc) => {
+            allDriversSorted.map((d: DriverLoc) => {
               const isSelected = selectedDriver?.id === d.id;
+              const active = isActiveNow(d);
               const km = selectedBooking?.lat && selectedBooking?.lng && d.lat != null && d.lng != null
                 ? distanceKm(selectedBooking.lat, selectedBooking.lng, d.lat, d.lng)
                 : null;
@@ -514,11 +533,16 @@ const MapPage: IDefaultLayoutPage = () => {
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-bold text-gray-900">{d.name}</span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${active ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-400"}`}>
+                        {active ? "활성" : "업무외"}
+                      </span>
+                      <span className="text-sm font-bold text-gray-900 truncate">{d.name}</span>
+                    </div>
                     {km != null ? (
-                      <span className="text-[10px] text-orange-500 font-semibold">신청지까지 {formatDistance(km)}</span>
+                      <span className="text-[10px] text-orange-500 font-semibold flex-shrink-0">신청지까지 {formatDistance(km)}</span>
                     ) : d.lat == null ? (
-                      <span className="text-[10px] text-gray-400">위치 없음</span>
+                      <span className="text-[10px] text-gray-400 flex-shrink-0">위치 없음</span>
                     ) : null}
                   </div>
                   <p className="text-xs text-gray-500 truncate">{(d.regions ?? []).join(", ") || "지역 미설정"}</p>
