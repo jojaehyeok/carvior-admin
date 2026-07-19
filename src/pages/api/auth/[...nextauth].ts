@@ -68,11 +68,13 @@ const credentialsProviderOption: CredentialsConfig<{}> = {
 
     // 하드코딩 계정에 없으면 DB(관리자 계정 관리에서 생성한 users.role='admin')로 확인.
     // 이렇게 해야 "관리자 계정 관리" 화면에서 새 발주사 계정을 만들면 코드 배포 없이 바로 로그인된다.
+    // 로그인 화면은 아이디만 입력받고, 실제 저장은 @carvior.store 붙은 이메일로 되어 있다.
+    const email = username.includes("@") ? username : `${username}@carvior.store`;
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_ENDPOINT}/users/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: username, password }),
+        body: JSON.stringify({ email, password }),
       });
       if (!res.ok) return null;
       const user = await res.json();

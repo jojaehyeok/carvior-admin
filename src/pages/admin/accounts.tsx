@@ -40,13 +40,14 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
 
   useEffect(() => { fetchAdmins(); }, [fetchAdmins]);
 
-  const handleCreate = async (values: { email: string; password: string; name: string; phone?: string; company?: string }) => {
+  const handleCreate = async (values: { username: string; password: string; name: string; phone?: string; company?: string }) => {
     setCreating(true);
     try {
+      const { username, ...rest } = values;
       const res = await fetch(`${API}/users/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...values, role: "admin", company: values.company || null }),
+        body: JSON.stringify({ ...rest, email: `${username}@carvior.store`, role: "admin", company: values.company || null }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -102,24 +103,28 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
     {
       title: "이름",
       dataIndex: "name",
-      render: (v: string) => <span className="font-semibold">{v}</span>,
+      width: 140,
+      render: (v: string) => <span className="font-semibold whitespace-nowrap">{v}</span>,
     },
     {
       title: "이메일",
       dataIndex: "email",
-      render: (v: string) => <span className="text-gray-500">{v}</span>,
+      width: 220,
+      render: (v: string) => <span className="text-gray-500 whitespace-nowrap">{v}</span>,
     },
     {
       title: "연락처",
       dataIndex: "phone",
+      width: 140,
       render: (v?: string) => v ?? <span className="text-gray-300">-</span>,
     },
     {
       title: "역할",
       dataIndex: "role",
+      width: 260,
       render: (_: string, record: AdminUser) =>
         record.company ? (
-          <Tag color="blue">발주사 관리자 · {record.company}</Tag>
+          <Tag color="blue" className="whitespace-nowrap">발주사 관리자 · {record.company}</Tag>
         ) : (
           <Tag color="purple">슈퍼 관리자</Tag>
         ),
@@ -127,10 +132,12 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
     {
       title: "생성일",
       dataIndex: "createdAt",
+      width: 110,
       render: (v: string) => new Date(v).toLocaleDateString("ko-KR"),
     },
     {
       title: "작업",
+      width: 180,
       render: (_: any, record: AdminUser) => (
         <div className="flex gap-2">
           <Button
@@ -154,7 +161,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
   ];
 
   return (
-    <div className="p-6 max-w-4xl">
+    <div className="p-6 max-w-6xl">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">관리자 계정 관리</h1>
         <Button
@@ -193,14 +200,14 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
             <Input placeholder="홍길동" />
           </Form.Item>
           <Form.Item
-            name="email"
-            label="이메일"
+            name="username"
+            label="아이디"
             rules={[
-              { required: true, message: "이메일을 입력하세요." },
-              { type: "email", message: "올바른 이메일 형식이 아닙니다." },
+              { required: true, message: "아이디를 입력하세요." },
+              { pattern: /^[a-zA-Z0-9._-]+$/, message: "영문/숫자/._- 만 입력하세요." },
             ]}
           >
-            <Input placeholder="admin@carvior.com" />
+            <Input placeholder="anyone" addonAfter="@carvior.store" />
           </Form.Item>
           <Form.Item name="phone" label="연락처">
             <Input placeholder="01012345678" />
@@ -216,10 +223,10 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
             label="비밀번호"
             rules={[
               { required: true, message: "비밀번호를 입력하세요." },
-              { min: 8, message: "8자 이상 입력하세요." },
+              { min: 4, message: "4자 이상 입력하세요." },
             ]}
           >
-            <Input.Password placeholder="8자 이상" />
+            <Input.Password placeholder="4자 이상" />
           </Form.Item>
           <Form.Item
             name="confirmPassword"
@@ -265,10 +272,10 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
             label="새 비밀번호"
             rules={[
               { required: true, message: "새 비밀번호를 입력하세요." },
-              { min: 8, message: "8자 이상 입력하세요." },
+              { min: 4, message: "4자 이상 입력하세요." },
             ]}
           >
-            <Input.Password placeholder="8자 이상" />
+            <Input.Password placeholder="4자 이상" />
           </Form.Item>
           <Form.Item
             name="confirmPassword"

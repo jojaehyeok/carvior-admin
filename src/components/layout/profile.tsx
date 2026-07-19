@@ -9,7 +9,9 @@ const Profile = () => {
   const { session } = useAuth();
 
   const handleLogoutClick = useCallback(async () => {
-    signOut({ callbackUrl: "/login" });
+    // 앱 내부 경로는 "/login"이지만 실제로는 carvior.store/admin/* 경로로 프록시되고 있어서
+    // 절대경로("/login")로 리다이렉트하면 프록시 프리픽스가 빠진 carvior.store/login으로 가버린다.
+    signOut({ callbackUrl: "https://carvior.store/admin/login" });
   }, []);
 
   const items: MenuProps["items"] = [
