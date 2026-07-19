@@ -20,10 +20,13 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
   const [loading, setLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState<AdminUser | null>(null);
+  const [editOpen, setEditOpen] = useState<AdminUser | null>(null);
   const [creating, setCreating] = useState(false);
   const [changingPw, setChangingPw] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [createForm] = Form.useForm();
   const [pwForm] = Form.useForm();
+  const [editForm] = Form.useForm();
 
   const fetchAdmins = useCallback(async () => {
     setLoading(true);
@@ -84,6 +87,27 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
     }
   };
 
+  const handleEditInfo = async (values: { name: string; phone?: string; company?: string }) => {
+    if (!editOpen) return;
+    setEditing(true);
+    try {
+      const res = await fetch(`${API}/users/${editOpen.id}/admin-info`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...values, company: values.company || null }),
+      });
+      if (!res.ok) throw new Error("수정 실패");
+      message.success("계정 정보가 수정되었습니다.");
+      setEditOpen(null);
+      editForm.resetFields();
+      fetchAdmins();
+    } catch (e: any) {
+      message.error(e.message);
+    } finally {
+      setEditing(false);
+    }
+  };
+
   const handleRevokeAdmin = async (id: number, name: string) => {
     try {
       const res = await fetch(`${API}/users/${id}/role`, {
@@ -137,9 +161,18 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
     },
     {
       title: "작업",
-      width: 180,
+      width: 280,
       render: (_: any, record: AdminUser) => (
         <div className="flex gap-2">
+          <Button
+            size="small"
+            onClick={() => {
+              setEditOpen(record);
+              editForm.setFieldsValue({ name: record.name, phone: record.phone, company: record.company ?? "" });
+            }}
+          >
+            정보 수정
+          </Button>
           <Button
             size="small"
             onClick={() => { setPwOpen(record); pwForm.resetFields(); }}
@@ -161,7 +194,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
   ];
 
   return (
-    <div className="p-6 max-w-6xl">
+    <div className="p-6 max-w-7xl">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">관리자 계정 관리</h1>
         <Button
@@ -253,6 +286,41 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
               style={{ background: "#7c3aed", border: "none" }}
             >
               생성
+            </Button>
+          </div>
+        </Form>
+      </Modal>
+
+      {/* 계정 정보 수정 모달 */}
+      <Modal
+        title={`정보 수정 — ${editOpen?.email}`}
+        open={!!editOpen}
+        onCancel={() => setEditOpen(null)}
+        footer={null}
+        destroyOnClose
+      >
+        <Form form={editForm} layout="vertical" onFinish={handleEditInfo} className="pt-2">
+          <Form.Item name="name" label="이름" rules={[{ required: true, message: "이름을 입력하세요." }]}>
+            <Input placeholder="홍길동" />
+          </Form.Item>
+          <Form.Item name="phone" label="연락처">
+            <Input placeholder="01012345678" />
+          </Form.Item>
+          <Form.Item
+            name="company"
+            label="발주사 코드 (선택 — 비우면 슈퍼 관리자, 입력하면 그 발주사 의뢰만 조회 가능)"
+          >
+            <Input placeholder="예: gwanghyun (비워두면 전체 조회 슈퍼 관리자)" />
+          </Form.Item>
+          <div className="flex gap-2 justify-end mt-4">
+            <Button onClick={() => setEditOpen(null)}>취소</Button>
+            <Button
+              type="primary"
+              htmlType="submit"
+              loading={editing}
+              style={{ background: "#7c3aed", border: "none" }}
+            >
+              저장
             </Button>
           </div>
         </Form>
