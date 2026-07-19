@@ -73,6 +73,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [editingBooking, setEditingBooking] = useState<IBooking | null>(null);
   const [tempMemo, setTempMemo] = useState("");
   const [tempStatus, setTempStatus] = useState<IBooking['status']>('PENDING');
+  // 간편신청(B2B)에서 "미정"으로 접수된 차량번호/차주 성함을 나중에 알게 되면 채워넣는 용도
+  const [tempCarNumber, setTempCarNumber] = useState("");
+  const [tempCarOwner, setTempCarOwner] = useState("");
   const [selectedDriver, setSelectedDriver] = useState<{ id: string, name: string } | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -174,6 +177,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setEditingBooking(record);
     setTempMemo(record.adminMemo || "");
     setTempStatus(record.status);
+    setTempCarNumber(record.carNumber || "");
+    setTempCarOwner(record.carOwner || "");
     setSelectedDriver(record.assignedDriverId ? { id: record.assignedDriverId, name: record.assignedDriverName || "" } : null);
     setTempContractWriter(record.contractWriter || "");
     setTempVehicleTransferred(record.vehicleTransferred ?? false);
@@ -198,6 +203,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         body: JSON.stringify({
           status: isUnassigning ? 'PENDING' : tempStatus,
           adminMemo: tempMemo,
+          carNumber: tempCarNumber.trim() || '미정',
+          carOwner: tempCarOwner.trim() || '미정',
           contractWriter: tempContractWriter,
           vehicleTransferred: tempVehicleTransferred,
           purchasePrice: tempPurchasePrice,
@@ -426,6 +433,26 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             {editingBooking?.source && (
               <p className="text-gray-400 mt-1">출처: <Tag>{editingBooking.source}</Tag></p>
             )}
+          </div>
+
+          {/* 차량번호 / 차주 성함 — 간편신청에서 "미정"으로 들어온 건 여기서 채워넣기 */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-400 mb-1">차량번호</label>
+              <Input
+                value={tempCarNumber}
+                onChange={e => setTempCarNumber(e.target.value)}
+                placeholder="차량번호"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 mb-1">차주 성함</label>
+              <Input
+                value={tempCarOwner}
+                onChange={e => setTempCarOwner(e.target.value)}
+                placeholder="차주 성함"
+              />
+            </div>
           </div>
 
           {/* 상태 변경 */}
