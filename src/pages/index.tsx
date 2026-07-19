@@ -100,6 +100,10 @@ const pageHeader: IPageHeader = { title: "모니터링" };
 
 const IndexPage: IDefaultLayoutPage = () => {
   const { session } = useAuth();
+  // COMPANY_ADMIN(예: 애니원모터스)은 진단 신청 통계도 자사 것만 봐야 한다.
+  const company = (session?.user as any)?.company ?? null;
+  const isCompanyAdmin = !!company;
+
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -107,7 +111,9 @@ const IndexPage: IDefaultLayoutPage = () => {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch(`${API}/dashboard/stats`);
+      const url = new URL(`${API}/dashboard/stats`);
+      if (company) url.searchParams.set('source', company);
+      const res = await fetch(url.toString());
       const data = await res.json();
       setStats(data);
       setLastUpdated(new Date());
@@ -122,7 +128,7 @@ const IndexPage: IDefaultLayoutPage = () => {
     fetchStats();
     timerRef.current = setInterval(fetchStats, 60_000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, []);
+  }, [company]);
 
   const s = stats;
 
@@ -153,8 +159,9 @@ const IndexPage: IDefaultLayoutPage = () => {
         <Skeleton active paragraph={{ rows: 8 }} />
       ) : (
         <>
-          {/* 스탯 카드 4개 */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {/* 스탯 카드 — 발주사 관리자는 상담/신규회원/진단사 같은 플랫폼 전체 지표는
+              자사와 무관해서 안 보여주고 진단 신청 카드만 노출 */}
+          <div className={`grid grid-cols-2 ${isCompanyAdmin ? '' : 'lg:grid-cols-4'} gap-4 mb-6`}>
             <StatCard
               icon={<Car className="w-5 h-5 text-violet-600" />}
               accent="bg-violet-50"
@@ -172,44 +179,48 @@ const IndexPage: IDefaultLayoutPage = () => {
                 </div>
               }
             />
-            <StatCard
-              icon={<MessageSquare className="w-5 h-5 text-blue-600" />}
-              accent="bg-blue-50"
-              label="상담 신청"
-              today={s?.consultation.today ?? 0}
-              week={s?.consultation.week ?? 0}
-              total={s?.consultation.total ?? 0}
-              sub={
-                <p className="text-[11px] text-orange-500 font-semibold">
-                  <AlertCircle className="w-3 h-3 inline mr-0.5" />
-                  미처리 {s?.consultation.pendingCount ?? 0}건
-                </p>
-              }
-            />
-            <StatCard
-              icon={<Users className="w-5 h-5 text-emerald-600" />}
-              accent="bg-emerald-50"
-              label="신규 회원"
-              today={s?.user.today ?? 0}
-              week={s?.user.week ?? 0}
-              total={s?.user.total ?? 0}
-            />
-            <StatCard
-              icon={<UserCheck className="w-5 h-5 text-amber-600" />}
-              accent="bg-amber-50"
-              label="진단 평가사"
-              today={0}
-              week={0}
-              total={s?.driver.approved ?? 0}
-              sub={
-                s?.driver.pending ? (
-                  <p className="text-[11px] text-orange-500 font-semibold">
-                    <Clock className="w-3 h-3 inline mr-0.5" />
-                    승인 대기 {s.driver.pending}명
-                  </p>
-                ) : undefined
-              }
-            />
+            {!isCompanyAdmin && (
+              <>
+                <StatCard
+                  icon={<MessageSquare className="w-5 h-5 text-blue-600" />}
+                  accent="bg-blue-50"
+                  label="상담 신청"
+                  today={s?.consultation.today ?? 0}
+                  week={s?.consultation.week ?? 0}
+                  total={s?.consultation.total ?? 0}
+                  sub={
+                    <p className="text-[11px] text-orange-500 font-semibold">
+                      <AlertCircle className="w-3 h-3 inline mr-0.5" />
+                      미처리 {s?.consultation.pendingCount ?? 0}건
+                    </p>
+                  }
+                />
+                <StatCard
+                  icon={<Users className="w-5 h-5 text-emerald-600" />}
+                  accent="bg-emerald-50"
+                  label="신규 회원"
+                  today={s?.user.today ?? 0}
+                  week={s?.user.week ?? 0}
+                  total={s?.user.total ?? 0}
+                />
+                <StatCard
+                  icon={<UserCheck className="w-5 h-5 text-amber-600" />}
+                  accent="bg-amber-50"
+                  label="진단 평가사"
+                  today={0}
+                  week={0}
+                  total={s?.driver.approved ?? 0}
+                  sub={
+                    s?.driver.pending ? (
+                      <p className="text-[11px] text-orange-500 font-semibold">
+                        <Clock className="w-3 h-3 inline mr-0.5" />
+                        승인 대기 {s.driver.pending}명
+                      </p>
+                    ) : undefined
+                  }
+                />
+              </>
+            )}
           </div>
 
           {/* 이번 달 진단 신청 현황 */}
@@ -259,24 +270,26 @@ const IndexPage: IDefaultLayoutPage = () => {
                     color: "text-violet-700",
                     bg: "bg-violet-50",
                   },
-                  {
-                    label: "이번 달 상담 신청",
-                    value: `${s?.consultation.week ?? 0}건`,
-                    color: "text-blue-700",
-                    bg: "bg-blue-50",
-                  },
-                  {
-                    label: "이번 주 신규 회원",
-                    value: `${s?.user.week ?? 0}명`,
-                    color: "text-emerald-700",
-                    bg: "bg-emerald-50",
-                  },
-                  {
-                    label: "승인된 평가사",
-                    value: `${s?.driver.approved ?? 0}명`,
-                    color: "text-amber-700",
-                    bg: "bg-amber-50",
-                  },
+                  ...(isCompanyAdmin ? [] : [
+                    {
+                      label: "이번 달 상담 신청",
+                      value: `${s?.consultation.week ?? 0}건`,
+                      color: "text-blue-700",
+                      bg: "bg-blue-50",
+                    },
+                    {
+                      label: "이번 주 신규 회원",
+                      value: `${s?.user.week ?? 0}명`,
+                      color: "text-emerald-700",
+                      bg: "bg-emerald-50",
+                    },
+                    {
+                      label: "승인된 평가사",
+                      value: `${s?.driver.approved ?? 0}명`,
+                      color: "text-amber-700",
+                      bg: "bg-amber-50",
+                    },
+                  ]),
                 ].map((item) => (
                   <div key={item.label} className={`flex items-center justify-between px-3 py-2.5 rounded-xl ${item.bg}`}>
                     <span className="text-xs font-semibold text-gray-600">{item.label}</span>
@@ -293,7 +306,7 @@ const IndexPage: IDefaultLayoutPage = () => {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
               <p className="text-sm font-bold text-gray-700">최근 진단 신청</p>
-              <Link href="/diagnosis/bookings" className="text-xs text-violet-600 font-semibold hover:underline">
+              <Link href={company ? `/diagnosis/${company}` : "/diagnosis/bookings"} className="text-xs text-violet-600 font-semibold hover:underline">
                 전체 보기 →
               </Link>
             </div>
