@@ -24,6 +24,12 @@ const ADMIN_ACCOUNTS: Record<string, { password: string; name: string; role: str
     role: "COMPANY_ADMIN",
     company: "anyone-motors",
   },
+  gwangmyeong: {
+    password: process.env.GWANGMYEONG_MOTORS_PW || "1234",
+    name: "광명모터스",
+    role: "COMPANY_ADMIN",
+    company: "gwangmyeong-motors",
+  },
   // 새 발주사 추가 시 여기에 추가:
   // "new-company": {
   //   password: process.env.NEW_COMPANY_PW || "password",
@@ -60,7 +66,30 @@ const credentialsProviderOption: CredentialsConfig<{}> = {
       };
     }
 
-    return null;
+    // 하드코딩 계정에 없으면 DB(관리자 계정 관리에서 생성한 users.role='admin')로 확인.
+    // 이렇게 해야 "관리자 계정 관리" 화면에서 새 발주사 계정을 만들면 코드 배포 없이 바로 로그인된다.
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_ENDPOINT}/users/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: username, password }),
+      });
+      if (!res.ok) return null;
+      const user = await res.json();
+      if (user?.role !== "admin") return null; // 관리자 권한이 아니면 대시보드 로그인 불가
+
+      return {
+        id: String(user.id),
+        login: user.email,
+        name: user.name,
+        email: user.email,
+        image: "",
+        role: user.company ? "COMPANY_ADMIN" : "SUPER_ADMIN",
+        company: user.company ?? null,
+      };
+    } catch {
+      return null;
+    }
   },
 };
 

@@ -98,8 +98,12 @@ const superAdminMenuData: IMenu[] = [
   },
 ];
 
-/** 애니원 모터스 관리자 메뉴 (자사 의뢰만) */
-const anyoneMotorsMenuData: IMenu[] = [
+/**
+ * 발주사(COMPANY_ADMIN) 공통 메뉴 — 자사 의뢰만 조회/배정/CS 확인 가능.
+ * bookingPath를 지정 안 하면 동적 라우트(/diagnosis/[company])로 자동 연결되므로,
+ * "관리자 계정 관리"에서 새 발주사 계정을 만들면 코드 배포 없이 바로 메뉴가 동작한다.
+ */
+const buildCompanyMenu = (company: string, bookingPath?: string): IMenu[] => [
   {
     id: "home",
     name: "홈",
@@ -112,20 +116,33 @@ const anyoneMotorsMenuData: IMenu[] = [
     icon: <Package2 className="w-5 h-5" />,
     submenu: [
       {
-        id: "anyoneMotorsList",
+        id: "companyBookingList",
         name: "진단 신청목록",
-        link: { path: "/diagnosis/anyone-motors" },
+        link: { path: bookingPath ?? `/diagnosis/${company}` },
+      },
+      {
+        id: "companyMap",
+        name: "실시간 지도 배정",
+        link: { path: "/diagnosis/map" },
       },
     ],
+  },
+  {
+    id: "cs",
+    name: "CS / 리뷰",
+    icon: <Star className="w-5 h-5" />,
+    link: { path: "/review" },
   },
 ];
 
 /**
  * company → 메뉴 데이터 매핑
- * 새 발주사 추가 시 여기에 추가하세요.
+ * 전용 페이지(예: /diagnosis/anyone-motors)가 따로 있는 발주사만 여기 추가하면 됨.
+ * 없으면 아래 MainMenu에서 buildCompanyMenu(company)로 동적 라우트에 자동 연결됨.
  */
 const COMPANY_MENUS: Record<string, IMenu[]> = {
-  "anyone-motors": anyoneMotorsMenuData,
+  "anyone-motors": buildCompanyMenu("anyone-motors", "/diagnosis/anyone-motors"),
+  "gwangmyeong-motors": buildCompanyMenu("gwangmyeong-motors", "/diagnosis/gwangmyeong-motors"),
 };
 
 const devMenuData: IMenu[] = [
@@ -145,8 +162,10 @@ const MainMenu = () => {
   const company = session?.user?.company;
 
   let menuData: IMenu[];
-  if (role === "COMPANY_ADMIN" && company && COMPANY_MENUS[company]) {
-    menuData = COMPANY_MENUS[company];
+  if (role === "COMPANY_ADMIN" && company) {
+    // 전용 페이지가 있는 발주사는 COMPANY_MENUS 매핑을, 없으면(관리자 계정 관리에서
+    // 새로 등록한 발주사) 동적 라우트로 자동 연결되는 메뉴를 생성한다.
+    menuData = COMPANY_MENUS[company] ?? buildCompanyMenu(company);
   } else {
     menuData = superAdminMenuData;
   }

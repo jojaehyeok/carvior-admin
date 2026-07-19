@@ -2,6 +2,7 @@ import { getDefaultLayout, IDefaultLayoutPage } from "@/components/layout/defaul
 import { Button, message, Select, Spin, Tag } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MapPin, Navigation, RefreshCw, Users, X } from "lucide-react";
+import { useSession } from "next-auth/react";
 
 const API = process.env.NEXT_PUBLIC_API_ENDPOINT;
 
@@ -107,6 +108,11 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
 }
 
 const MapPage: IDefaultLayoutPage = () => {
+  const { data: session } = useSession();
+  // COMPANY_ADMIN(예: 애니원모터스)은 자사 의뢰만 지도에 뜨고 배정도 자사 것만 가능해야 함.
+  // SUPER_ADMIN(company: null)은 전체를 본다.
+  const company = session?.user?.company ?? null;
+
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<any>(null);
   const driverMarkers = useRef<Record<number, any>>({});
@@ -201,9 +207,11 @@ const MapPage: IDefaultLayoutPage = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
+      const bookingListUrl = new URL(`${API}/external/request/list`);
+      if (company) bookingListUrl.searchParams.set('source', company);
       const [dRes, bRes] = await Promise.all([
         fetch(`${API}/drivers/locations/all`),
-        fetch(`${API}/external/request/list`),
+        fetch(bookingListUrl.toString()),
       ]);
       const dData = await dRes.json();
       const bData = await bRes.json();
@@ -231,7 +239,7 @@ const MapPage: IDefaultLayoutPage = () => {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [company]);
 
   // 진단사 마커
   useEffect(() => {

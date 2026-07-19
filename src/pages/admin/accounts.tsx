@@ -11,6 +11,7 @@ interface AdminUser {
   name: string;
   phone?: string;
   role: string;
+  company?: string | null;
   createdAt: string;
 }
 
@@ -39,13 +40,13 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
 
   useEffect(() => { fetchAdmins(); }, [fetchAdmins]);
 
-  const handleCreate = async (values: { email: string; password: string; name: string; phone?: string }) => {
+  const handleCreate = async (values: { email: string; password: string; name: string; phone?: string; company?: string }) => {
     setCreating(true);
     try {
       const res = await fetch(`${API}/users/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...values, role: "admin" }),
+        body: JSON.stringify({ ...values, role: "admin", company: values.company || null }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -116,7 +117,12 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
     {
       title: "역할",
       dataIndex: "role",
-      render: () => <Tag color="purple">관리자</Tag>,
+      render: (_: string, record: AdminUser) =>
+        record.company ? (
+          <Tag color="blue">발주사 관리자 · {record.company}</Tag>
+        ) : (
+          <Tag color="purple">슈퍼 관리자</Tag>
+        ),
     },
     {
       title: "생성일",
@@ -198,6 +204,12 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
           </Form.Item>
           <Form.Item name="phone" label="연락처">
             <Input placeholder="01012345678" />
+          </Form.Item>
+          <Form.Item
+            name="company"
+            label="발주사 코드 (선택 — 비우면 슈퍼 관리자, 입력하면 그 발주사 의뢰만 조회 가능)"
+          >
+            <Input placeholder="예: gwangmyeong-motors (비워두면 전체 조회 슈퍼 관리자)" />
           </Form.Item>
           <Form.Item
             name="password"

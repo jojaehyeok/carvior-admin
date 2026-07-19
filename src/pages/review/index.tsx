@@ -4,6 +4,7 @@ import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { RefreshCw, Star } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import DefaultTable from "@/components/shared/ui/default-table";
 
 const pageHeader: IPageHeader = { title: "CS 관리 / 리뷰" };
@@ -25,6 +26,10 @@ const ratingColor = (r: number) =>
   r >= 4 ? "green" : r === 3 ? "orange" : "red";
 
 const ReviewListPage: IDefaultLayoutPage = () => {
+  const { data: session } = useSession();
+  // COMPANY_ADMIN은 자사 의뢰 리뷰만, SUPER_ADMIN(company: null)은 전체를 본다.
+  const company = session?.user?.company ?? null;
+
   const [data, setData] = useState<IReview[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selected, setSelected] = useState<IReview | null>(null);
@@ -32,12 +37,14 @@ const ReviewListPage: IDefaultLayoutPage = () => {
   const fetchReviews = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_ENDPOINT}/reviews`);
+      const url = new URL(`${process.env.NEXT_PUBLIC_API_ENDPOINT}/reviews`);
+      if (company) url.searchParams.set('source', company);
+      const res = await fetch(url.toString());
       const json = await res.json();
       setData(Array.isArray(json) ? json : []);
     } catch { /* ignore */ }
     finally { setIsLoading(false); }
-  }, []);
+  }, [company]);
 
   useEffect(() => { fetchReviews(); }, [fetchReviews]);
 
