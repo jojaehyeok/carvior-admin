@@ -6,7 +6,7 @@ import { ISO8601DateTime } from "@/types/common";
 import { Button, Checkbox, Input, InputNumber, Modal, Select, Tag, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
-import { Eye, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
+import { Eye, FileText, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -142,6 +142,27 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     // 매물 조회 자체를 스킵 — 불필요한 API 호출과 store-items 데이터 노출을 줄임
     if (!effectiveCompany) fetchStoreItemMap();
   }, [fetchBookings, fetchDrivers, fetchStoreItemMap, effectiveCompany]);
+
+  // --- 자동차등록증 원본 확인 (대시보드 로그인 계정만 — 공개 리포트 페이지엔 개인정보 보호를 위해 안 올림) ---
+  const [loadingRegId, setLoadingRegId] = useState<number | null>(null);
+  const handleViewRegistration = async (record: IBooking) => {
+    setLoadingRegId(record.id);
+    try {
+      const res = await fetch(`${API_BASE}/external/inspection/report/${record.id}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const url = data?.images?.registration?.[0];
+      if (!url) {
+        message.warning('등록증 사진이 없습니다.');
+        return;
+      }
+      window.open(url, '_blank');
+    } catch {
+      message.error('등록증 조회 실패');
+    } finally {
+      setLoadingRegId(null);
+    }
+  };
 
   // --- 진단사/매니저 수정 요청 (SMS) ---
   const openRequestModal = (record: IBooking) => {
@@ -354,9 +375,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       render: (value: ISO8601DateTime) => dayjs(value).format("YYYY-MM-DD"),
     },
     {
-      title: "진단 리포트 / 수정",
+      title: "진단 리포트 / 등록증 / 수정",
       key: "reportAndEdit",
-      width: 220,
+      width: 320,
       align: "center",
       render: (_, record) => (
         <div className="flex items-center justify-center gap-1.5">
@@ -369,6 +390,15 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             onClick={() => window.open(`/report/${record.carHash}`, '_blank')}
           >
             리포트 보기
+          </Button>
+          <Button
+            size="small"
+            disabled={record.status !== 'COMPLETED'}
+            loading={loadingRegId === record.id}
+            icon={<FileText size={14} />}
+            onClick={() => handleViewRegistration(record)}
+          >
+            등록증 보기
           </Button>
           <Button
             size="small"
