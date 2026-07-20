@@ -340,6 +340,8 @@ const ReportEditPage: IDefaultLayoutPage = () => {
   // ── 저장 ───────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!bookingId) return;
+    // 목록 버튼뿐 아니라 URL로 직접 들어와도 4시간 지나면 저장 자체를 막는다
+    if (expired) { message.error('수정 가능 시간(진단 완료 후 4시간)이 지났습니다.'); return; }
     setSaving(true);
     try {
       const res = await fetch(`${CAVIOR_BASE}/api/v1/external/inspection/${bookingId}/report-fields`, {
@@ -481,10 +483,11 @@ const ReportEditPage: IDefaultLayoutPage = () => {
               size="large"
               block
               loading={saving}
+              disabled={expired}
               onClick={handleSave}
               style={{ background: '#7c3aed', borderColor: '#7c3aed' }}
             >
-              수정 저장
+              {expired ? '수정 가능 시간 지남' : '수정 저장'}
             </Button>
           </div>
         </div>
