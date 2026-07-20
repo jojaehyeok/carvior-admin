@@ -59,7 +59,6 @@ const PhotoSection = React.memo(function PhotoSection({
   photoOrder, regImage, vinImage, dashboardImage, addingPhoto, replacingSingle,
   onAddPhotos, onReplaceSingle, onMovePhoto, onRemove, onLightbox, onOpenDamageEditor,
 }: PhotoSectionProps) {
-  const photoInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const singleInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const dragSrc = useRef<{ cat: string; idx: number } | null>(null);
   const [dragOverCat, setDragOverCat] = useState<string | null>(null);
@@ -151,24 +150,7 @@ const PhotoSection = React.memo(function PhotoSection({
                     <Tag color="default" className="text-[10px] m-0">{CAT_LABEL[cat] ?? cat}</Tag>
                     <span className="text-[10px] text-gray-400">{photos.length}장</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      ref={el => { photoInputRefs.current[cat] = el; }}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={e => { const files = Array.from(e.target.files ?? []); if (files.length) onAddPhotos(cat, files); e.target.value = ''; }}
-                    />
-                    <Button
-                      size="small"
-                      loading={addingPhoto === cat}
-                      onClick={() => photoInputRefs.current[cat]?.click()}
-                      className="text-[10px] h-6 px-2"
-                    >
-                      ➕ 추가
-                    </Button>
-                  </div>
+                  {addingPhoto === cat && <span className="text-[10px] text-violet-500">업로드 중…</span>}
                 </div>
                 {photos.length === 0 ? (
                   <div className="h-14 rounded-lg border border-dashed border-gray-200 flex items-center justify-center text-[10px] text-gray-300">
