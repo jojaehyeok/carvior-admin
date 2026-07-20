@@ -57,8 +57,6 @@ const ReportEditPage: IDefaultLayoutPage = () => {
   const [vinImage, setVinImage] = useState<string>('');
   const [damages, setDamages] = useState<string[][]>([]);
 
-  const [ocrLoading, setOcrLoading] = useState<string | null>(null);
-  const [blurring, setBlurring] = useState<Record<string, boolean>>({});
   const [lightbox, setLightbox] = useState<Lightbox | null>(null);
   const [damageEditorOpen, setDamageEditorOpen] = useState(false);
   const [blurEditTarget, setBlurEditTarget] = useState<{ cat: string; idx: number; url: string } | null>(null);
@@ -180,65 +178,6 @@ const ReportEditPage: IDefaultLayoutPage = () => {
     });
   }, []);
 
-  const handleBlurCategory = useCallback(async (cat: string) => {
-    const urls = photoOrder[cat] ?? [];
-    if (!urls.length) return;
-    setBlurring(prev => ({ ...prev, [cat]: true }));
-    try {
-      const res = await fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls }),
-      });
-      const data = await res.json();
-      if (!res.ok || !Array.isArray(data.urls)) throw new Error(data.message || '블러 실패');
-      setPhotoOrder(prev => ({ ...prev, [cat]: data.urls }));
-      message.success(`${CAT_LABEL[cat] ?? cat} 번호판 블러 완료`);
-    } catch {
-      message.error('블러 처리 실패');
-    } finally {
-      setBlurring(prev => ({ ...prev, [cat]: false }));
-    }
-  }, [photoOrder]);
-
-  // ── OCR ────────────────────────────────────────────────────────
-  const handleOcr = useCallback(async (mode: 'registration' | 'dashboard') => {
-    const photoUrl = mode === 'registration' ? regImage : dashboardImage;
-    if (!photoUrl) {
-      message.warning(mode === 'registration' ? '자동차등록증 사진이 없습니다.' : '계기판 사진이 없습니다.');
-      return;
-    }
-    setOcrLoading(mode);
-    try {
-      const res = await fetch(`${CAVIOR_BASE}/api/v1/external/ocr/${mode}/from-url`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: photoUrl }),
-      });
-      if (!res.ok) { message.error('OCR 실패'); return; }
-      const data = await res.json();
-      if (data.error) { message.error(data.error); return; }
-
-      if (mode === 'registration') {
-        setForm(f => ({
-          ...f,
-          carModel: data.carName ?? f.carModel,
-          color: data.color ?? f.color,
-        }));
-        message.success('자동차등록증 OCR 자동입력 완료');
-      } else if (data.mileage) {
-        setForm(f => ({ ...f, mileage: String(data.mileage) }));
-        message.success(`계기판 OCR: 주행거리 ${Number(data.mileage).toLocaleString()} km`);
-      } else {
-        message.warning('계기판에서 주행거리를 인식하지 못했습니다.');
-      }
-    } catch {
-      message.error('OCR 오류');
-    } finally {
-      setOcrLoading(null);
-    }
-  }, [regImage, dashboardImage]);
-
   // ── 저장 ───────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!bookingId) return;
@@ -285,11 +224,6 @@ const ReportEditPage: IDefaultLayoutPage = () => {
     [photoOrder],
   );
 
-  const privacyPhotos = useMemo(() => [
-    ...(regImage ? [{ url: regImage, cat: '자동차등록증', key: 'registration' as const }] : []),
-    ...(vinImage ? [{ url: vinImage, cat: '차대번호', key: 'vin' as const }] : []),
-  ], [regImage, vinImage]);
-
   if (loading) {
     return <div className="flex items-center justify-center h-96"><Spin size="large" tip="로딩 중…" /></div>;
   }
@@ -322,29 +256,9 @@ const ReportEditPage: IDefaultLayoutPage = () => {
         {/* ── 왼쪽: 사진 편집 ── */}
         <div className="w-[55%] flex flex-col gap-4">
 
-          {/* 개인정보 사진 + OCR 버튼 */}
+          {/* 개인정보 사진 */}
           <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-bold text-red-600">⚠️ 개인정보 사진 — 스토어/리포트 미노출</p>
-              <div className="flex gap-2">
-                <Button
-                  size="small"
-                  loading={ocrLoading === 'registration'}
-                  onClick={() => handleOcr('registration')}
-                  style={{ borderColor: '#1677ff', color: '#1677ff' }}
-                >
-                  📄 등록증 OCR
-                </Button>
-                <Button
-                  size="small"
-                  loading={ocrLoading === 'dashboard'}
-                  onClick={() => handleOcr('dashboard')}
-                  style={{ borderColor: '#7c3aed', color: '#7c3aed' }}
-                >
-                  📸 계기판 OCR
-                </Button>
-              </div>
-            </div>
+            <p className="text-xs font-bold text-red-600 mb-3">⚠️ 개인정보 사진 — 스토어/리포트 미노출</p>
             <div className="flex gap-2 flex-wrap">
               {[
                 { key: 'registration' as const, url: regImage, label: '자동차등록증' },
@@ -420,16 +334,6 @@ const ReportEditPage: IDefaultLayoutPage = () => {
                           >
                             ➕ 추가
                           </Button>
-                          {(cat === 'exterior' || cat === 'damage') && (
-                            <Button
-                              size="small"
-                              loading={blurring[cat]}
-                              onClick={() => handleBlurCategory(cat)}
-                              className="text-[10px] h-6 px-2"
-                            >
-                              번호판 블러
-                            </Button>
-                          )}
                         </div>
                       </div>
                       <div className="flex gap-2 overflow-x-auto pb-1">
