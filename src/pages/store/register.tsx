@@ -1,6 +1,7 @@
 'use client';
 
 import { getDefaultLayout, IDefaultLayoutPage, IPageHeader } from "@/components/layout/default-layout";
+import RequireSuperAdmin from "@/components/shared/require-super-admin";
 import { Button, Checkbox, Form, Input, InputNumber, message, Select, Spin, Tag } from "antd";
 import { useRouter } from "next/router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -43,7 +44,7 @@ interface Lightbox { photos: string[]; idx: number; }
 
 const pageHeader: IPageHeader = { title: "스토어 등록" };
 
-const StoreRegisterPage: IDefaultLayoutPage = () => {
+const StoreRegisterPageInner = () => {
   const router = useRouter();
   const { bookingId, storeItemId } = router.query;
   const isEditMode = !!storeItemId;
@@ -758,6 +759,12 @@ const StoreRegisterPage: IDefaultLayoutPage = () => {
     </div>
   );
 };
+
+const StoreRegisterPage: IDefaultLayoutPage = () => (
+  <RequireSuperAdmin>
+    <StoreRegisterPageInner />
+  </RequireSuperAdmin>
+);
 
 StoreRegisterPage.getLayout = getDefaultLayout;
 StoreRegisterPage.pageHeader = pageHeader;

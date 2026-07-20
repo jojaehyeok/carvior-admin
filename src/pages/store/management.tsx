@@ -1,4 +1,5 @@
 import { getDefaultLayout, IDefaultLayoutPage, IPageHeader } from "@/components/layout/default-layout";
+import RequireSuperAdmin from "@/components/shared/require-super-admin";
 import StoreList from "@/components/page/store/store-list";
 
 const pageHeader: IPageHeader = {
@@ -7,9 +8,11 @@ const pageHeader: IPageHeader = {
 
 const StoreManagementPage: IDefaultLayoutPage = () => {
   return (
-    <div className="flex flex-col gap-6">
-      <StoreList />
-    </div>
+    <RequireSuperAdmin>
+      <div className="flex flex-col gap-6">
+        <StoreList />
+      </div>
+    </RequireSuperAdmin>
   );
 };
 

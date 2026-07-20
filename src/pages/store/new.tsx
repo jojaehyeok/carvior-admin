@@ -1,4 +1,5 @@
 import { getDefaultLayout, IDefaultLayoutPage, IPageHeader } from "@/components/layout/default-layout";
+import RequireSuperAdmin from "@/components/shared/require-super-admin";
 import ProductForm from "@/components/page/sample/product/product-form";
 
 const pageHeader: IPageHeader = {
@@ -6,7 +7,11 @@ const pageHeader: IPageHeader = {
 };
 
 const ProductNewPage: IDefaultLayoutPage = () => {
-  return <ProductForm initialValues={{ status: "NOTSALE" }} />;
+  return (
+    <RequireSuperAdmin>
+      <ProductForm initialValues={{ status: "NOTSALE" }} />
+    </RequireSuperAdmin>
+  );
 };
 
 ProductNewPage.getLayout = getDefaultLayout;
