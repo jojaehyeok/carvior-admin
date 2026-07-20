@@ -3,7 +3,7 @@
 import DefaultTable from "@/components/shared/ui/default-table";
 import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
 import { ISO8601DateTime } from "@/types/common";
-import { Button, Checkbox, Input, InputNumber, Modal, Select, Tag, message } from "antd";
+import { Button, Checkbox, Input, InputNumber, Modal, Select, Spin, Tag, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { Eye, FileText, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
@@ -14,6 +14,14 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 const CAVIOR_BASE = (process.env.NEXT_PUBLIC_API_ENDPOINT || 'https://carvior.store/api/v1').replace('/api/v1', '');
 const INTERNAL_KEY = process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? '';
 const INTERNAL_HEADERS = { 'x-internal-key': INTERNAL_KEY };
+
+// 리포트 수정은 진단 완료 후 4시간까지만 — 그 이후엔 이미 발주사가 리포트를 보고
+// 판단을 내렸을 수 있어서 조용히 내용이 바뀌는 걸 막기 위함
+const REPORT_EDIT_WINDOW_MS = 4 * 60 * 60 * 1000;
+const isReportEditExpired = (record: { firstCompletedAt?: string | null }) => {
+  if (!record.firstCompletedAt) return false; // completedAt 정보가 없는 구버전 데이터는 막지 않음
+  return Date.now() - new Date(record.firstCompletedAt).getTime() > REPORT_EDIT_WINDOW_MS;
+};
 
 // --- 인터페이스 정의 ---
 interface IDriver {
@@ -35,6 +43,7 @@ interface IBooking {
   source?: string;
   status: 'PENDING' | 'ASSIGNED' | 'COMPLETED' | 'CANCELLED';
   carHash?: string | null;
+  firstCompletedAt?: string | null;
   adminMemo?: string;
   assignedDriverId?: string | null;
   assignedDriverName?: string | null;
@@ -375,9 +384,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       render: (value: ISO8601DateTime) => dayjs(value).format("YYYY-MM-DD"),
     },
     {
-      title: "진단 리포트 / 등록증 / 수정",
-      key: "reportAndEdit",
-      width: 320,
+      title: "진단 리포트",
+      key: "report",
+      width: 200,
       align: "center",
       render: (_, record) => (
         <div className="flex items-center justify-center gap-1.5">
@@ -393,23 +402,30 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           </Button>
           <Button
             size="small"
-            disabled={record.status !== 'COMPLETED'}
-            loading={loadingRegId === record.id}
-            icon={<FileText size={14} />}
-            onClick={() => handleViewRegistration(record)}
+            disabled={record.status !== 'COMPLETED' || isReportEditExpired(record)}
+            icon={<PenSquare size={14} />}
+            onClick={() => router.push(`/report/edit?bookingId=${record.id}`)}
           >
-            등록증 보기
-          </Button>
-          <Button
-            size="small"
-            danger
-            disabled={record.status !== 'COMPLETED'}
-            icon={<MessageSquare size={14} />}
-            onClick={() => openRequestModal(record)}
-          >
-            수정 요청
+            {isReportEditExpired(record) ? '수정마감' : '리포트 수정'}
           </Button>
         </div>
+      ),
+    },
+    {
+      title: "등록증",
+      key: "registration",
+      width: 110,
+      align: "center",
+      render: (_, record) => (
+        <Button
+          size="small"
+          disabled={record.status !== 'COMPLETED'}
+          loading={loadingRegId === record.id}
+          icon={<FileText size={14} />}
+          onClick={() => handleViewRegistration(record)}
+        >
+          등록증 보기
+        </Button>
       ),
     },
     ...(isSuperAdminView ? [{
@@ -435,6 +451,23 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         );
       },
     }] : []),
+    {
+      title: "수정 요청",
+      key: "requestUpdate",
+      width: 120,
+      align: "center",
+      render: (_, record) => (
+        <Button
+          size="small"
+          danger
+          disabled={record.status !== 'COMPLETED'}
+          icon={<MessageSquare size={14} />}
+          onClick={() => openRequestModal(record)}
+        >
+          수정 요청
+        </Button>
+      ),
+    },
   ];
 
   return (
@@ -444,12 +477,14 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         <Button type="primary" icon={<RefreshCw size={14} />} onClick={fetchBookings} loading={isLoading}>새로고침</Button>
       </DefaultTableBtn>
 
-      <DefaultTable<IBooking>
-        columns={columns}
-        dataSource={filteredData}
-        loading={isLoading}
-        rowKey="id"
-      />
+      <div className="overflow-x-auto">
+        <DefaultTable<IBooking>
+          columns={columns}
+          dataSource={filteredData}
+          loading={isLoading}
+          rowKey="id"
+        />
+      </div>
 
       <Modal
         title={`진단 관리 - ${editingBooking?.carNumber}`}

@@ -16,7 +16,7 @@ const DefaultTable = <T extends object>({
       size="small"
       rowKey="id"
       tableLayout="fixed"
-      scroll={{ x: 800 }}
+      scroll={{ x: 'max-content' }}
       bordered
       {...(countLabel && { title: () => <p>{numeral(countLabel).format("0,0")}건</p> })}
       {...tableProps}
