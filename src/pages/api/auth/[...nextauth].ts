@@ -5,11 +5,9 @@ import GithubProvider from "next-auth/providers/github";
 import GoogleProvider from "next-auth/providers/google";
 
 /**
- * 발주사별 관리자 계정 목록
+ * 슈퍼 관리자 하드코딩 계정 (발주사 계정은 전부 DB 계정으로 전환 완료 —
+ * "관리자 계정 관리" 화면에서 발급, authorize()의 DB 폴백으로 로그인됨)
  * - role: 'SUPER_ADMIN' → 전체 의뢰 조회 가능 (carvior-inspection 포함)
- * - role: 'COMPANY_ADMIN' → company에 해당하는 의뢰만 조회 가능
- *
- * 운영 시: 비밀번호는 환경변수로 관리하세요 (예: ANYONE_MOTORS_PW)
  */
 const ADMIN_ACCOUNTS: Record<string, { password: string; name: string; role: string; company: string | null }> = {
   admin: {
@@ -18,25 +16,6 @@ const ADMIN_ACCOUNTS: Record<string, { password: string; name: string; role: str
     role: "SUPER_ADMIN",
     company: null,
   },
-  anyone: {
-    password: process.env.ANYONE_MOTORS_PW || "1234",
-    name: "애니원 모터스",
-    role: "COMPANY_ADMIN",
-    company: "anyone-motors",
-  },
-  gwangmyeong: {
-    password: process.env.GWANGMYEONG_MOTORS_PW || "1234",
-    name: "광명모터스",
-    role: "COMPANY_ADMIN",
-    company: "gwangmyeong-motors",
-  },
-  // 새 발주사 추가 시 여기에 추가:
-  // "new-company": {
-  //   password: process.env.NEW_COMPANY_PW || "password",
-  //   name: "새 발주사명",
-  //   role: "COMPANY_ADMIN",
-  //   company: "new-company",
-  // },
 };
 
 const credentialsProviderOption: CredentialsConfig<{}> = {
