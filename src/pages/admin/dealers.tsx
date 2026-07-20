@@ -1,4 +1,5 @@
 import { getDefaultLayout, IDefaultLayoutPage } from "@/components/layout/default-layout";
+import RequireSuperAdmin from "@/components/shared/require-super-admin";
 import { Button, message, Popconfirm, Spin, Table, Tag } from "antd";
 import { useCallback, useEffect, useState } from "react";
 
@@ -129,25 +130,27 @@ const DealerApprovalPage: IDefaultLayoutPage = () => {
   ];
 
   return (
-    <div className="p-6 max-w-6xl">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">딜러 승인 관리</h1>
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center py-16"><Spin /></div>
-      ) : (
-        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-          <Table
-            dataSource={dealers}
-            columns={columns}
-            rowKey="id"
-            pagination={false}
-            locale={{ emptyText: "가입한 딜러가 없습니다." }}
-          />
+    <RequireSuperAdmin>
+      <div className="p-6 max-w-6xl">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold">딜러 승인 관리</h1>
         </div>
-      )}
-    </div>
+
+        {loading ? (
+          <div className="flex justify-center py-16"><Spin /></div>
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+            <Table
+              dataSource={dealers}
+              columns={columns}
+              rowKey="id"
+              pagination={false}
+              locale={{ emptyText: "가입한 딜러가 없습니다." }}
+            />
+          </div>
+        )}
+      </div>
+    </RequireSuperAdmin>
   );
 };
 

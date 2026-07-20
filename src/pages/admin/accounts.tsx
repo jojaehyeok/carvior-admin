@@ -1,4 +1,5 @@
 import { getDefaultLayout, IDefaultLayoutPage } from "@/components/layout/default-layout";
+import RequireSuperAdmin from "@/components/shared/require-super-admin";
 import { Button, Form, Input, message, Modal, Popconfirm, Spin, Table, Tag, Upload } from "antd";
 import { Upload as UploadIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -232,6 +233,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
   ];
 
   return (
+    <RequireSuperAdmin>
     <div className="p-6 max-w-7xl">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">관리자 계정 관리</h1>
@@ -450,6 +452,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
         </Form>
       </Modal>
     </div>
+    </RequireSuperAdmin>
   );
 };
 

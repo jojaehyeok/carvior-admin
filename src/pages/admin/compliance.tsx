@@ -1,4 +1,5 @@
 import { getDefaultLayout, IDefaultLayoutPage } from "@/components/layout/default-layout";
+import RequireSuperAdmin from "@/components/shared/require-super-admin";
 import { Input, Spin, Table, Tag } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -120,6 +121,7 @@ const CompliancePage: IDefaultLayoutPage = () => {
   ];
 
   return (
+    <RequireSuperAdmin>
     <div className="p-6 max-w-6xl">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">온라인 자동차매매정보 보관 기록</h1>
@@ -152,6 +154,7 @@ const CompliancePage: IDefaultLayoutPage = () => {
         </div>
       )}
     </div>
+    </RequireSuperAdmin>
   );
 };
 
