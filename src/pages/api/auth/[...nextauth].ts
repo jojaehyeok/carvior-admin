@@ -42,6 +42,7 @@ const credentialsProviderOption: CredentialsConfig<{}> = {
         image: "",
         role: account.role,
         company: account.company,
+        logoUrl: null,
       };
     }
 
@@ -67,6 +68,7 @@ const credentialsProviderOption: CredentialsConfig<{}> = {
         image: "",
         role: user.company ? "COMPANY_ADMIN" : "SUPER_ADMIN",
         company: user.company ?? null,
+        logoUrl: user.logoUrl ?? null,
       };
     } catch {
       return null;
@@ -113,6 +115,7 @@ export default NextAuth({
         token.login = (user as any).login;
         token.role = (user as any).role ?? "SUPER_ADMIN";
         token.company = (user as any).company ?? null;
+        token.logoUrl = (user as any).logoUrl ?? null;
       }
       return token;
     },
@@ -123,6 +126,7 @@ export default NextAuth({
         login: token.login as string,
         role: token.role as string,
         company: (token.company as string | null) ?? null,
+        logoUrl: (token.logoUrl as string | null) ?? null,
       };
       return session;
     },

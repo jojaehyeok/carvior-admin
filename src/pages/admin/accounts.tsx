@@ -1,5 +1,6 @@
 import { getDefaultLayout, IDefaultLayoutPage } from "@/components/layout/default-layout";
-import { Button, Form, Input, message, Modal, Popconfirm, Spin, Table, Tag } from "antd";
+import { Button, Form, Input, message, Modal, Popconfirm, Spin, Table, Tag, Upload } from "antd";
+import { Upload as UploadIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_ENDPOINT;
@@ -12,7 +13,17 @@ interface AdminUser {
   phone?: string;
   role: string;
   company?: string | null;
+  logoUrl?: string | null;
   createdAt: string;
+}
+
+async function uploadLogoFile(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`${API}/users/upload-logo`, { method: 'POST', body: formData });
+  if (!res.ok) throw new Error('로고 업로드 실패');
+  const data = await res.json();
+  return data.url as string;
 }
 
 const AdminAccountPage: IDefaultLayoutPage = () => {
@@ -27,6 +38,9 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
   const [createForm] = Form.useForm();
   const [pwForm] = Form.useForm();
   const [editForm] = Form.useForm();
+  const [createLogoUrl, setCreateLogoUrl] = useState<string | null>(null);
+  const [editLogoUrl, setEditLogoUrl] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   const fetchAdmins = useCallback(async () => {
     setLoading(true);
@@ -50,7 +64,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
       const res = await fetch(`${API}/users/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...rest, email: `${username}@carvior.store`, role: "admin", company: values.company || null }),
+        body: JSON.stringify({ ...rest, email: `${username}@carvior.store`, role: "admin", company: values.company || null, logoUrl: createLogoUrl }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -59,6 +73,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
       message.success("관리자 계정이 생성되었습니다.");
       setCreateOpen(false);
       createForm.resetFields();
+      setCreateLogoUrl(null);
       fetchAdmins();
     } catch (e: any) {
       message.error(e.message);
@@ -94,17 +109,31 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
       const res = await fetch(`${API}/users/${editOpen.id}/admin-info`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...values, company: values.company || null }),
+        body: JSON.stringify({ ...values, company: values.company || null, logoUrl: editLogoUrl }),
       });
       if (!res.ok) throw new Error("수정 실패");
       message.success("계정 정보가 수정되었습니다.");
       setEditOpen(null);
       editForm.resetFields();
+      setEditLogoUrl(null);
       fetchAdmins();
     } catch (e: any) {
       message.error(e.message);
     } finally {
       setEditing(false);
+    }
+  };
+
+  const handleLogoPick = async (file: File, apply: (url: string) => void) => {
+    setUploadingLogo(true);
+    try {
+      const url = await uploadLogoFile(file);
+      apply(url);
+      message.success("로고가 업로드되었습니다.");
+    } catch {
+      message.error("로고 업로드 실패");
+    } finally {
+      setUploadingLogo(false);
     }
   };
 
@@ -128,7 +157,15 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
       title: "이름",
       dataIndex: "name",
       width: 140,
-      render: (v: string) => <span className="font-semibold whitespace-nowrap">{v}</span>,
+      render: (v: string, record: AdminUser) => (
+        <div className="flex items-center gap-2">
+          {record.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={record.logoUrl} alt="" className="w-6 h-6 rounded object-contain border border-gray-100" />
+          ) : null}
+          <span className="font-semibold whitespace-nowrap">{v}</span>
+        </div>
+      ),
     },
     {
       title: "이메일",
@@ -168,6 +205,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
             size="small"
             onClick={() => {
               setEditOpen(record);
+              setEditLogoUrl(record.logoUrl ?? null);
               editForm.setFieldsValue({ name: record.name, phone: record.phone, company: record.company ?? "" });
             }}
           >
@@ -224,11 +262,28 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
       <Modal
         title="관리자 계정 추가"
         open={createOpen}
-        onCancel={() => setCreateOpen(false)}
+        onCancel={() => { setCreateOpen(false); setCreateLogoUrl(null); }}
         footer={null}
         destroyOnClose
       >
         <Form form={createForm} layout="vertical" onFinish={handleCreate} className="pt-2">
+          <Form.Item label="로고 (선택 — 발주사 화이트라벨용, 대시보드 사이드바에 표시)">
+            <div className="flex items-center gap-3">
+              {createLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={createLogoUrl} alt="" className="w-10 h-10 rounded object-contain border border-gray-100" />
+              ) : null}
+              <Upload
+                accept="image/*"
+                showUploadList={false}
+                beforeUpload={(file) => { handleLogoPick(file, setCreateLogoUrl); return false; }}
+              >
+                <Button size="small" loading={uploadingLogo} icon={<UploadIcon width={14} height={14} />}>
+                  {createLogoUrl ? "로고 다시 선택" : "로고 업로드"}
+                </Button>
+              </Upload>
+            </div>
+          </Form.Item>
           <Form.Item name="name" label="이름" rules={[{ required: true, message: "이름을 입력하세요." }]}>
             <Input placeholder="홍길동" />
           </Form.Item>
@@ -295,11 +350,31 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
       <Modal
         title={`정보 수정 — ${editOpen?.email}`}
         open={!!editOpen}
-        onCancel={() => setEditOpen(null)}
+        onCancel={() => { setEditOpen(null); setEditLogoUrl(null); }}
         footer={null}
         destroyOnClose
       >
         <Form form={editForm} layout="vertical" onFinish={handleEditInfo} className="pt-2">
+          <Form.Item label="로고 (선택 — 발주사 화이트라벨용, 대시보드 사이드바에 표시)">
+            <div className="flex items-center gap-3">
+              {editLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={editLogoUrl} alt="" className="w-10 h-10 rounded object-contain border border-gray-100" />
+              ) : null}
+              <Upload
+                accept="image/*"
+                showUploadList={false}
+                beforeUpload={(file) => { handleLogoPick(file, setEditLogoUrl); return false; }}
+              >
+                <Button size="small" loading={uploadingLogo} icon={<UploadIcon width={14} height={14} />}>
+                  {editLogoUrl ? "로고 다시 선택" : "로고 업로드"}
+                </Button>
+              </Upload>
+              {editLogoUrl ? (
+                <Button size="small" danger type="text" onClick={() => setEditLogoUrl(null)}>제거</Button>
+              ) : null}
+            </div>
+          </Form.Item>
           <Form.Item name="name" label="이름" rules={[{ required: true, message: "이름을 입력하세요." }]}>
             <Input placeholder="홍길동" />
           </Form.Item>

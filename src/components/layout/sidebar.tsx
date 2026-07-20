@@ -1,3 +1,4 @@
+import { useAuth } from "@/lib/auth/auth-provider";
 import { ChevronLeft, MenuIcon } from "lucide-react";
 import Link from "next/link";
 import React from "react";
@@ -11,6 +12,9 @@ interface ISidebarProps {
 }
 
 const Sidebar = ({ isShowSidebar, hideSidebar }: ISidebarProps) => {
+  const { session } = useAuth();
+  const logoSrc = session.user.logoUrl || "/logo-icon.svg";
+
   return (
     <aside className={`hidden ${style.sidebar} ${isShowSidebar ? "sm:block" : "hidden"}`}>
       <div className="flex flex-col h-full">
@@ -18,7 +22,7 @@ const Sidebar = ({ isShowSidebar, hideSidebar }: ISidebarProps) => {
           <div className="shrink-0">
             <Link href="/" className="flex items-center justify-center w-12 h-12 rounded-lg overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo-icon.svg" alt="카비어" width={40} height={40} className="object-contain" />
+              <img src={logoSrc} alt={session.user.company || "카비어"} width={40} height={40} className="object-contain" />
             </Link>
           </div>
           <div className="ml-1 grow">

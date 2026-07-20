@@ -13,6 +13,8 @@ declare module "next-auth" {
       role: string;
       /** 발주사 ID (예: 'anyone-motors'). SUPER_ADMIN이면 null */
       company: string | null;
+      /** 발주사 화이트라벨 로고 URL. 없으면 카비어 기본 로고 */
+      logoUrl: string | null;
     } & DefaultSession["user"];
   }
 }
