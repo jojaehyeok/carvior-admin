@@ -4,7 +4,7 @@ import { getDefaultLayout, IDefaultLayoutPage, IPageHeader } from "@/components/
 import RequireSuperAdmin from "@/components/shared/require-super-admin";
 import { Button, Checkbox, Form, Input, InputNumber, message, Select, Spin, Tag } from "antd";
 import { useRouter } from "next/router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DamageEditorModal from "@/components/page/store/damage-editor";
 import ManualBlurEditorModal from "@/components/page/store/manual-blur-editor";
 
@@ -44,6 +44,116 @@ interface Lightbox { photos: string[]; idx: number; }
 
 const pageHeader: IPageHeader = { title: "스토어 등록" };
 
+const STORE_CATEGORY_ORDER = ['exterior', 'wheel', 'undercarriage', 'interior', 'engine', 'damage', 'extra', 'extraMemo'];
+
+// 사진이 많을 때 폼 상태 변경(로딩 스피너 등)에 그리드 전체가 덩달아 다시 그려지지
+// 않도록 분리 + memo. 콜백은 부모에서 안정적인 참조로 넘겨야 memo가 의미 있다.
+interface StorePhotoSectionProps {
+  photoOrder: Record<string, string[]>;
+  addingPhoto: string | null;
+  blurring: Record<string, boolean>;
+  onAddPhotos: (cat: string, files: File[]) => void;
+  onMovePhoto: (fromCat: string, fromIdx: number, toCat: string, toIdx: number) => void;
+  onRemove: (cat: string, idx: number) => void;
+  onLightbox: (photos: string[], idx: number) => void;
+  onManualBlurTarget: (target: { cat: string; idx: number; url: string }) => void;
+  onBlurCategory: (cat: string) => void;
+}
+
+const StorePhotoSection = React.memo(function StorePhotoSection({
+  photoOrder, addingPhoto, blurring, onAddPhotos, onMovePhoto, onRemove, onLightbox, onManualBlurTarget, onBlurCategory,
+}: StorePhotoSectionProps) {
+  const dragSrc = useRef<{ cat: string; idx: number } | null>(null);
+  const [dragOverCat, setDragOverCat] = useState<string | null>(null);
+
+  const handleCategoryDrop = (e: React.DragEvent, cat: string, toIdx?: number) => {
+    e.preventDefault();
+    setDragOverCat(null);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      onAddPhotos(cat, Array.from(e.dataTransfer.files));
+      return;
+    }
+    const src = dragSrc.current;
+    if (!src) return;
+    const targetIdx = toIdx ?? (photoOrder[cat]?.length ?? 0);
+    onMovePhoto(src.cat, src.idx, cat, targetIdx);
+    dragSrc.current = null;
+  };
+
+  return (
+    <div className="space-y-5">
+      {STORE_CATEGORY_ORDER.map(cat => {
+        const photos = photoOrder[cat] ?? [];
+        return (
+          <div
+            key={cat}
+            onDragOver={e => { e.preventDefault(); setDragOverCat(cat); }}
+            onDragLeave={() => setDragOverCat(prev => (prev === cat ? null : prev))}
+            onDrop={e => handleCategoryDrop(e, cat)}
+            className={`rounded-lg p-1.5 -m-1.5 transition-colors ${dragOverCat === cat ? 'bg-violet-50 ring-1 ring-violet-300' : ''}`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Tag color="default" className="text-[10px] m-0">{CAT_LABEL[cat] ?? cat}</Tag>
+                <span className="text-[10px] text-gray-400">{photos.length}장</span>
+                {addingPhoto === cat && <span className="text-[10px] text-violet-500">업로드 중…</span>}
+              </div>
+              {(cat === 'exterior' || cat === 'damage') && photos.length > 0 && (
+                <Button
+                  size="small"
+                  loading={blurring[cat]}
+                  onClick={() => onBlurCategory(cat)}
+                  className="text-[10px] h-6 px-2"
+                >
+                  번호판 블러
+                </Button>
+              )}
+            </div>
+            {photos.length === 0 ? (
+              <div className="h-14 rounded-lg border border-dashed border-gray-200 flex items-center justify-center text-[10px] text-gray-300">
+                사진을 여기로 끌어다 놓으세요
+              </div>
+            ) : (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {photos.map((url, i) => (
+                  <div
+                    key={`${cat}-${i}-${url.slice(-8)}`}
+                    className="relative flex-shrink-0 cursor-grab active:cursor-grabbing select-none"
+                    draggable
+                    onDragStart={() => { dragSrc.current = { cat, idx: i }; }}
+                    onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={e => { e.stopPropagation(); handleCategoryDrop(e, cat, i); }}
+                  >
+                    <img
+                      src={url}
+                      alt=""
+                      loading="lazy"
+                      onClick={() => onLightbox(photos, i)}
+                      className="w-28 h-20 object-cover rounded-lg border hover:opacity-90 transition-opacity"
+                    />
+                    {cat === 'exterior' && i === 0 && (
+                      <span className="absolute top-1 left-1 text-[8px] bg-green-600 text-white px-1.5 rounded-full pointer-events-none">대표</span>
+                    )}
+                    <button
+                      onClick={e => { e.stopPropagation(); onManualBlurTarget({ cat, idx: i, url }); }}
+                      className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center hover:bg-blue-600 transition-colors leading-none"
+                      title="수동 블러 처리"
+                    >🔧</button>
+                    <button
+                      onClick={e => { e.stopPropagation(); onRemove(cat, i); }}
+                      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[10px] font-bold flex items-center justify-center hover:bg-red-600 transition-colors leading-none"
+                    >×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
 const StoreRegisterPageInner = () => {
   const router = useRouter();
   const { bookingId, storeItemId } = router.query;
@@ -63,10 +173,6 @@ const StoreRegisterPageInner = () => {
   const [damageEditorOpen, setDamageEditorOpen] = useState(false);
   const [blurEditTarget, setBlurEditTarget] = useState<{ cat: string; idx: number; url: string } | null>(null);
   const [addingPhoto, setAddingPhoto] = useState<string | null>(null);
-  const photoInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-
-  // drag state — ref so no re-render
-  const dragSrc = useRef<{ cat: string; idx: number } | null>(null);
 
   // 진단 연계 매물이면 booking/inspection 로드 시점이 등록모드/수정모드마다 달라서 통일
   const effectiveBookingId = booking?.id ?? storeItem?.bookingId;
@@ -161,40 +267,48 @@ const StoreRegisterPageInner = () => {
     }));
   }, []);
 
-  const onDragStart = useCallback((cat: string, idx: number) => {
-    dragSrc.current = { cat, idx };
-  }, []);
-
-  const onDrop = useCallback((cat: string, toIdx: number) => {
-    const src = dragSrc.current;
-    if (!src || src.cat !== cat || src.idx === toIdx) { dragSrc.current = null; return; }
+  // 같은 카테고리 안 순서 변경 + 다른 카테고리로 이동(라벨 변경) 둘 다 처리
+  const movePhoto = useCallback((fromCat: string, fromIdx: number, toCat: string, toIdx: number) => {
+    if (fromCat === toCat && fromIdx === toIdx) return;
     setPhotoOrder(prev => {
-      const arr = [...(prev[cat] ?? [])];
-      const [item] = arr.splice(src.idx, 1);
-      arr.splice(toIdx, 0, item);
-      return { ...prev, [cat]: arr };
+      if (fromCat === toCat) {
+        const arr = [...(prev[fromCat] ?? [])];
+        const [item] = arr.splice(fromIdx, 1);
+        arr.splice(toIdx, 0, item);
+        return { ...prev, [fromCat]: arr };
+      }
+      const fromArr = [...(prev[fromCat] ?? [])];
+      const [item] = fromArr.splice(fromIdx, 1);
+      const toArr = [...(prev[toCat] ?? [])];
+      toArr.splice(toIdx, 0, item);
+      return { ...prev, [fromCat]: fromArr, [toCat]: toArr };
     });
-    dragSrc.current = null;
   }, []);
 
-  // ── 사진 추가 업로드 ────────────────────────────────────────────
-  const handleAddPhoto = useCallback(async (cat: string, file: File) => {
+  // ── 사진 추가 업로드 (여러 장 동시 드래그앤드롭 지원) ────────────
+  const handleAddPhotos = useCallback(async (cat: string, files: File[]) => {
     if (!effectiveBookingId) { message.error('예약 정보를 먼저 불러온 뒤 사진을 추가해주세요.'); return; }
     setAddingPhoto(cat);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('requestId', String(effectiveBookingId));
-      formData.append('category', cat);
-      formData.append('carNumber', effectiveCarNumber ?? '');
-      const res = await fetch(`${CAVIOR_BASE}/api/v1/external/inspection/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
-      if (!res.ok || !data.url) throw new Error();
-      setPhotoOrder(prev => ({ ...prev, [cat]: [...(prev[cat] ?? []), data.url] }));
-      message.success('사진을 추가했습니다.');
+      const uploaded: string[] = [];
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('requestId', String(effectiveBookingId));
+        formData.append('category', cat);
+        formData.append('carNumber', effectiveCarNumber ?? '');
+        const res = await fetch(`${CAVIOR_BASE}/api/v1/external/inspection/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+        if (res.ok && data.url) uploaded.push(data.url);
+      }
+      if (uploaded.length) {
+        setPhotoOrder(prev => ({ ...prev, [cat]: [...(prev[cat] ?? []), ...uploaded] }));
+        message.success(`사진 ${uploaded.length}장을 추가했습니다.`);
+      }
+      if (uploaded.length < files.length) message.warning('일부 사진 업로드에 실패했습니다.');
     } catch {
       message.error('사진 업로드에 실패했습니다.');
     } finally {
@@ -383,11 +497,7 @@ const StoreRegisterPageInner = () => {
     return () => window.removeEventListener('keydown', handler);
   }, [lightbox]);
 
-  // ── 표시할 카테고리 (동적) ─────────────────────────────────────
-  const publicCats = useMemo(
-    () => Object.keys(photoOrder).filter(cat => (photoOrder[cat] ?? []).length > 0),
-    [photoOrder],
-  );
+  const handleLightbox = useCallback((photos: string[], idx: number) => setLightbox({ photos, idx }), []);
 
   // 개인정보 사진 (단일 URL)
   const privacyPhotos = useMemo(() => [
@@ -483,7 +593,7 @@ const StoreRegisterPageInner = () => {
           <div className="bg-white rounded-xl border border-gray-100 p-4">
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs font-bold text-gray-500">
-                📷 사진 편집 — <span className="font-normal text-gray-400">드래그로 순서 변경 · ✕로 제외 · 클릭하면 슬라이드 보기</span>
+                📷 사진 편집 — <span className="font-normal text-gray-400">사진을 다른 칸으로 끌어다 놓으면 카테고리 이동 · 파일을 바로 끌어다 놓으면 업로드 · ✕로 제외</span>
               </p>
               {inspection && (
                 <Button size="small" onClick={() => setDamageEditorOpen(true)}>
@@ -491,92 +601,17 @@ const StoreRegisterPageInner = () => {
                 </Button>
               )}
             </div>
-            {publicCats.length === 0 ? (
-              <p className="text-sm text-gray-300 py-8 text-center">진단 사진 없음</p>
-            ) : (
-              <div className="space-y-5">
-                {publicCats.map(cat => {
-                  const photos = photoOrder[cat] ?? [];
-                  return (
-                    <div key={cat}>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Tag color="default" className="text-[10px] m-0">{CAT_LABEL[cat] ?? cat}</Tag>
-                          <span className="text-[10px] text-gray-400">{photos.length}장</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            ref={el => { photoInputRefs.current[cat] = el; }}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={e => {
-                              const file = e.target.files?.[0];
-                              if (file) handleAddPhoto(cat, file);
-                              e.target.value = '';
-                            }}
-                          />
-                          <Button
-                            size="small"
-                            loading={addingPhoto === cat}
-                            onClick={() => photoInputRefs.current[cat]?.click()}
-                            className="text-[10px] h-6 px-2"
-                          >
-                            ➕ 추가
-                          </Button>
-                          {(cat === 'exterior' || cat === 'damage') && (
-                            <Button
-                              size="small"
-                              loading={blurring[cat]}
-                              onClick={() => handleBlurCategory(cat)}
-                              className="text-[10px] h-6 px-2"
-                            >
-                              번호판 블러
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex gap-2 overflow-x-auto pb-1">
-                        {photos.map((url, i) => (
-                          <div
-                            key={`${cat}-${i}-${url.slice(-8)}`}
-                            className="relative flex-shrink-0 cursor-grab active:cursor-grabbing select-none"
-                            draggable
-                            onDragStart={() => onDragStart(cat, i)}
-                            onDragOver={e => e.preventDefault()}
-                            onDrop={() => onDrop(cat, i)}
-                          >
-                            {/* 사진 클릭 → 슬라이드 */}
-                            <img
-                              src={url}
-                              alt=""
-                              loading="lazy"
-                              onClick={() => setLightbox({ photos, idx: i })}
-                              className="w-28 h-20 object-cover rounded-lg border hover:opacity-90 transition-opacity"
-                            />
-                            {/* 대표 뱃지 — 외관 첫 번째 사진만 */}
-                            {cat === 'exterior' && i === 0 && (
-                              <span className="absolute top-1 left-1 text-[8px] bg-green-600 text-white px-1.5 rounded-full pointer-events-none">대표</span>
-                            )}
-                            {/* 수동 블러 버튼 — 자동인식이 놓친 얼굴·번호판을 직접 지정 */}
-                            <button
-                              onClick={e => { e.stopPropagation(); setBlurEditTarget({ cat, idx: i, url }); }}
-                              className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center hover:bg-blue-600 transition-colors leading-none"
-                              title="수동 블러 처리"
-                            >🔧</button>
-                            {/* X 버튼 — 항상 표시 */}
-                            <button
-                              onClick={e => { e.stopPropagation(); removePhoto(cat, i); }}
-                              className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[10px] font-bold flex items-center justify-center hover:bg-red-600 transition-colors leading-none"
-                            >×</button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <StorePhotoSection
+              photoOrder={photoOrder}
+              addingPhoto={addingPhoto}
+              blurring={blurring}
+              onAddPhotos={handleAddPhotos}
+              onMovePhoto={movePhoto}
+              onRemove={removePhoto}
+              onLightbox={handleLightbox}
+              onManualBlurTarget={setBlurEditTarget}
+              onBlurCategory={handleBlurCategory}
+            />
           </div>
 
           {/* 진단 메모 */}
