@@ -138,8 +138,10 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   useEffect(() => {
     fetchBookings();
     fetchDrivers();
-    fetchStoreItemMap();
-  }, [fetchBookings, fetchDrivers, fetchStoreItemMap]);
+    // 스마트옥션 매물 컬럼은 슈퍼 관리자 뷰에서만 보이므로, 발주사 스코프 뷰에서는
+    // 매물 조회 자체를 스킵 — 불필요한 API 호출과 store-items 데이터 노출을 줄임
+    if (!effectiveCompany) fetchStoreItemMap();
+  }, [fetchBookings, fetchDrivers, fetchStoreItemMap, effectiveCompany]);
 
   // --- 진단사/매니저 수정 요청 (SMS) ---
   const openRequestModal = (record: IBooking) => {
@@ -273,6 +275,10 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     });
   }, [data, router.query]);
 
+  // 스마트옥션 매물 등록/수정은 슈퍼 관리자 전용 기능 — 발주사 계정에서 보는
+  // 회사 스코프 목록(companyFilter가 있는 경우)에서는 컬럼 자체를 숨긴다.
+  const isSuperAdminView = !effectiveCompany;
+
   const columns: ColumnsType<IBooking> = [
     {
       title: "관리",
@@ -376,12 +382,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         </div>
       ),
     },
-    {
+    ...(isSuperAdminView ? [{
       title: "스마트옥션 매물",
       key: "storeItem",
       width: 130,
-      align: "center",
-      render: (_, record) => {
+      align: "center" as const,
+      render: (_: unknown, record: IBooking) => {
         const storeItemId = storeItemMap[record.id];
         return (
           <Button
@@ -398,7 +404,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           </Button>
         );
       },
-    },
+    }] : []),
   ];
 
   return (
