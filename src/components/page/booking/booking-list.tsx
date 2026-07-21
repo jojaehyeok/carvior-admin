@@ -346,8 +346,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       render: (value: string) => <span className="font-bold text-blue-600">{value}</span>,
     },
     {
-      title: "차주이름",
-      dataIndex: "carOwner",
+      title: "딜러이름",
+      dataIndex: "dealerName",
       align: "center",
       render: (value?: string) => value || <span className="text-gray-300">-</span>,
     },
@@ -356,6 +356,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       dataIndex: "contact",
       align: "center",
       render: (value?: string) => formatPhone(value) || <span className="text-gray-300">-</span>,
+    },
+    {
+      title: "차주이름",
+      dataIndex: "carOwner",
+      align: "center",
+      render: (value?: string) => value || <span className="text-gray-300">-</span>,
     },
     {
       title: "고객번호",
