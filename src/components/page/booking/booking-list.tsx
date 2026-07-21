@@ -53,6 +53,7 @@ interface IBooking {
   vehicleTransferred?: boolean;
   purchasePrice?: number | null;
   isOldDealerPurchase?: boolean;
+  customerContact?: string | null; // 계약팀이 직접 확인·기록하는 차주(고객) 연락처
   createdAt: ISO8601DateTime;
 }
 
@@ -93,6 +94,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [tempVehicleTransferred, setTempVehicleTransferred] = useState(false);
   const [tempPurchasePrice, setTempPurchasePrice] = useState<number | null>(null);
   const [tempIsOldDealerPurchase, setTempIsOldDealerPurchase] = useState(false);
+  const [tempCustomerContact, setTempCustomerContact] = useState("");
 
   const API_BASE = process.env.NEXT_PUBLIC_API_ENDPOINT || 'http://localhost:4000/api/v1';
 
@@ -216,6 +218,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setTempVehicleTransferred(record.vehicleTransferred ?? false);
     setTempPurchasePrice(record.purchasePrice ?? null);
     setTempIsOldDealerPurchase(record.isOldDealerPurchase ?? false);
+    setTempCustomerContact(record.customerContact || "");
     setIsModalOpen(true);
   };
 
@@ -241,6 +244,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           vehicleTransferred: tempVehicleTransferred,
           purchasePrice: tempPurchasePrice,
           isOldDealerPurchase: tempIsOldDealerPurchase,
+          customerContact: tempCustomerContact.trim() || null,
           ...(isUnassigning ? { assignedDriverId: null, assignedDriverName: null } : {}),
         })
       });
@@ -324,18 +328,33 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     {
       title: "차량번호",
       dataIndex: "carNumber",
+      align: "center",
       render: (value: string) => <span className="font-bold text-blue-600">{value}</span>,
+    },
+    {
+      title: "고객번호",
+      dataIndex: "customerContact",
+      align: "center",
+      render: (value?: string | null) => value || <span className="text-gray-300">-</span>,
+    },
+    {
+      title: "딜러번호",
+      dataIndex: "contact",
+      align: "center",
+      render: (value?: string) => value || <span className="text-gray-300">-</span>,
     },
     {
       title: "출처",
       dataIndex: "source",
+      align: "center",
       render: (value: string) => value ? <Tag>{value}</Tag> : <span className="text-gray-300">-</span>,
     },
     {
       title: "배정 진단사",
       dataIndex: "assignedDriverName",
+      align: "center",
       render: (value: string, record: IBooking) => (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col items-center gap-1">
           {value
             ? <Tag icon={<UserPlus size={12} />} color="blue">{value}</Tag>
             : <span className="text-gray-300">미배정</span>
@@ -349,6 +368,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     {
       title: "계약서 작성자",
       dataIndex: "contractWriter",
+      align: "center",
       render: (value: string) => value || <span className="text-gray-300">-</span>,
     },
     {
@@ -360,7 +380,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     {
       title: "매입가",
       dataIndex: "purchasePrice",
-      align: "right",
+      align: "center",
       render: (value: number | null) => value != null ? <span className="font-bold">{value.toLocaleString()}만원</span> : <span className="text-gray-300">-</span>,
     },
     {
@@ -381,6 +401,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     {
       title: "접수일",
       dataIndex: "createdAt",
+      align: "center",
       render: (value: ISO8601DateTime) => dayjs(value).format("YYYY-MM-DD"),
     },
     {
@@ -580,6 +601,16 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 value={tempContractWriter}
                 onChange={e => setTempContractWriter(e.target.value)}
                 placeholder="작성자 성함"
+              />
+            </div>
+
+            {/* 고객번호 — 접수 시 받은 contact(신청자 번호)와 별개로, 계약 진행 중 확인한 실제 차주 연락처 */}
+            <div className="mb-3">
+              <label className="block text-xs font-bold text-gray-400 mb-1">고객번호 (차주 연락처)</label>
+              <Input
+                value={tempCustomerContact}
+                onChange={e => setTempCustomerContact(e.target.value)}
+                placeholder="01012345678"
               />
             </div>
 
