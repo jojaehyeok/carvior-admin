@@ -15,6 +15,19 @@ const CAVIOR_BASE = (process.env.NEXT_PUBLIC_API_ENDPOINT || 'https://carvior.st
 const INTERNAL_KEY = process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? '';
 const INTERNAL_HEADERS = { 'x-internal-key': INTERNAL_KEY };
 
+// 저장은 숫자만으로 하고, 화면에 보여줄 때만 하이픈을 넣어준다(01050384348 → 010-5038-4348)
+function formatPhone(raw?: string | null): string {
+  if (!raw) return '';
+  const digits = raw.replace(/[^0-9]/g, '');
+  if (digits.length === 11) return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  if (digits.length === 10) {
+    return digits.startsWith('02')
+      ? `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6)}`
+      : `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return raw;
+}
+
 // 리포트 수정은 진단 완료 후 4시간까지만 — 그 이후엔 이미 발주사가 리포트를 보고
 // 판단을 내렸을 수 있어서 조용히 내용이 바뀌는 걸 막기 위함
 const REPORT_EDIT_WINDOW_MS = 4 * 60 * 60 * 1000;
@@ -53,6 +66,7 @@ interface IBooking {
   vehicleTransferred?: boolean;
   purchasePrice?: number | null;
   isOldDealerPurchase?: boolean;
+  oldDealerFee?: number | null; // 구전 금액 (만원)
   customerContact?: string | null; // 계약팀이 직접 확인·기록하는 차주(고객) 연락처
   createdAt: ISO8601DateTime;
 }
@@ -93,7 +107,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [tempContractWriter, setTempContractWriter] = useState("");
   const [tempVehicleTransferred, setTempVehicleTransferred] = useState(false);
   const [tempPurchasePrice, setTempPurchasePrice] = useState<number | null>(null);
-  const [tempIsOldDealerPurchase, setTempIsOldDealerPurchase] = useState(false);
+  const [tempOldDealerFee, setTempOldDealerFee] = useState<number | null>(null);
   const [tempCustomerContact, setTempCustomerContact] = useState("");
 
   const API_BASE = process.env.NEXT_PUBLIC_API_ENDPOINT || 'http://localhost:4000/api/v1';
@@ -217,7 +231,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setTempContractWriter(record.contractWriter || "");
     setTempVehicleTransferred(record.vehicleTransferred ?? false);
     setTempPurchasePrice(record.purchasePrice ?? null);
-    setTempIsOldDealerPurchase(record.isOldDealerPurchase ?? false);
+    setTempOldDealerFee(record.oldDealerFee ?? null);
     setTempCustomerContact(record.customerContact || "");
     setIsModalOpen(true);
   };
@@ -243,7 +257,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           contractWriter: tempContractWriter,
           vehicleTransferred: tempVehicleTransferred,
           purchasePrice: tempPurchasePrice,
-          isOldDealerPurchase: tempIsOldDealerPurchase,
+          oldDealerFee: tempOldDealerFee,
           customerContact: tempCustomerContact.trim() || null,
           ...(isUnassigning ? { assignedDriverId: null, assignedDriverName: null } : {}),
         })
@@ -332,16 +346,16 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       render: (value: string) => <span className="font-bold text-blue-600">{value}</span>,
     },
     {
-      title: "고객번호",
-      dataIndex: "customerContact",
-      align: "center",
-      render: (value?: string | null) => value || <span className="text-gray-300">-</span>,
-    },
-    {
       title: "딜러번호",
       dataIndex: "contact",
       align: "center",
-      render: (value?: string) => value || <span className="text-gray-300">-</span>,
+      render: (value?: string) => formatPhone(value) || <span className="text-gray-300">-</span>,
+    },
+    {
+      title: "고객번호",
+      dataIndex: "customerContact",
+      align: "center",
+      render: (value?: string | null) => formatPhone(value) || <span className="text-gray-300">-</span>,
     },
     {
       title: "출처",
@@ -385,9 +399,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     },
     {
       title: "구전",
-      dataIndex: "isOldDealerPurchase",
+      dataIndex: "oldDealerFee",
       align: "center",
-      render: (value: boolean) => value ? <Tag color="purple">구전</Tag> : <span className="text-gray-300">-</span>,
+      render: (value: number | null) => value != null ? <span className="font-bold text-purple-600">{value.toLocaleString()}만원</span> : <span className="text-gray-300">-</span>,
     },
     {
       title: "상태",
@@ -627,21 +641,25 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
               />
             </div>
 
-            {/* 체크박스 그룹 */}
-            <div className="flex gap-6">
-              <Checkbox
-                checked={tempVehicleTransferred}
-                onChange={e => setTempVehicleTransferred(e.target.checked)}
-              >
-                차량 이전 완료
-              </Checkbox>
-              <Checkbox
-                checked={tempIsOldDealerPurchase}
-                onChange={e => setTempIsOldDealerPurchase(e.target.checked)}
-              >
-                구전 매입
-              </Checkbox>
+            {/* 구전 금액 */}
+            <div className="mb-3">
+              <label className="block text-xs font-bold text-gray-400 mb-1">구전 (만원)</label>
+              <InputNumber
+                className="w-full"
+                value={tempOldDealerFee}
+                onChange={val => setTempOldDealerFee(val)}
+                placeholder="예: 50"
+                min={0}
+                formatter={val => val ? `${Number(val).toLocaleString()}` : ''}
+              />
             </div>
+
+            <Checkbox
+              checked={tempVehicleTransferred}
+              onChange={e => setTempVehicleTransferred(e.target.checked)}
+            >
+              차량 이전 완료
+            </Checkbox>
           </div>
 
           {/* 관리자 메모 */}
