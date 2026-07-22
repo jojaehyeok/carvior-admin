@@ -68,7 +68,6 @@ interface IBooking {
   isOldDealerPurchase?: boolean;
   oldDealerFee?: number | null; // 구전 금액 (만원)
   customerContact?: string | null; // 계약팀이 직접 확인·기록하는 차주(고객) 연락처
-  autoAssignLog?: Record<string, any> | null; // 자동배정 알고리즘의 후보 비교/선정 근거(SUPER_ADMIN 전용)
   createdAt: ISO8601DateTime;
 }
 
@@ -92,9 +91,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [requestMessage, setRequestMessage] = useState("");
   const [requestRecipientId, setRequestRecipientId] = useState<number | undefined>(undefined);
   const [requesting, setRequesting] = useState(false);
-
-  // 자동배정 근거 보기 모달 (SUPER_ADMIN 전용)
-  const [assignLogTarget, setAssignLogTarget] = useState<IBooking | null>(null);
 
   // --- 상세/수정 모달 상태 ---
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -395,15 +391,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         </div>
       ),
     },
-    ...(isSuperAdminView ? [{
-      title: "배정 근거",
-      key: "autoAssignLog",
-      align: "center" as const,
-      render: (_: unknown, record: IBooking) =>
-        record.autoAssignLog
-          ? <Button size="small" onClick={() => setAssignLogTarget(record)}>보기</Button>
-          : <span className="text-gray-300 text-xs">수동 배정</span>,
-    }] : []),
     {
       title: "계약서 작성자",
       dataIndex: "contractWriter",
@@ -755,58 +742,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             링크 없이 짧은 안내 SMS만 발송돼요 — 받는 사람이 앱에서 직접 &ldquo;진단 내역 보기 → 수정하기&rdquo;로 들어가서 확인해야 해요.
           </p>
         </div>
-      </Modal>
-
-      {/* 자동배정 근거 보기 (SUPER_ADMIN 전용) */}
-      <Modal
-        title={`배정 근거 — ${assignLogTarget?.carNumber}`}
-        open={!!assignLogTarget}
-        onCancel={() => setAssignLogTarget(null)}
-        footer={[<Button key="close" onClick={() => setAssignLogTarget(null)}>닫기</Button>]}
-        width={640}
-      >
-        {assignLogTarget?.autoAssignLog && (
-          <div className="space-y-3 text-sm">
-            <p className="text-gray-500">
-              신청 주소: {String(assignLogTarget.autoAssignLog.bookingAddress ?? '-')}
-            </p>
-            {assignLogTarget.autoAssignLog.nearestKm != null && (
-              <p className="text-gray-500">
-                가장 가까운 진단사 기준 {String(assignLogTarget.autoAssignLog.nearestKm)}km, 반경 +{String(assignLogTarget.autoAssignLog.radiusKm)}km 이내 후보끼리 비교
-              </p>
-            )}
-            <table className="w-full text-xs border border-gray-100 rounded overflow-hidden">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500">
-                  <th className="p-2 text-left">진단사</th>
-                  <th className="p-2 text-right">거리</th>
-                  <th className="p-2 text-right">오늘 배정건수</th>
-                  <th className="p-2 text-center">비고</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(assignLogTarget.autoAssignLog.candidates as Array<Record<string, any>> || []).map((c, idx) => (
-                  <tr
-                    key={idx}
-                    className={`border-t border-gray-50 ${c.driverId === assignLogTarget.autoAssignLog?.chosenDriverId ? 'bg-purple-50 font-bold' : ''}`}
-                  >
-                    <td className="p-2">{c.driverName}</td>
-                    <td className="p-2 text-right">{c.km != null ? `${c.km}km` : '-'}</td>
-                    <td className="p-2 text-right">{c.todayCount}건</td>
-                    <td className="p-2 text-center">
-                      {c.driverId === assignLogTarget.autoAssignLog?.chosenDriverId
-                        ? <Tag color="purple">선정</Tag>
-                        : c.atCap ? <Tag color="default">마감</Tag> : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="text-gray-600">
-              <span className="font-bold">선정 사유:</span> {String(assignLogTarget.autoAssignLog.reason ?? '-')}
-            </p>
-          </div>
-        )}
       </Modal>
     </div>
   );
