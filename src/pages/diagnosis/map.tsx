@@ -1,5 +1,5 @@
 import { getDefaultLayout, IDefaultLayoutPage } from "@/components/layout/default-layout";
-import { Button, message, Select, Spin, Tag } from "antd";
+import { Button, message, Spin, Tag } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MapPin, Navigation, RefreshCw, Users, X } from "lucide-react";
 import { useSession } from "next-auth/react";
@@ -127,9 +127,8 @@ const MapPage: IDefaultLayoutPage = () => {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [selectedDriver, setSelectedDriver] = useState<DriverLoc | null>(null);
   const [assigning, setAssigning] = useState(false);
-  const [demoMode, setDemoMode] = useState(false);
-  const [demoTarget, setDemoTarget] = useState<DriverLoc | null>(null);
   const [activeTab, setActiveTab] = useState<"bookings" | "drivers">("bookings");
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
 
   // 활성 진단사 = 가용 시간(요일+시간대)에 지금이 포함되는 진단사 (GPS 최신 여부와 무관)
   const activeDrivers = drivers.filter(isActiveNow);
@@ -184,28 +183,11 @@ const MapPage: IDefaultLayoutPage = () => {
       attribution: "© OpenStreetMap",
     }).addTo(map);
     leafletMap.current = map;
+  }, [mapReady]);
 
-    map.on("click", async (e: any) => {
-      if (!demoMode || !demoTarget) return;
-      const { lat, lng } = e.latlng;
-      try {
-        await fetch(`${API}/drivers/${demoTarget.id}/location`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ lat, lng }),
-        });
-        message.success(`${demoTarget.name} 위치 설정 완료`);
-        setDemoMode(false);
-        setDemoTarget(null);
-        fetchData();
-      } catch {
-        message.error("위치 설정 실패");
-      }
-    });
-  }, [mapReady, demoMode, demoTarget]);
-
-  const fetchData = async () => {
-    setLoading(true);
+  // silent=true면 자동 갱신용 — 매번 전체 목록을 로딩 스피너로 가리지 않고 조용히 최신화만 함
+  const fetchData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const bookingListUrl = new URL(`${API}/external/request/list`);
       if (company) bookingListUrl.searchParams.set('source', company);
@@ -232,14 +214,21 @@ const MapPage: IDefaultLayoutPage = () => {
         setBookings(geocoded);
         setGeocoding(false);
       }
+      setLastRefreshedAt(new Date());
     } catch {
-      message.error("데이터를 불러오지 못했습니다.");
+      if (!silent) message.error("데이터를 불러오지 못했습니다.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => { fetchData(); }, [company]);
+
+  // 실시간 배정 현황 반영 — 30초마다 조용히 자동 갱신(진단사 위치·신규/배정된 신청 목록)
+  useEffect(() => {
+    const interval = setInterval(() => fetchData(true), 30000);
+    return () => clearInterval(interval);
+  }, [company]);
 
   // 진단사 마커
   useEffect(() => {
@@ -574,28 +563,10 @@ const MapPage: IDefaultLayoutPage = () => {
           )}
         </div>
 
-        {/* 데모 도구 */}
-        <div className="p-3 border-t border-gray-100 bg-gray-50">
-          <p className="text-[10px] font-bold text-gray-400 mb-2">[데모] 진단사 위치 설정</p>
-          <Select
-            placeholder="진단사 선택 후 지도 클릭"
-            className="w-full"
-            size="small"
-            value={demoTarget?.id ?? null}
-            onChange={(id) => {
-              const d = drivers.find((x) => x.id === id) ?? null;
-              setDemoTarget(d);
-              setDemoMode(!!d);
-            }}
-            allowClear
-            onClear={() => { setDemoMode(false); setDemoTarget(null); }}
-            options={drivers.map((d) => ({ label: d.name, value: d.id }))}
-          />
-          {demoMode && (
-            <p className="text-[10px] text-orange-500 font-semibold mt-1.5">
-              📍 지도를 클릭해 {demoTarget?.name} 위치를 설정하세요
-            </p>
-          )}
+        {/* 실시간 갱신 상태 */}
+        <div className="p-3 border-t border-gray-100 bg-gray-50 flex items-center gap-1.5 text-[10px] text-gray-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+          실시간 자동 갱신 · 마지막 갱신 {lastRefreshedAt ? lastRefreshedAt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "-"}
         </div>
       </div>
 
