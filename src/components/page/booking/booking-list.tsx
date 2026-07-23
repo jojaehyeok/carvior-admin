@@ -124,6 +124,10 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       const url = new URL(`${API_BASE}/external/request/list`);
       if (effectiveCompany) {
         url.searchParams.set('source', effectiveCompany);
+      } else {
+        // 전체(슈퍼관리자) 목록은 자체 신청(self-) 건도 기존처럼 같이 보여야 함 —
+        // /list 기본값은 자체 신청을 제외하도록 바뀌어서 명시적으로 포함 요청
+        url.searchParams.set('includeSelf', 'true');
       }
       const response = await fetch(url.toString());
       if (!response.ok) throw new Error();
