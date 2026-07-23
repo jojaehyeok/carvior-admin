@@ -36,6 +36,19 @@ const isReportEditExpired = (record: { firstCompletedAt?: string | null }) => {
   return Date.now() - new Date(record.firstCompletedAt).getTime() > REPORT_EDIT_WINDOW_MS;
 };
 
+// 진단일시(방문예정, "YYYY-MM-DD HH:mm")부터 진단완료일시까지 실제로 몇 시간 걸렸는지 계산
+function formatDuration(preferredDateTime?: string | null, completedAt?: string | null): string | null {
+  if (!preferredDateTime || !completedAt) return null;
+  const start = dayjs(preferredDateTime, "YYYY-MM-DD HH:mm");
+  const end = dayjs(completedAt);
+  if (!start.isValid() || !end.isValid()) return null;
+  const diffMin = end.diff(start, "minute");
+  if (diffMin < 0) return null; // 완료시각이 방문예정시각보다 이르면 비교 의미 없음(표시 생략)
+  const h = Math.floor(diffMin / 60);
+  const m = diffMin % 60;
+  return h > 0 ? `${h}시간 ${m}분` : `${m}분`;
+}
+
 // --- 인터페이스 정의 ---
 interface IDriver {
   id: number;
@@ -101,8 +114,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 간편신청(B2B)에서 "미정"으로 접수된 차량번호/차주 성함을 나중에 알게 되면 채워넣는 용도
   const [tempCarNumber, setTempCarNumber] = useState("");
   const [tempCarOwner, setTempCarOwner] = useState("");
-  // 배정 전에 접수 정보(딜러이름/주소)가 잘못 들어온 경우 바로잡기 위한 용도
+  // 배정 전에 접수 정보(딜러이름/딜러번호/주소)가 잘못 들어온 경우 바로잡기 위한 용도
   const [tempDealerName, setTempDealerName] = useState("");
+  const [tempContact, setTempContact] = useState("");
   const [tempAddress, setTempAddress] = useState("");
   const [selectedDriver, setSelectedDriver] = useState<{ id: string, name: string } | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -237,6 +251,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setTempCarNumber(record.carNumber || "");
     setTempCarOwner(record.carOwner || "");
     setTempDealerName(record.dealerName || "");
+    setTempContact(record.contact || "");
     setTempAddress(record.address || "");
     setSelectedDriver(record.assignedDriverId ? { id: record.assignedDriverId, name: record.assignedDriverName || "" } : null);
     setTempContractWriter(record.contractWriter || "");
@@ -267,6 +282,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           carNumber: tempCarNumber.trim() || '미정',
           carOwner: tempCarOwner.trim() || '미정',
           dealerName: tempDealerName.trim(),
+          contact: tempContact.trim(),
           address: tempAddress.trim(),
           contractWriter: tempContractWriter,
           vehicleTransferred: tempVehicleTransferred,
@@ -574,14 +590,23 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         <div className="space-y-4 py-4">
           {/* 기본 정보 */}
           <div className="p-3 bg-gray-50 rounded-lg text-sm space-y-2">
-            <div>
-              <label className="block text-xs font-bold text-gray-400 mb-1">딜러이름</label>
-              <Input
-                value={tempDealerName}
-                onChange={e => setTempDealerName(e.target.value)}
-                placeholder="딜러이름"
-                addonAfter={editingBooking?.contact || undefined}
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-400 mb-1">딜러이름</label>
+                <Input
+                  value={tempDealerName}
+                  onChange={e => setTempDealerName(e.target.value)}
+                  placeholder="딜러이름"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 mb-1">딜러번호</label>
+                <Input
+                  value={tempContact}
+                  onChange={e => setTempContact(e.target.value)}
+                  placeholder="딜러번호"
+                />
+              </div>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-400 mb-1">주소</label>
@@ -591,7 +616,14 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 placeholder="주소"
               />
             </div>
-            <p className="text-gray-500">진단일시: {editingBooking?.preferredDateTime || "-"}</p>
+            <p className="text-gray-500">진단시작시간: {editingBooking?.preferredDateTime || "-"}</p>
+            <p className="text-gray-500">
+              진단완료일시: {editingBooking?.firstCompletedAt ? dayjs(editingBooking.firstCompletedAt).format("YYYY-MM-DD HH:mm") : "-"}
+              {(() => {
+                const duration = formatDuration(editingBooking?.preferredDateTime, editingBooking?.firstCompletedAt);
+                return duration ? <span className="text-gray-400"> (소요시간: {duration})</span> : null;
+              })()}
+            </p>
             {editingBooking?.source && (
               <p className="text-gray-400">출처: <Tag>{editingBooking.source}</Tag></p>
             )}
