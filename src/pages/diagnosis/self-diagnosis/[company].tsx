@@ -5,8 +5,8 @@ import BookingSearch from "@/components/page/booking/booking-search";
 
 const pageHeader: IPageHeader = { title: "자체 진단 목록" };
 
-// 일단은 진단 신청목록과 동일한 내용(같은 BookingList/BookingSearch) — 나중에
-// "자체 진단"만 따로 구분해서 보여주도록 필터링 로직을 추가할 예정.
+// source가 "self-{company}"(예: self-anyone-motors)로 접수된 건만 필터링해서 보여줌 —
+// 발주사가 외부 딜러 신청이 아니라 자체적으로 접수한 진단 건 전용.
 const SelfDiagnosisPage: IDefaultLayoutPage = () => {
   const router = useRouter();
   const company = typeof router.query.company === "string" ? router.query.company : undefined;
@@ -14,7 +14,7 @@ const SelfDiagnosisPage: IDefaultLayoutPage = () => {
   return (
     <div className="flex flex-col gap-6">
       <BookingSearch />
-      <BookingList companyFilter={company} />
+      <BookingList companyFilter={company ? `self-${company}` : undefined} />
     </div>
   );
 };
