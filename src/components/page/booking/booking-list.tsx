@@ -101,6 +101,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 간편신청(B2B)에서 "미정"으로 접수된 차량번호/차주 성함을 나중에 알게 되면 채워넣는 용도
   const [tempCarNumber, setTempCarNumber] = useState("");
   const [tempCarOwner, setTempCarOwner] = useState("");
+  // 배정 전에 접수 정보(딜러이름/주소)가 잘못 들어온 경우 바로잡기 위한 용도
+  const [tempDealerName, setTempDealerName] = useState("");
+  const [tempAddress, setTempAddress] = useState("");
   const [selectedDriver, setSelectedDriver] = useState<{ id: string, name: string } | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -233,6 +236,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setTempStatus(record.status);
     setTempCarNumber(record.carNumber || "");
     setTempCarOwner(record.carOwner || "");
+    setTempDealerName(record.dealerName || "");
+    setTempAddress(record.address || "");
     setSelectedDriver(record.assignedDriverId ? { id: record.assignedDriverId, name: record.assignedDriverName || "" } : null);
     setTempContractWriter(record.contractWriter || "");
     setTempVehicleTransferred(record.vehicleTransferred ?? false);
@@ -261,6 +266,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           adminMemo: tempMemo,
           carNumber: tempCarNumber.trim() || '미정',
           carOwner: tempCarOwner.trim() || '미정',
+          dealerName: tempDealerName.trim(),
+          address: tempAddress.trim(),
           contractWriter: tempContractWriter,
           vehicleTransferred: tempVehicleTransferred,
           contractConfirmed: tempContractConfirmed,
@@ -566,11 +573,27 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       >
         <div className="space-y-4 py-4">
           {/* 기본 정보 */}
-          <div className="p-3 bg-gray-50 rounded-lg text-sm">
-            <p className="mb-1 font-medium">딜러: {editingBooking?.dealerName} ({editingBooking?.contact})</p>
-            <p className="text-gray-500">주소: {editingBooking?.address}</p>
+          <div className="p-3 bg-gray-50 rounded-lg text-sm space-y-2">
+            <div>
+              <label className="block text-xs font-bold text-gray-400 mb-1">딜러이름</label>
+              <Input
+                value={tempDealerName}
+                onChange={e => setTempDealerName(e.target.value)}
+                placeholder="딜러이름"
+                addonAfter={editingBooking?.contact || undefined}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 mb-1">주소</label>
+              <Input
+                value={tempAddress}
+                onChange={e => setTempAddress(e.target.value)}
+                placeholder="주소"
+              />
+            </div>
+            <p className="text-gray-500">진단일시: {editingBooking?.preferredDateTime || "-"}</p>
             {editingBooking?.source && (
-              <p className="text-gray-400 mt-1">출처: <Tag>{editingBooking.source}</Tag></p>
+              <p className="text-gray-400">출처: <Tag>{editingBooking.source}</Tag></p>
             )}
           </div>
 
