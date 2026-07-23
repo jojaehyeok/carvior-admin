@@ -64,6 +64,7 @@ interface IBooking {
   // 오더 기록 필드
   contractWriter?: string;
   vehicleTransferred?: boolean;
+  contractConfirmed?: boolean; // 계약 상태 확인 여부(계약완료 확인/미확인)
   purchasePrice?: number | null;
   isOldDealerPurchase?: boolean;
   oldDealerFee?: number | null; // 구전 금액 (만원)
@@ -106,6 +107,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 오더 기록 필드 상태
   const [tempContractWriter, setTempContractWriter] = useState("");
   const [tempVehicleTransferred, setTempVehicleTransferred] = useState(false);
+  const [tempContractConfirmed, setTempContractConfirmed] = useState(false);
   const [tempPurchasePrice, setTempPurchasePrice] = useState<number | null>(null);
   const [tempOldDealerFee, setTempOldDealerFee] = useState<number | null>(null);
   const [tempCustomerContact, setTempCustomerContact] = useState("");
@@ -230,6 +232,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setSelectedDriver(record.assignedDriverId ? { id: record.assignedDriverId, name: record.assignedDriverName || "" } : null);
     setTempContractWriter(record.contractWriter || "");
     setTempVehicleTransferred(record.vehicleTransferred ?? false);
+    setTempContractConfirmed(record.contractConfirmed ?? false);
     setTempPurchasePrice(record.purchasePrice ?? null);
     setTempOldDealerFee(record.oldDealerFee ?? null);
     setTempCustomerContact(record.customerContact || "");
@@ -256,6 +259,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           carOwner: tempCarOwner.trim() || '미정',
           contractWriter: tempContractWriter,
           vehicleTransferred: tempVehicleTransferred,
+          contractConfirmed: tempContractConfirmed,
           purchasePrice: tempPurchasePrice,
           oldDealerFee: tempOldDealerFee,
           customerContact: tempCustomerContact.trim() || null,
@@ -404,6 +408,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       render: (value: boolean) => value ? <Tag color="green">완료</Tag> : <Tag color="default">미완료</Tag>,
     },
     {
+      title: "계약상태",
+      dataIndex: "contractConfirmed",
+      align: "center",
+      render: (value: boolean) => value ? <Tag color="blue">확인</Tag> : <Tag color="default">미확인</Tag>,
+    },
+    {
       title: "매입가",
       dataIndex: "purchasePrice",
       align: "center",
@@ -530,6 +540,13 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           dataSource={filteredData}
           loading={isLoading}
           rowKey="id"
+          rowClassName={(record) =>
+            record.vehicleTransferred && record.contractConfirmed
+              ? "bg-blue-50"
+              : record.vehicleTransferred
+                ? "bg-green-50"
+                : ""
+          }
         />
       </div>
 
@@ -671,6 +688,14 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
               onChange={e => setTempVehicleTransferred(e.target.checked)}
             >
               차량 이전 완료
+            </Checkbox>
+
+            <Checkbox
+              className="ml-4"
+              checked={tempContractConfirmed}
+              onChange={e => setTempContractConfirmed(e.target.checked)}
+            >
+              계약 확인 완료
             </Checkbox>
           </div>
 
