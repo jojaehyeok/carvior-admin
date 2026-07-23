@@ -61,6 +61,7 @@ interface IDriver {
 interface IBooking {
   id: number;
   carNumber: string;
+  carModel?: string | null;
   carOwner: string;
   dealerName: string;
   contact: string;
@@ -375,6 +376,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       dataIndex: "carNumber",
       align: "center",
       render: (value: string) => <span className="font-bold text-blue-600">{value}</span>,
+    },
+    {
+      title: "차량명",
+      dataIndex: "carModel",
+      align: "center",
+      render: (value?: string | null) => value || <span className="text-gray-300">-</span>,
     },
     {
       title: "딜러이름",
