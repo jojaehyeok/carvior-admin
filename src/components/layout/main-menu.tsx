@@ -121,6 +121,11 @@ const buildCompanyMenu = (company: string, bookingPath?: string): IMenu[] => [
         link: { path: bookingPath ?? `/diagnosis/${company}` },
       },
       {
+        id: "companySelfDiagnosisList",
+        name: "자체 진단 목록",
+        link: { path: `/diagnosis/self-diagnosis/${company}` },
+      },
+      {
         id: "companyMap",
         name: "실시간 지도 배정",
         link: { path: "/diagnosis/map" },
