@@ -39,7 +39,7 @@ const superAdminMenuData: IMenu[] = [
       },
       {
         id: "driverMap",
-        name: "[데모] 실시간 지도 배정",
+        name: "실시간 지도 배정",
         link: { path: "/diagnosis/map" },
       },
     ],
