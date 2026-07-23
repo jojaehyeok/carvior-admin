@@ -115,6 +115,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 간편신청(B2B)에서 "미정"으로 접수된 차량번호/차주 성함을 나중에 알게 되면 채워넣는 용도
   const [tempCarNumber, setTempCarNumber] = useState("");
   const [tempCarOwner, setTempCarOwner] = useState("");
+  const [tempCarModel, setTempCarModel] = useState("");
   // 배정 전에 접수 정보(딜러이름/딜러번호/주소)가 잘못 들어온 경우 바로잡기 위한 용도
   const [tempDealerName, setTempDealerName] = useState("");
   const [tempContact, setTempContact] = useState("");
@@ -251,6 +252,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setTempStatus(record.status);
     setTempCarNumber(record.carNumber || "");
     setTempCarOwner(record.carOwner || "");
+    setTempCarModel(record.carModel || "");
     setTempDealerName(record.dealerName || "");
     setTempContact(record.contact || "");
     setTempAddress(record.address || "");
@@ -281,6 +283,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           status: isUnassigning ? 'PENDING' : tempStatus,
           adminMemo: tempMemo,
           carNumber: tempCarNumber.trim() || '미정',
+          carModel: tempCarModel.trim() || null,
           carOwner: tempCarOwner.trim() || '미정',
           dealerName: tempDealerName.trim(),
           contact: tempContact.trim(),
@@ -654,6 +657,14 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 placeholder="차주 성함"
               />
             </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-400 mb-1">차량명</label>
+            <Input
+              value={tempCarModel}
+              onChange={e => setTempCarModel(e.target.value)}
+              placeholder="예: 그랜저 IG"
+            />
           </div>
 
           {/* 상태 변경 */}
