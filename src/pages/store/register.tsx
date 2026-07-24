@@ -316,14 +316,49 @@ const StoreRegisterPageInner = () => {
     }
   }, [effectiveBookingId, effectiveCarNumber]);
 
-  // ── 개별 사진 수동 블러 적용 반영 ───────────────────────────────
+  // ── 개별 사진 수동 블러 적용 반영 (매물 등록 화면 + 원본 진단 리포트 둘 다) ──
+  const SINGLE_IMAGE_CATS = new Set(['dashboard', 'registration', 'vin']);
   const handleManualBlurApplied = useCallback((cat: string, idx: number, newUrl: string) => {
     setPhotoOrder(prev => {
       const arr = [...(prev[cat] ?? [])];
       arr[idx] = newUrl;
       return { ...prev, [cat]: arr };
     });
-  }, []);
+
+    // 진단 연계 매물이면 원본 리포트 사진도 같이 교체 — 안 하면 매물 사진만 블러되고
+    // 고객이 보는 리포트에는 원본(비블러) 사진이 그대로 남아있게 됨
+    if (!effectiveBookingId || !inspection) return;
+    if (SINGLE_IMAGE_CATS.has(cat)) {
+      const field = cat === 'dashboard' ? 'dashboardImage' : cat === 'registration' ? 'regImage' : 'vinImage';
+      fetch(`${CAVIOR_BASE}/api/v1/external/inspection/${effectiveBookingId}/report-fields`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...INTERNAL_HEADERS },
+        body: JSON.stringify({ [field]: newUrl }),
+      }).catch(() => message.warning('매물 사진은 블러됐지만 리포트 원본 반영에는 실패했습니다.'));
+      setInspection(prev => prev ? { ...prev, images: { ...prev.images, [cat]: [newUrl] } } : prev);
+    } else {
+      // updateReportFields는 photos를 통째로 교체하므로 현재 전체 카테고리를 다 실어보내야 함
+      const fullPhotos: Record<string, string[]> = {
+        exterior: inspection.images?.exterior ?? [],
+        wheel: inspection.images?.wheel ?? [],
+        undercarriage: inspection.images?.undercarriage ?? [],
+        interior: inspection.images?.interior ?? [],
+        engine: inspection.images?.engine ?? [],
+        damage: inspection.images?.damage ?? [],
+        extra: inspection.images?.extra ?? [],
+        extraMemo: inspection.images?.extraMemo ?? [],
+      };
+      const arr = [...(fullPhotos[cat] ?? [])];
+      arr[idx] = newUrl;
+      fullPhotos[cat] = arr;
+      fetch(`${CAVIOR_BASE}/api/v1/external/inspection/${effectiveBookingId}/report-fields`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...INTERNAL_HEADERS },
+        body: JSON.stringify({ photos: fullPhotos }),
+      }).catch(() => message.warning('매물 사진은 블러됐지만 리포트 원본 반영에는 실패했습니다.'));
+      setInspection(prev => prev ? { ...prev, images: { ...prev.images, [cat]: arr } } : prev);
+    }
+  }, [effectiveBookingId, inspection]);
 
   // ── 카테고리 블러 (등록 전 미리보기 — 결과를 기다렸다가 화면에 바로 반영) ──
   const handleBlurCategory = useCallback(async (cat: string) => {
