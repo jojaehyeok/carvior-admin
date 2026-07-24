@@ -481,6 +481,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "진단일시",
       dataIndex: "preferredDateTime",
       align: "center",
+      // 소스마다 구분자가 다를 수 있어("YYYY-MM-DD HH:mm" vs "YYYY-MM-DDTHH:mm") 비교 전에 통일
+      sorter: (a, b) => (a.preferredDateTime || '').replace('T', ' ').localeCompare((b.preferredDateTime || '').replace('T', ' ')),
+      defaultSortOrder: "ascend",
       render: (value: string | null) => value ? <span className="text-red-500 font-bold">{value}</span> : <span className="text-gray-300">-</span>,
     },
     {
