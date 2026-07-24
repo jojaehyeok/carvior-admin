@@ -481,7 +481,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "진단일시",
       dataIndex: "preferredDateTime",
       align: "center",
-      render: (value: string | null) => value || <span className="text-gray-300">-</span>,
+      render: (value: string | null) => value ? <span className="text-red-500 font-bold">{value}</span> : <span className="text-gray-300">-</span>,
     },
     {
       title: "진단 리포트",
