@@ -83,6 +83,7 @@ interface IBooking {
   isOldDealerPurchase?: boolean;
   oldDealerFee?: number | null; // 구전 금액 (만원)
   customerContact?: string | null; // 계약팀이 직접 확인·기록하는 차주(고객) 연락처
+  isUrgent?: boolean; // 관리자가 "긴급·당일배정"으로 전체 브로드캐스트한 건
   createdAt: ISO8601DateTime;
 }
 
@@ -122,6 +123,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [tempAddress, setTempAddress] = useState("");
   const [selectedDriver, setSelectedDriver] = useState<{ id: string, name: string } | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [broadcasting, setBroadcasting] = useState(false);
 
   // 오더 기록 필드 상태
   const [tempContractWriter, setTempContractWriter] = useState("");
@@ -313,6 +315,24 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       message.error("저장 중 오류 발생");
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  // 스케줄·활동중 여부와 무관하게 승인된 진단사 전원에게 강제 브로드캐스트 —
+  // 자동배정이 실패한 당일 긴급 건을 위한 최후 수단(관리자 수동 트리거)
+  const handleUrgentBroadcast = async () => {
+    if (!editingBooking) return;
+    setBroadcasting(true);
+    try {
+      await fetch(`${API_BASE}/external/request/${editingBooking.id}/urgent-broadcast`, {
+        method: 'PATCH',
+      });
+      message.success("긴급·당일배정으로 전체 진단사에게 브로드캐스트했습니다.");
+      fetchBookings();
+    } catch (e) {
+      message.error("브로드캐스트 중 오류 발생");
+    } finally {
+      setBroadcasting(false);
     }
   };
 
@@ -716,6 +736,22 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
               <p className="text-xs text-orange-500 mt-1">
                 🔄 진단사 취소로 재대기 중 ({dayjs(editingBooking.cancelledByDriverAt).format('MM/DD HH:mm')})
               </p>
+            )}
+            {editingBooking?.status === 'PENDING' && (
+              <div className="mt-2">
+                <Button
+                  danger
+                  block
+                  loading={broadcasting}
+                  disabled={editingBooking?.isUrgent}
+                  onClick={handleUrgentBroadcast}
+                >
+                  {editingBooking?.isUrgent ? '✅ 긴급·당일배정 브로드캐스트 완료' : '🚨 긴급·당일배정으로 전체 브로드캐스트'}
+                </Button>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  스케줄·활동중 여부와 무관하게 승인된 진단사 전원에게 즉시 알림을 보냅니다. 자동배정이 안 되는 당일 긴급 건에만 사용하세요.
+                </p>
+              </div>
             )}
           </div>
 
