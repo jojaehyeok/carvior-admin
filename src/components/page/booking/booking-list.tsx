@@ -84,6 +84,11 @@ interface IBooking {
   oldDealerFee?: number | null; // 구전 금액 (만원)
   customerContact?: string | null; // 계약팀이 직접 확인·기록하는 차주(고객) 연락처
   isUrgent?: boolean; // 관리자가 "긴급·당일배정"으로 전체 브로드캐스트한 건
+  // 접수 시점에 1회 계산되는 거리 진단(참고용 표시 전용, 배정 로직과 무관) — 관리자가
+  // 오지/준오지 가격협상 여부, 긴급브로드캐스트 필요 여부를 판단하는 데 참고하는 뱃지
+  nearestDriverKm?: number | null;
+  remoteTier?: 'semi_remote' | 'remote' | null;
+  urgentCandidate?: boolean;
   createdAt: ISO8601DateTime;
 }
 
@@ -399,6 +404,35 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       dataIndex: "carNumber",
       align: "center",
       render: (value: string) => <span className="font-bold text-blue-600">{value}</span>,
+    },
+    {
+      title: "표시",
+      key: "flags",
+      align: "center",
+      render: (_, record) => {
+        const tags: React.ReactNode[] = [];
+        if (record.urgentCandidate && record.status === 'PENDING') {
+          tags.push(
+            <Tag key="urgent-candidate" color="gold">
+              ⚡긴급후보
+            </Tag>,
+          );
+        }
+        if (record.remoteTier === 'remote') {
+          tags.push(
+            <Tag key="remote" color="red">
+              🏔오지{record.nearestDriverKm != null ? ` (${record.nearestDriverKm}km)` : ''}
+            </Tag>,
+          );
+        } else if (record.remoteTier === 'semi_remote') {
+          tags.push(
+            <Tag key="semi-remote" color="orange">
+              🗺준오지{record.nearestDriverKm != null ? ` (${record.nearestDriverKm}km)` : ''}
+            </Tag>,
+          );
+        }
+        return tags.length > 0 ? <div className="flex flex-col gap-1 items-center">{tags}</div> : <span className="text-gray-300">-</span>;
+      },
     },
     {
       title: "차량명",
@@ -735,6 +769,16 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             {editingBooking?.cancelledByDriverAt && (
               <p className="text-xs text-orange-500 mt-1">
                 🔄 진단사 취소로 재대기 중 ({dayjs(editingBooking.cancelledByDriverAt).format('MM/DD HH:mm')})
+              </p>
+            )}
+            {editingBooking?.urgentCandidate && editingBooking?.status === 'PENDING' && (
+              <p className="text-xs text-amber-600 mt-1">
+                ⚡ 지역 맞는 진단사는 있지만 활동중인 사람이 없는 당일 건입니다 — 긴급·당일배정 브로드캐스트를 검토해주세요.
+              </p>
+            )}
+            {editingBooking?.remoteTier && (
+              <p className="text-xs text-red-500 mt-1">
+                {editingBooking.remoteTier === 'remote' ? '🏔 오지' : '🗺 준오지'} 지역입니다(가장 가까운 진단사 편도 약 {editingBooking.nearestDriverKm}km) — 필요시 발주사와 가격협상 후 관리자메모에 직접 기록해주세요.
               </p>
             )}
             {editingBooking?.status === 'PENDING' && (
