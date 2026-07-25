@@ -116,6 +116,11 @@ const buildCompanyMenu = (company: string, bookingPath?: string): IMenu[] => [
     icon: <Package2 className="w-5 h-5" />,
     submenu: [
       {
+        id: "companyNewRequest",
+        name: "신규 접수",
+        link: { path: "/diagnosis/new-request" },
+      },
+      {
         id: "companyBookingList",
         name: "진단 신청목록",
         link: { path: bookingPath ?? `/diagnosis/${company}` },
