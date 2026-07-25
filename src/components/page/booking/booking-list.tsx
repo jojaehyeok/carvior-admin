@@ -3,7 +3,7 @@
 import DefaultTable from "@/components/shared/ui/default-table";
 import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
 import { ISO8601DateTime } from "@/types/common";
-import { Button, Checkbox, Input, InputNumber, Modal, Select, Spin, Tag, message } from "antd";
+import { Button, Checkbox, Input, InputNumber, Modal, Select, Spin, Switch, Tag, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { Eye, FileText, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
@@ -103,6 +103,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [data, setData] = useState<IBooking[]>([]);
   const [drivers, setDrivers] = useState<IDriver[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [reportOnly, setReportOnly] = useState(false);
   // bookingId → storeItemId (스마트옥션 매물로 이미 등록됐는지 확인용)
   const [storeItemMap, setStoreItemMap] = useState<Record<number, string>>({});
 
@@ -379,9 +380,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         if (dateEnd && itemDate > String(dateEnd)) return false;
       }
 
+      // 리포트 있는 건만 보기 토글 — 진단완료 + carHash(리포트 해시)가 실제로 있는 건만
+      if (reportOnly && !(item.status === 'COMPLETED' && item.carHash)) return false;
+
       return true;
     });
-  }, [data, router.query]);
+  }, [data, router.query, reportOnly]);
 
   // 스마트옥션 매물 등록/수정은 슈퍼 관리자 전용 기능 — 발주사 계정에서 보는
   // 회사 스코프 목록(companyFilter가 있는 경우)에서는 컬럼 자체를 숨긴다.
@@ -405,11 +409,13 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       align: "center",
       render: (value: string) => <span className="font-bold text-blue-600">{value}</span>,
     },
-    {
+    // 오지/준오지/긴급후보 뱃지는 내부 운영(가격협상 판단 등) 참고용 — 발주사(Anyone모터스 등)
+    // 회사 스코프 목록에는 노출하지 않고 슈퍼 관리자에게만 보여준다.
+    ...(isSuperAdminView ? [{
       title: "표시",
       key: "flags",
-      align: "center",
-      render: (_, record) => {
+      align: "center" as const,
+      render: (_: unknown, record: IBooking) => {
         const tags: React.ReactNode[] = [];
         if (record.urgentCandidate && record.status === 'PENDING') {
           tags.push(
@@ -433,7 +439,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         }
         return tags.length > 0 ? <div className="flex flex-col gap-1 items-center">{tags}</div> : <span className="text-gray-300">-</span>;
       },
-    },
+    }] : []),
     {
       title: "차량명",
       dataIndex: "carModel",
@@ -630,7 +636,13 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   return (
     <div className="p-4 bg-white rounded-lg shadow-sm">
       <DefaultTableBtn className="justify-between mb-4">
-        <span className="text-gray-500">전체 {filteredData.length}건</span>
+        <div className="flex items-center gap-4">
+          <span className="text-gray-500">전체 {filteredData.length}건</span>
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <Switch size="small" checked={reportOnly} onChange={setReportOnly} />
+            리포트 있는 건만
+          </label>
+        </div>
         <Button type="primary" icon={<RefreshCw size={14} />} onClick={fetchBookings} loading={isLoading}>새로고침</Button>
       </DefaultTableBtn>
 
@@ -771,12 +783,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 🔄 진단사 취소로 재대기 중 ({dayjs(editingBooking.cancelledByDriverAt).format('MM/DD HH:mm')})
               </p>
             )}
-            {editingBooking?.urgentCandidate && editingBooking?.status === 'PENDING' && (
+            {isSuperAdminView && editingBooking?.urgentCandidate && editingBooking?.status === 'PENDING' && (
               <p className="text-xs text-amber-600 mt-1">
                 ⚡ 지역 맞는 진단사는 있지만 활동중인 사람이 없는 당일 건입니다 — 긴급·당일배정 브로드캐스트를 검토해주세요.
               </p>
             )}
-            {editingBooking?.remoteTier && (
+            {isSuperAdminView && editingBooking?.remoteTier && (
               <p className="text-xs text-red-500 mt-1">
                 {editingBooking.remoteTier === 'remote' ? '🏔 오지' : '🗺 준오지'} 지역입니다(가장 가까운 진단사 편도 약 {editingBooking.nearestDriverKm}km) — 필요시 발주사와 가격협상 후 관리자메모에 직접 기록해주세요.
               </p>
