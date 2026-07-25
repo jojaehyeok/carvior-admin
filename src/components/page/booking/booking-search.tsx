@@ -72,6 +72,7 @@ const BookingSearch = () => {
                 <Select.Option value="dealerName">딜러명/상사명</Select.Option>
                 <Select.Option value="contact">연락처</Select.Option>
                 <Select.Option value="carOwner">차주성함</Select.Option>
+                <Select.Option value="assignedDriverName">진단사이름</Select.Option>
               </Select>
             </Form.Item>
             <Form.Item name="searchText" className="grow">
