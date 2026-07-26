@@ -84,6 +84,9 @@ interface IBooking {
   oldDealerFee?: number | null; // 구전 금액 (만원)
   customerContact?: string | null; // 계약팀이 직접 확인·기록하는 차주(고객) 연락처
   isUrgent?: boolean; // 관리자가 "긴급·당일배정"으로 전체 브로드캐스트한 건
+  // /inspection(검차 신청 결제) 계좌이체 건 전용 — 입금 확인 전까지 자동배정/브로드캐스트 보류됨
+  paymentMethod?: string | null;
+  depositConfirmed?: boolean;
   // 접수 시점에 1회 계산되는 거리 진단(참고용 표시 전용, 배정 로직과 무관) — 관리자가
   // 오지/준오지 가격협상 여부, 긴급브로드캐스트 필요 여부를 판단하는 데 참고하는 뱃지
   nearestDriverKm?: number | null;
@@ -130,6 +133,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [selectedDriver, setSelectedDriver] = useState<{ id: string, name: string } | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [broadcasting, setBroadcasting] = useState(false);
+  const [confirmingDeposit, setConfirmingDeposit] = useState(false);
 
   // 오더 기록 필드 상태
   const [tempContractWriter, setTempContractWriter] = useState("");
@@ -342,6 +346,25 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     }
   };
 
+  // 계좌이체 신청 건은 입금 확인 전까지 자동배정/브로드캐스트가 보류돼 있다 —
+  // 관리자가 실제 입금을 확인한 뒤 이 버튼을 눌러야 그제서야 배정이 진행된다.
+  const handleConfirmDeposit = async () => {
+    if (!editingBooking) return;
+    setConfirmingDeposit(true);
+    try {
+      await fetch(`${API_BASE}/external/request/${editingBooking.id}/confirm-deposit`, {
+        method: 'PATCH',
+      });
+      message.success("입금 확인 처리되었습니다. 배정을 진행합니다.");
+      fetchBookings();
+      setIsModalOpen(false);
+    } catch (e) {
+      message.error("입금 확인 처리 중 오류 발생");
+    } finally {
+      setConfirmingDeposit(false);
+    }
+  };
+
   const statusConfig: any = {
     PENDING: { color: "orange", label: "대기중" },
     ASSIGNED: { color: "blue", label: "배정완료" },
@@ -417,6 +440,13 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       align: "center" as const,
       render: (_: unknown, record: IBooking) => {
         const tags: React.ReactNode[] = [];
+        if (record.paymentMethod === 'BANK_TRANSFER' && !record.depositConfirmed) {
+          tags.push(
+            <Tag key="pending-deposit" color="volcano">
+              💰입금대기
+            </Tag>,
+          );
+        }
         if (record.urgentCandidate && record.status === 'PENDING') {
           tags.push(
             <Tag key="urgent-candidate" color="gold">
@@ -792,6 +822,21 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
               <p className="text-xs text-red-500 mt-1">
                 {editingBooking.remoteTier === 'remote' ? '🏔 오지' : '🗺 준오지'} 지역입니다(가장 가까운 진단사 편도 약 {editingBooking.nearestDriverKm}km) — 필요시 발주사와 가격협상 후 관리자메모에 직접 기록해주세요.
               </p>
+            )}
+            {editingBooking?.paymentMethod === 'BANK_TRANSFER' && !editingBooking?.depositConfirmed && (
+              <div className="mt-2">
+                <Button
+                  type="primary"
+                  block
+                  loading={confirmingDeposit}
+                  onClick={handleConfirmDeposit}
+                >
+                  💰 입금 확인 → 배정 진행
+                </Button>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  검차 신청 시 계좌이체를 선택한 건입니다. 실제 입금을 확인한 뒤 눌러주세요 — 그 전까지는 진단사에게 자동배정/알림이 가지 않습니다.
+                </p>
+              </div>
             )}
             {editingBooking?.status === 'PENDING' && (
               <div className="mt-2">
