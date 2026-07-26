@@ -13,6 +13,15 @@ const COMPANY_BOOKING_PAGES: Record<string, string> = {
   "gwangmyeong-motors": "/diagnosis/gwangmyeong-motors",
 };
 
+// 발주사를 거치지 않고 /inspection(구매동행 검차 서비스)에서 고객이 직접 신청한 건 —
+// 등록된 발주사 계정이 없어 /users/admins 목록엔 안 잡히니 "발주사 관리" 맨 앞에 고정으로 붙인다.
+// source=CARVIOR_INSPECTION만 넘기면 기존 동적 라우트(/diagnosis/[company])가 그대로 필터링해줌.
+const CARVIOR_DIRECT_LINK: IMenu = {
+  id: "company-carvior-direct",
+  name: "카비어(고객 직접신청)",
+  link: { path: "/diagnosis/CARVIOR_INSPECTION" },
+};
+
 /** 슈퍼 관리자 메뉴 (전체 의뢰 + carvior-inspection 포함) */
 const superAdminMenuData: IMenu[] = [
   {
@@ -221,7 +230,7 @@ const MainMenu = () => {
     menuData = COMPANY_MENUS[company] ?? buildCompanyMenu(company);
   } else {
     menuData = superAdminMenuData.map((item) =>
-      item.id === "companyList" ? { ...item, submenu: companyLinks } : item
+      item.id === "companyList" ? { ...item, submenu: [CARVIOR_DIRECT_LINK, ...companyLinks] } : item
     );
   }
 
