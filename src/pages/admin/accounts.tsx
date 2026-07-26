@@ -1,6 +1,6 @@
 import { getDefaultLayout, IDefaultLayoutPage } from "@/components/layout/default-layout";
 import RequireSuperAdmin from "@/components/shared/require-super-admin";
-import { Button, Form, Input, message, Modal, Popconfirm, Spin, Table, Tag, Upload } from "antd";
+import { Button, Form, Input, message, Modal, Popconfirm, Spin, Switch, Table, Tag, Upload } from "antd";
 import { Upload as UploadIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -15,6 +15,7 @@ interface AdminUser {
   role: string;
   company?: string | null;
   logoUrl?: string | null;
+  isExportOnly?: boolean;
   createdAt: string;
 }
 
@@ -58,7 +59,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
 
   useEffect(() => { fetchAdmins(); }, [fetchAdmins]);
 
-  const handleCreate = async (values: { username: string; password: string; name: string; phone?: string; company?: string }) => {
+  const handleCreate = async (values: { username: string; password: string; name: string; phone?: string; company?: string; isExportOnly?: boolean }) => {
     setCreating(true);
     try {
       const { username, ...rest } = values;
@@ -103,7 +104,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
     }
   };
 
-  const handleEditInfo = async (values: { name: string; phone?: string; company?: string }) => {
+  const handleEditInfo = async (values: { name: string; phone?: string; company?: string; isExportOnly?: boolean }) => {
     if (!editOpen) return;
     setEditing(true);
     try {
@@ -184,12 +185,16 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
       title: "역할",
       dataIndex: "role",
       width: 260,
-      render: (_: string, record: AdminUser) =>
-        record.company ? (
-          <Tag color="blue" className="whitespace-nowrap">발주사 관리자 · {record.company}</Tag>
-        ) : (
-          <Tag color="purple">슈퍼 관리자</Tag>
-        ),
+      render: (_: string, record: AdminUser) => (
+        <div className="flex flex-wrap gap-1">
+          {record.company ? (
+            <Tag color="blue" className="whitespace-nowrap">발주사 관리자 · {record.company}</Tag>
+          ) : (
+            <Tag color="purple">슈퍼 관리자</Tag>
+          )}
+          {record.isExportOnly && <Tag color="gold">수출전용</Tag>}
+        </div>
+      ),
     },
     {
       title: "생성일",
@@ -207,7 +212,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
             onClick={() => {
               setEditOpen(record);
               setEditLogoUrl(record.logoUrl ?? null);
-              editForm.setFieldsValue({ name: record.name, phone: record.phone, company: record.company ?? "" });
+              editForm.setFieldsValue({ name: record.name, phone: record.phone, company: record.company ?? "", isExportOnly: !!record.isExportOnly });
             }}
           >
             정보 수정
@@ -309,6 +314,14 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
             <Input placeholder="예: gwangmyeong-motors (비워두면 전체 조회 슈퍼 관리자)" />
           </Form.Item>
           <Form.Item
+            name="isExportOnly"
+            label="수출전용 발주사 (datrade처럼 수출용 차량만 다룸)"
+            valuePropName="checked"
+            initialValue={false}
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
             name="password"
             label="비밀번호"
             rules={[
@@ -388,6 +401,13 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
             label="발주사 코드 (선택 — 비우면 슈퍼 관리자, 입력하면 그 발주사 의뢰만 조회 가능)"
           >
             <Input placeholder="예: gwanghyun (비워두면 전체 조회 슈퍼 관리자)" />
+          </Form.Item>
+          <Form.Item
+            name="isExportOnly"
+            label="수출전용 발주사 (datrade처럼 수출용 차량만 다룸)"
+            valuePropName="checked"
+          >
+            <Switch />
           </Form.Item>
           <div className="flex gap-2 justify-end mt-4">
             <Button onClick={() => setEditOpen(null)}>취소</Button>
