@@ -120,7 +120,7 @@ const CompanyApprovalPage: IDefaultLayoutPage = () => {
     <RequireSuperAdmin>
       <div className="p-6 max-w-7xl">
         <div className="flex items-center justify-between mb-2">
-          <h1 className="text-2xl font-bold">발주사 관리</h1>
+          <h1 className="text-2xl font-bold">발주사 승인 관리</h1>
         </div>
         <p className="text-sm text-gray-500 mb-6">
           접수는 들어오고 있지만 아직 로그인 계정이 없는 발주사 코드 목록입니다. 승인하면 그 발주사 전용 관리자 계정이 바로 생성됩니다.

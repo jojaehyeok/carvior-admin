@@ -1,8 +1,17 @@
 import { Divider } from "antd";
-import { BarChart2, Home, MessageCircle, Monitor, Package2, Settings, ShoppingBag, Star } from "lucide-react";
+import { BarChart2, Building2, Home, MessageCircle, Monitor, Package2, Settings, ShoppingBag, Star } from "lucide-react";
 import { useSession } from "next-auth/react";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Menu, { IMenu } from "./nav";
+
+const API = process.env.NEXT_PUBLIC_API_ENDPOINT;
+
+// 전용 페이지(자체 브랜딩 타이틀 등)가 따로 있는 발주사만 여기 추가하면 됨.
+// 없으면 동적 라우트(/diagnosis/[company])로 자동 연결된다.
+const COMPANY_BOOKING_PAGES: Record<string, string> = {
+  "anyone-motors": "/diagnosis/anyone-motors",
+  "gwangmyeong-motors": "/diagnosis/gwangmyeong-motors",
+};
 
 /** 슈퍼 관리자 메뉴 (전체 의뢰 + carvior-inspection 포함) */
 const superAdminMenuData: IMenu[] = [
@@ -23,11 +32,6 @@ const superAdminMenuData: IMenu[] = [
         link: { path: "/diagnosis/bookings" },
       },
       {
-        id: "anyoneMotorsList",
-        name: "애니원 모터스",
-        link: { path: "/diagnosis/anyone-motors" },
-      },
-      {
         id: "driverList",
         name: "진단사 계정 관리",
         link: { path: "/diagnosis/drivers" },
@@ -43,6 +47,14 @@ const superAdminMenuData: IMenu[] = [
         link: { path: "/diagnosis/map" },
       },
     ],
+  },
+  {
+    // submenu는 빈 배열로 시작해서 MainMenu가 /users/admins 조회 결과로 채운다 —
+    // "발주사 승인 관리"에서 새 발주사 계정을 승인하면 코드 수정 없이 여기 바로 추가됨.
+    id: "companyList",
+    name: "발주사 관리",
+    icon: <Building2 className="w-5 h-5" />,
+    submenu: [],
   },
   {
     id: "consultation",
@@ -74,7 +86,7 @@ const superAdminMenuData: IMenu[] = [
       },
       {
         id: "companyApproval",
-        name: "발주사 관리",
+        name: "발주사 승인 관리",
         link: { path: "/admin/companies" },
       },
       {
@@ -175,6 +187,32 @@ const MainMenu = () => {
   const { data: session } = useSession();
   const role = session?.user?.role;
   const company = session?.user?.company;
+  const [companyLinks, setCompanyLinks] = useState<IMenu[]>([]);
+
+  // 슈퍼 관리자 세션에서만 필요 — 등록된 발주사 관리자 계정 목록을 조회해서
+  // "발주사 관리" 서브메뉴를 채운다. "발주사 승인 관리"에서 새 계정을 승인하면
+  // 메뉴 코드를 손대지 않아도 다음 로드 때 여기 자동으로 나타난다.
+  useEffect(() => {
+    if (role === "COMPANY_ADMIN") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API}/users/admins`);
+        const data = await res.json();
+        const links: IMenu[] = (Array.isArray(data) ? data : [])
+          .filter((u: { company?: string | null }) => !!u.company)
+          .map((u: { name: string; company: string }) => ({
+            id: `company-${u.company}`,
+            name: u.name || u.company,
+            link: { path: COMPANY_BOOKING_PAGES[u.company] ?? `/diagnosis/${u.company}` },
+          }));
+        if (!cancelled) setCompanyLinks(links);
+      } catch {
+        if (!cancelled) setCompanyLinks([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [role]);
 
   let menuData: IMenu[];
   if (role === "COMPANY_ADMIN" && company) {
@@ -182,7 +220,9 @@ const MainMenu = () => {
     // 새로 등록한 발주사) 동적 라우트로 자동 연결되는 메뉴를 생성한다.
     menuData = COMPANY_MENUS[company] ?? buildCompanyMenu(company);
   } else {
-    menuData = superAdminMenuData;
+    menuData = superAdminMenuData.map((item) =>
+      item.id === "companyList" ? { ...item, submenu: companyLinks } : item
+    );
   }
 
   return (
