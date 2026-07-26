@@ -73,6 +73,11 @@ const superAdminMenuData: IMenu[] = [
         link: { path: "/admin/accounts" },
       },
       {
+        id: "companyApproval",
+        name: "발주사 관리",
+        link: { path: "/admin/companies" },
+      },
+      {
         id: "dealerApproval",
         name: "딜러 승인 관리",
         link: { path: "/admin/dealers" },
