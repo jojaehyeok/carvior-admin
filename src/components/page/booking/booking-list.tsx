@@ -413,34 +413,21 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 계약상태를 상세 모달까지 안 들어가고 목록에서 태그 클릭 한 번으로 바로 토글 —
   // 체크박스 찾으러 상세 들어가는 게 불편하다는 피드백으로 추가. 즉시 반응하도록
   // 먼저 화면(data)을 낙관적으로 바꾸고, 실패하면 목록을 다시 불러와 원상복구한다.
-  const handleToggleContract = async (record: IBooking) => {
-    const next = !record.contractConfirmed;
-    setData(prev => prev.map(b => b.id === record.id ? { ...b, contractConfirmed: next } : b));
+  const handleToggleBoolField = async (
+    record: IBooking,
+    field: 'contractConfirmed' | 'vehicleTransferred' | 'purchasePriceSeen' | 'oldDealerFeeSeen',
+    label: string,
+  ) => {
+    const next = !record[field];
+    setData(prev => prev.map(b => b.id === record.id ? { ...b, [field]: next } : b));
     try {
       await fetch(`${API_BASE}/external/request/${record.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contractConfirmed: next }),
+        body: JSON.stringify({ [field]: next }),
       });
     } catch {
-      message.error("계약상태 변경 중 오류 발생");
-      fetchBookings();
-    }
-  };
-
-  // 매입가/구전 값을 목록에서 클릭해서 "확인함"으로 표시(빨간색 → 파란색) — 값 자체는
-  // 상세 모달에서만 수정 가능하고, 여긴 "봤다"는 표시만 남긴다.
-  const handleMarkSeen = async (record: IBooking, field: 'purchasePriceSeen' | 'oldDealerFeeSeen') => {
-    if (record[field]) return; // 이미 확인한 값이면 클릭해도 아무 일 없음
-    setData(prev => prev.map(b => b.id === record.id ? { ...b, [field]: true } : b));
-    try {
-      await fetch(`${API_BASE}/external/request/${record.id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [field]: true }),
-      });
-    } catch {
-      message.error("확인 처리 중 오류 발생");
+      message.error(`${label} 변경 중 오류 발생`);
       fetchBookings();
     }
   };
@@ -627,7 +614,15 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "차량 이전",
       dataIndex: "vehicleTransferred",
       align: "center",
-      render: (value: boolean) => value ? <Tag color="green">완료</Tag> : <Tag color="default">미완료</Tag>,
+      render: (value: boolean, record: IBooking) => (
+        <Tag
+          color={value ? "blue" : "red"}
+          style={{ cursor: "pointer", fontWeight: 700 }}
+          onClick={() => handleToggleBoolField(record, "vehicleTransferred", "차량 이전")}
+        >
+          {value ? "완료" : "미완료"}
+        </Tag>
+      ),
     },
     {
       title: "계약상태",
@@ -635,9 +630,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       align: "center",
       render: (value: boolean, record: IBooking) => (
         <Tag
-          color={value ? "blue" : "default"}
-          style={{ cursor: "pointer" }}
-          onClick={() => handleToggleContract(record)}
+          color={value ? "blue" : "red"}
+          style={{ cursor: "pointer", fontWeight: 700 }}
+          onClick={() => handleToggleBoolField(record, "contractConfirmed", "계약상태")}
         >
           {value ? "확인" : "미확인"}
         </Tag>
@@ -649,14 +644,18 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       align: "center",
       render: (value: number | null, record: IBooking) => {
         if (value == null) return <span className="text-gray-300">-</span>;
-        const seen = record.purchasePriceSeen ?? true;
+        const done = record.purchasePriceSeen ?? true;
         return (
-          <span
-            className={`font-bold cursor-pointer ${seen ? "text-blue-600" : "text-red-500"}`}
-            onClick={() => handleMarkSeen(record, "purchasePriceSeen")}
-          >
-            {value.toLocaleString()}만원
-          </span>
+          <div className="flex flex-col items-center gap-1">
+            <span className="font-bold">{value.toLocaleString()}만원</span>
+            <Tag
+              color={done ? "blue" : "red"}
+              style={{ cursor: "pointer", fontWeight: 700 }}
+              onClick={() => handleToggleBoolField(record, "purchasePriceSeen", "매입가")}
+            >
+              {done ? "완료" : "미완료"}
+            </Tag>
+          </div>
         );
       },
     },
@@ -666,14 +665,18 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       align: "center",
       render: (value: number | null, record: IBooking) => {
         if (value == null) return <span className="text-gray-300">-</span>;
-        const seen = record.oldDealerFeeSeen ?? true;
+        const done = record.oldDealerFeeSeen ?? true;
         return (
-          <span
-            className={`font-bold cursor-pointer ${seen ? "text-blue-600" : "text-red-500"}`}
-            onClick={() => handleMarkSeen(record, "oldDealerFeeSeen")}
-          >
-            {value.toLocaleString()}만원
-          </span>
+          <div className="flex flex-col items-center gap-1">
+            <span className="font-bold">{value.toLocaleString()}만원</span>
+            <Tag
+              color={done ? "blue" : "red"}
+              style={{ cursor: "pointer", fontWeight: 700 }}
+              onClick={() => handleToggleBoolField(record, "oldDealerFeeSeen", "구전")}
+            >
+              {done ? "완료" : "미완료"}
+            </Tag>
+          </div>
         );
       },
     },
