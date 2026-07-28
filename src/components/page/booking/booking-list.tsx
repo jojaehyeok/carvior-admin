@@ -145,6 +145,44 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [tempOldDealerFee, setTempOldDealerFee] = useState<number | null>(null);
   const [tempCustomerContact, setTempCustomerContact] = useState("");
 
+  // 주소 수정 — 접수 페이지(/inspection 등)와 동일하게 카카오 키워드검색으로.
+  // 평소엔 접혀있다가(현재 주소만 텍스트로 표시) "변경" 눌렀을 때만 검색창이 펼쳐지게 해서
+  // 모달이 불필요하게 커지지 않도록 함.
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [placeResults, setPlaceResults] = useState<{ name: string; address: string }[]>([]);
+  const [showPlaceResults, setShowPlaceResults] = useState(false);
+  const [searchingPlace, setSearchingPlace] = useState(false);
+
+  const searchPlace = async () => {
+    if (!placeQuery.trim()) return;
+    setSearchingPlace(true);
+    try {
+      const res = await fetch(
+        `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(placeQuery)}`,
+        { headers: { Authorization: 'KakaoAK 5d73c6482159874735a29becf6849e11' } },
+      );
+      const data = await res.json();
+      const docs = (data?.documents ?? []).slice(0, 8).map((d: any) => ({
+        name: d.place_name as string,
+        address: (d.road_address_name || d.address_name) as string,
+      }));
+      setPlaceResults(docs);
+      setShowPlaceResults(true);
+    } catch {
+      message.error('위치 검색 중 오류가 발생했습니다.');
+    } finally {
+      setSearchingPlace(false);
+    }
+  };
+
+  const selectPlace = (p: { name: string; address: string }) => {
+    setTempAddress(p.name ? `${p.address} (${p.name})` : p.address);
+    setIsEditingAddress(false);
+    setShowPlaceResults(false);
+    setPlaceQuery("");
+  };
+
   const API_BASE = process.env.NEXT_PUBLIC_API_ENDPOINT || 'http://localhost:4000/api/v1';
 
   // 세션에서 company 결정 (props 우선, 없으면 세션 기반)
@@ -270,6 +308,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setTempDealerName(record.dealerName || "");
     setTempContact(record.contact || "");
     setTempAddress(record.address || "");
+    setIsEditingAddress(false);
+    setPlaceQuery("");
+    setShowPlaceResults(false);
     setSelectedDriver(record.assignedDriverId ? { id: record.assignedDriverId, name: record.assignedDriverName || "" } : null);
     setTempContractWriter(record.contractWriter || "");
     setTempVehicleTransferred(record.vehicleTransferred ?? false);
@@ -742,11 +783,42 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-400 mb-1">주소</label>
-              <Input
-                value={tempAddress}
-                onChange={e => setTempAddress(e.target.value)}
-                placeholder="주소"
-              />
+              {!isEditingAddress ? (
+                <div className="flex items-start justify-between gap-2 bg-gray-50 rounded px-3 py-2">
+                  <span className="text-sm text-gray-700">{tempAddress || <span className="text-gray-300">주소 없음</span>}</span>
+                  <Button size="small" onClick={() => setIsEditingAddress(true)}>변경</Button>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={placeQuery}
+                      onChange={e => setPlaceQuery(e.target.value)}
+                      onPressEnter={searchPlace}
+                      placeholder="장소 검색 (예: 도이치오토월드, 또는 도로명주소)"
+                    />
+                    <Button onClick={searchPlace} loading={searchingPlace}>검색</Button>
+                    <Button onClick={() => { setIsEditingAddress(false); setShowPlaceResults(false); }}>취소</Button>
+                  </div>
+                  {showPlaceResults && (
+                    <div className="mt-2 border rounded overflow-hidden divide-y max-h-48 overflow-y-auto">
+                      {placeResults.length === 0 ? (
+                        <p className="text-xs text-gray-400 px-3 py-2">검색 결과가 없습니다.</p>
+                      ) : placeResults.map((p, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => selectPlace(p)}
+                          className="w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors"
+                        >
+                          <p className="text-sm font-bold text-gray-800">{p.name}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{p.address}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <p className="text-gray-500">진단시작시간: {editingBooking?.preferredDateTime || "-"}</p>
             <p className="text-gray-500">
