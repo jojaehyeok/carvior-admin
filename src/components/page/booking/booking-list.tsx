@@ -82,8 +82,10 @@ interface IBooking {
   vehicleTransferred?: boolean;
   contractConfirmed?: boolean; // 계약 상태 확인 여부(계약완료 확인/미확인)
   purchasePrice?: number | null;
+  purchasePriceSeen?: boolean; // false면 새로 적힌 값(목록에서 빨간색), 클릭해서 확인하면 true
   isOldDealerPurchase?: boolean;
   oldDealerFee?: number | null; // 구전 금액 (만원)
+  oldDealerFeeSeen?: boolean;
   customerContact?: string | null; // 계약팀이 직접 확인·기록하는 차주(고객) 연락처
   isUrgent?: boolean; // 관리자가 "긴급·당일배정"으로 전체 브로드캐스트한 건
   // /inspection(검차 신청 결제) 계좌이체 건 전용 — 입금 확인 전까지 자동배정/브로드캐스트 보류됨
@@ -408,6 +410,41 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     }
   };
 
+  // 계약상태를 상세 모달까지 안 들어가고 목록에서 태그 클릭 한 번으로 바로 토글 —
+  // 체크박스 찾으러 상세 들어가는 게 불편하다는 피드백으로 추가. 즉시 반응하도록
+  // 먼저 화면(data)을 낙관적으로 바꾸고, 실패하면 목록을 다시 불러와 원상복구한다.
+  const handleToggleContract = async (record: IBooking) => {
+    const next = !record.contractConfirmed;
+    setData(prev => prev.map(b => b.id === record.id ? { ...b, contractConfirmed: next } : b));
+    try {
+      await fetch(`${API_BASE}/external/request/${record.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contractConfirmed: next }),
+      });
+    } catch {
+      message.error("계약상태 변경 중 오류 발생");
+      fetchBookings();
+    }
+  };
+
+  // 매입가/구전 값을 목록에서 클릭해서 "확인함"으로 표시(빨간색 → 파란색) — 값 자체는
+  // 상세 모달에서만 수정 가능하고, 여긴 "봤다"는 표시만 남긴다.
+  const handleMarkSeen = async (record: IBooking, field: 'purchasePriceSeen' | 'oldDealerFeeSeen') => {
+    if (record[field]) return; // 이미 확인한 값이면 클릭해도 아무 일 없음
+    setData(prev => prev.map(b => b.id === record.id ? { ...b, [field]: true } : b));
+    try {
+      await fetch(`${API_BASE}/external/request/${record.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: true }),
+      });
+    } catch {
+      message.error("확인 처리 중 오류 발생");
+      fetchBookings();
+    }
+  };
+
   const statusConfig: any = {
     PENDING: { color: "orange", label: "대기중" },
     ASSIGNED: { color: "blue", label: "배정완료" },
@@ -596,19 +633,49 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "계약상태",
       dataIndex: "contractConfirmed",
       align: "center",
-      render: (value: boolean) => value ? <Tag color="blue">확인</Tag> : <Tag color="default">미확인</Tag>,
+      render: (value: boolean, record: IBooking) => (
+        <Tag
+          color={value ? "blue" : "default"}
+          style={{ cursor: "pointer" }}
+          onClick={() => handleToggleContract(record)}
+        >
+          {value ? "확인" : "미확인"}
+        </Tag>
+      ),
     },
     {
       title: "매입가",
       dataIndex: "purchasePrice",
       align: "center",
-      render: (value: number | null) => value != null ? <span className="font-bold">{value.toLocaleString()}만원</span> : <span className="text-gray-300">-</span>,
+      render: (value: number | null, record: IBooking) => {
+        if (value == null) return <span className="text-gray-300">-</span>;
+        const seen = record.purchasePriceSeen ?? true;
+        return (
+          <span
+            className={`font-bold cursor-pointer ${seen ? "text-blue-600" : "text-red-500"}`}
+            onClick={() => handleMarkSeen(record, "purchasePriceSeen")}
+          >
+            {value.toLocaleString()}만원
+          </span>
+        );
+      },
     },
     {
       title: "구전",
       dataIndex: "oldDealerFee",
       align: "center",
-      render: (value: number | null) => value != null ? <span className="font-bold text-purple-600">{value.toLocaleString()}만원</span> : <span className="text-gray-300">-</span>,
+      render: (value: number | null, record: IBooking) => {
+        if (value == null) return <span className="text-gray-300">-</span>;
+        const seen = record.oldDealerFeeSeen ?? true;
+        return (
+          <span
+            className={`font-bold cursor-pointer ${seen ? "text-blue-600" : "text-red-500"}`}
+            onClick={() => handleMarkSeen(record, "oldDealerFeeSeen")}
+          >
+            {value.toLocaleString()}만원
+          </span>
+        );
+      },
     },
     {
       title: "상태",
@@ -912,7 +979,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 {editingBooking.remoteTier === 'remote' ? '🏔 오지' : '🗺 준오지'} 지역입니다(가장 가까운 진단사 편도 약 {editingBooking.nearestDriverKm}km) — 필요시 발주사와 가격협상 후 관리자메모에 직접 기록해주세요.
               </p>
             )}
-            {editingBooking?.paymentMethod === 'BANK_TRANSFER' && !editingBooking?.depositConfirmed && (
+            {isSuperAdminView && editingBooking?.paymentMethod === 'BANK_TRANSFER' && !editingBooking?.depositConfirmed && (
               <div className="mt-2">
                 <Button
                   type="primary"
