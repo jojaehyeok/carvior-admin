@@ -647,7 +647,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         const done = record.purchasePriceSeen ?? true;
         return (
           <div className="flex flex-col items-center gap-1">
-            <span className="font-bold">{value.toLocaleString()}만원</span>
+            <span className={`font-bold ${done ? "text-blue-600" : "text-red-600"}`}>{value.toLocaleString()}만원</span>
             <Tag
               color={done ? "blue" : "red"}
               style={{ cursor: "pointer", fontWeight: 700 }}
@@ -668,7 +668,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         const done = record.oldDealerFeeSeen ?? true;
         return (
           <div className="flex flex-col items-center gap-1">
-            <span className="font-bold">{value.toLocaleString()}만원</span>
+            <span className={`font-bold ${done ? "text-blue-600" : "text-red-600"}`}>{value.toLocaleString()}만원</span>
             <Tag
               color={done ? "blue" : "red"}
               style={{ cursor: "pointer", fontWeight: 700 }}
