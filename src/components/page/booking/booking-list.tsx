@@ -810,13 +810,15 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           dataSource={filteredData}
           loading={isLoading}
           rowKey="id"
-          rowClassName={(record) =>
-            record.vehicleTransferred && record.contractConfirmed
-              ? "bg-blue-50"
-              : record.vehicleTransferred
-                ? "bg-green-50"
-                : ""
-          }
+          // antd 테이블은 배경색을 <tr>가 아니라 각 <td> 셀 단위로 칠해서, row 클래스에
+          // 붙인 옅은 배경(bg-blue-50 등)이 셀 배경에 가려 안 보이는 문제가 있었음 —
+          // 셀 배경까지 강제로 덮어써서 실제로 눈에 보이게 함.
+          // 차량이전/계약상태 둘 중 하나만 완료면 초록, 둘 다 완료면 파랑.
+          rowClassName={(record) => {
+            const both = record.vehicleTransferred && record.contractConfirmed;
+            const either = record.vehicleTransferred || record.contractConfirmed;
+            return both ? "[&>td]:!bg-blue-50" : either ? "[&>td]:!bg-green-50" : "";
+          }}
         />
       </div>
 
