@@ -795,7 +795,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                       value={placeQuery}
                       onChange={e => setPlaceQuery(e.target.value)}
                       onPressEnter={searchPlace}
-                      placeholder="장소 검색 (예: 도이치오토월드, 또는 도로명주소)"
+                      placeholder="장소를 입력한 후 검색을 눌러주세요 (예: 도이치오토월드)"
                     />
                     <Button onClick={searchPlace} loading={searchingPlace}>검색</Button>
                     <Button onClick={() => { setIsEditingAddress(false); setShowPlaceResults(false); }}>취소</Button>
