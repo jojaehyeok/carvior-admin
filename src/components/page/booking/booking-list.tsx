@@ -77,6 +77,7 @@ interface IBooking {
   assignedDriverId?: string | null;
   assignedDriverName?: string | null;
   cancelledByDriverAt?: string | null; // 진단사 취소로 재대기된 시각
+  driverSeenAt?: string | null; // 배정된 진단사가 앱에서 이 건 상세를 처음 연 시각(자동배정 놓침 확인용)
   // 오더 기록 필드
   contractWriter?: string;
   vehicleTransferred?: boolean;
@@ -617,6 +618,13 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           }
           {record.cancelledByDriverAt && (
             <Tag color="volcano" className="text-xs">🔄 재대기중</Tag>
+          )}
+          {/* 자동배정 알림톡을 놓칠 수 있어서 추가한 확인 여부 표시 — 배정 상태(ASSIGNED)일 때만
+              의미가 있음(완료되면 어차피 이미 확인하고 진단까지 마친 것이므로 표시하지 않음) */}
+          {value && record.status === 'ASSIGNED' && (
+            record.driverSeenAt
+              ? <Tag color="green" className="text-xs">✅ 확인 {dayjs(record.driverSeenAt).format('MM/DD HH:mm')}</Tag>
+              : <Tag color="red" className="text-xs">👀 미확인</Tag>
           )}
         </div>
       ),
