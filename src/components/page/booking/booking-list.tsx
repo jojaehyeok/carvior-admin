@@ -3,7 +3,7 @@
 import DefaultTable from "@/components/shared/ui/default-table";
 import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
 import { ISO8601DateTime } from "@/types/common";
-import { Button, Checkbox, Input, InputNumber, Modal, Select, Spin, Switch, Tag, message } from "antd";
+import { Alert, Button, Checkbox, Input, InputNumber, Modal, Select, Spin, Switch, Tag, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { Eye, FileText, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
@@ -313,12 +313,26 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setRegistrationPreview(URL.createObjectURL(file));
   };
 
+  // 실제 전송 전, 딜러+고객 각각 SMS 1건씩(총 100원) 비용이 나간다는 걸 한 번 더 확인시키고
+  // 여기서 취소하면(Cancel) 업로드 자체가 실행되지 않도록 함
+  const confirmSendRegistration = () => {
+    if (!registrationTarget || !registrationFile) return;
+    Modal.confirm({
+      title: '등록증 전송 안내',
+      content: '딜러/고객에게 각각 SMS 1건씩 발송되어 총 100원(건당 50원, VAT 포함)의 비용이 청구됩니다. 계속하시겠습니까?',
+      okText: '보내기',
+      cancelText: '취소',
+      onOk: handleSendRegistration,
+    });
+  };
+
   const handleSendRegistration = async () => {
     if (!registrationTarget || !registrationFile) return;
     setUploadingRegistration(true);
     try {
       const form = new FormData();
       form.append('photo', registrationFile);
+      form.append('message', registrationMessage);
       const res = await fetch(`${API_BASE}/external/request/${registrationTarget.id}/transferred-registration`, {
         method: 'POST',
         body: form,
@@ -923,14 +937,18 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       align: "center" as const,
       render: (_: unknown, record: IBooking) => (
         <div className="flex flex-col items-center gap-1">
-          {record.transferredRegistrationUrl && (
-            <Button size="small" onClick={() => window.open(record.transferredRegistrationUrl!, '_blank')}>
-              보기
+          {record.transferredRegistrationUrl ? (
+            <>
+              <Tag color="green">전송완료</Tag>
+              <Button size="small" onClick={() => window.open(record.transferredRegistrationUrl!, '_blank')}>
+                보기
+              </Button>
+            </>
+          ) : (
+            <Button size="small" type="primary" onClick={() => openRegistrationModal(record)}>
+              등록증 보내기
             </Button>
           )}
-          <Button size="small" type={record.transferredRegistrationUrl ? "default" : "primary"} onClick={() => openRegistrationModal(record)}>
-            {record.transferredRegistrationUrl ? '다시 보내기' : '등록증 보내기'}
-          </Button>
         </div>
       ),
     }] : [{
@@ -1438,7 +1456,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       <Modal
         title={`등록증 전송 — ${registrationTarget?.carNumber}`}
         open={!!registrationTarget}
-        onOk={handleSendRegistration}
+        onOk={confirmSendRegistration}
         onCancel={() => setRegistrationTarget(null)}
         confirmLoading={uploadingRegistration}
         okText="보내기"
@@ -1446,16 +1464,13 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         cancelText="취소"
       >
         <div className="py-2 space-y-3">
+          <Alert
+            type="warning"
+            showIcon
+            message="딜러/고객에게 각각 SMS 1건씩 발송되어 총 100원(건당 50원, VAT 포함)의 비용이 청구됩니다. 한 건당 1회만 전송할 수 있어요."
+          />
           <div>
             <label className="block text-xs font-bold text-gray-400 mb-1">이전된 자동차등록증 사진</label>
-            {registrationTarget?.transferredRegistrationUrl && !registrationPreview && (
-              <p className="text-xs text-gray-400 mb-2">
-                이미 등록된 사진이 있어요.{' '}
-                <a href={registrationTarget.transferredRegistrationUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline">
-                  기존 등록증 보기
-                </a>
-              </p>
-            )}
             {registrationPreview ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={registrationPreview} alt="등록증 미리보기" className="w-full max-h-64 object-contain rounded border mb-2" />
