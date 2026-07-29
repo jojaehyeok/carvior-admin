@@ -897,12 +897,42 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         );
       },
     }] : []),
-    {
+    // 애니원모터스는 "수정 요청" 대신 명의이전 등록증을 직접 업로드하는 열을 씀
+    ...(isAnyoneMotors ? [{
+      title: "이전 등록증",
+      key: "transferredRegistration",
+      width: 150,
+      align: "center" as const,
+      render: (_: unknown, record: IBooking) => (
+        <div className="flex flex-col items-center gap-1">
+          {record.transferredRegistrationUrl && (
+            <Button size="small" onClick={() => window.open(record.transferredRegistrationUrl!, '_blank')}>
+              보기
+            </Button>
+          )}
+          <Button size="small" type={record.transferredRegistrationUrl ? "default" : "primary"} loading={uploadingRegistration}>
+            <label className="cursor-pointer">
+              {record.transferredRegistrationUrl ? '다시 업로드' : '등록증 보내기'}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) handleUploadTransferredRegistration(record, file);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          </Button>
+        </div>
+      ),
+    }] : [{
       title: "수정 요청",
       key: "requestUpdate",
       width: 120,
-      align: "center",
-      render: (_, record) => (
+      align: "center" as const,
+      render: (_: unknown, record: IBooking) => (
         <Button
           size="small"
           danger
@@ -913,7 +943,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           수정 요청
         </Button>
       ),
-    },
+    }]),
   ];
 
   return (
@@ -1231,35 +1261,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             >
               계약 확인 완료
             </Checkbox>
-
-            {/* 명의이전 등록증 직접 업로드 — 애니원모터스가 이전 완료 즉시 사진을 남길 수 있게 */}
-            {isAnyoneMotors && editingBooking && (
-              <div className="mt-4 pt-3 border-t">
-                <label className="block text-xs font-bold text-gray-400 mb-1">명의이전 등록증</label>
-                <div className="flex items-center gap-2">
-                  {editingBooking.transferredRegistrationUrl && (
-                    <Button size="small" onClick={() => window.open(editingBooking.transferredRegistrationUrl!, '_blank')}>
-                      업로드된 등록증 보기
-                    </Button>
-                  )}
-                  <Button size="small" loading={uploadingRegistration}>
-                    <label className="cursor-pointer">
-                      {editingBooking.transferredRegistrationUrl ? '다시 업로드' : '등록증 업로드'}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={e => {
-                          const file = e.target.files?.[0];
-                          if (file) handleUploadTransferredRegistration(editingBooking, file);
-                          e.target.value = '';
-                        }}
-                      />
-                    </label>
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* 진단사 정산 — 슈퍼관리자 전용 */}
