@@ -89,6 +89,8 @@ interface IBooking {
   agentBonus?: number | null; // 에이전트 관리수당(원)
   agentBonusMemo?: string | null;
   transferredRegistrationUrl?: string | null; // 발주사가 직접 업로드하는 명의이전된 등록증 사진
+  registrationSentToDealerAt?: string | null; // 딜러에게 등록증 SMS를 보낸 시각(건당 1회 제한)
+  registrationSentToCustomerAt?: string | null; // 고객에게 등록증 SMS를 보낸 시각(건당 1회 제한)
   // 오더 기록 필드
   contractWriter?: string;
   vehicleTransferred?: boolean;
@@ -294,11 +296,18 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   };
 
   // --- 명의이전 등록증 전송 모달(애니원모터스 전용) — 수정요청 모달과 동일한 흐름:
-  // 버튼 클릭 → 모달에서 사진 선택(미리보기) + 안내 문구 확인 → 보내기 ---
+  // 버튼 클릭 → 모달에서 사진 선택(미리보기) + 전송 대상(딜러/고객) 체크 + 번호 확인 → 보내기 ---
+  // 대상별로 건당 1회만 전송 가능 — 이미 보낸 대상은 체크박스가 자동으로 꺼진다.
+  // 둘 다 선택하지 않고 사진만 새로 올리면 SMS 없이 사진만 교체된다(잘못 올린 등록증 정정용 —
+  // 이미 보낸 단축링크가 새 사진으로 그대로 반영되므로 재전송할 필요가 없다).
   const [registrationTarget, setRegistrationTarget] = useState<IBooking | null>(null);
   const [registrationFile, setRegistrationFile] = useState<File | null>(null);
   const [registrationPreview, setRegistrationPreview] = useState<string | null>(null);
   const [registrationMessage, setRegistrationMessage] = useState("이전된 차량등록증을 보내드립니다.");
+  const [sendToDealer, setSendToDealer] = useState(false);
+  const [sendToCustomer, setSendToCustomer] = useState(false);
+  const [dealerPhone, setDealerPhone] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [uploadingRegistration, setUploadingRegistration] = useState(false);
 
   const openRegistrationModal = (record: IBooking) => {
@@ -306,6 +315,10 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setRegistrationFile(null);
     setRegistrationPreview(null);
     setRegistrationMessage("이전된 차량등록증을 보내드립니다.");
+    setSendToDealer(!record.registrationSentToDealerAt);
+    setSendToCustomer(!record.registrationSentToCustomerAt);
+    setDealerPhone(record.contact || "");
+    setCustomerPhone(record.customerContact || "");
   };
 
   const handleSelectRegistrationFile = (file: File) => {
@@ -313,14 +326,18 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setRegistrationPreview(URL.createObjectURL(file));
   };
 
-  // 실제 전송 전, 딜러+고객 각각 SMS 1건씩(총 100원) 비용이 나간다는 걸 한 번 더 확인시키고
+  // 실제 전송 전, 선택한 대상만큼 비용이 나간다는 걸 한 번 더 확인시키고
   // 여기서 취소하면(Cancel) 업로드 자체가 실행되지 않도록 함
   const confirmSendRegistration = () => {
     if (!registrationTarget || !registrationFile) return;
+    const count = (sendToDealer ? 1 : 0) + (sendToCustomer ? 1 : 0);
+    const content = count === 0
+      ? 'SMS 발송 없이 사진만 교체합니다. 계속하시겠습니까?'
+      : `${[sendToDealer && '딜러', sendToCustomer && '고객'].filter(Boolean).join(', ')}에게 SMS가 발송되어 총 ${count * 50}원(건당 50원, VAT 포함)의 비용이 청구됩니다. 계속하시겠습니까?`;
     Modal.confirm({
       title: '등록증 전송 안내',
-      content: '딜러/고객에게 각각 SMS 1건씩 발송되어 총 100원(건당 50원, VAT 포함)의 비용이 청구됩니다. 계속하시겠습니까?',
-      okText: '보내기',
+      content,
+      okText: count === 0 ? '교체' : '보내기',
       cancelText: '취소',
       onOk: handleSendRegistration,
     });
@@ -333,12 +350,16 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       const form = new FormData();
       form.append('photo', registrationFile);
       form.append('message', registrationMessage);
+      form.append('sendToDealer', String(sendToDealer));
+      form.append('sendToCustomer', String(sendToCustomer));
+      form.append('dealerPhone', dealerPhone);
+      form.append('customerPhone', customerPhone);
       const res = await fetch(`${API_BASE}/external/request/${registrationTarget.id}/transferred-registration`, {
         method: 'POST',
         body: form,
       });
       if (!res.ok) throw new Error();
-      message.success('등록증을 보냈습니다.');
+      message.success(sendToDealer || sendToCustomer ? '등록증을 보냈습니다.' : '사진을 교체했습니다.');
       setRegistrationTarget(null);
       fetchBookings();
     } catch {
@@ -935,22 +956,31 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       key: "transferredRegistration",
       width: 150,
       align: "center" as const,
-      render: (_: unknown, record: IBooking) => (
-        <div className="flex flex-col items-center gap-1">
-          {record.transferredRegistrationUrl ? (
-            <>
-              <Tag color="green">전송완료</Tag>
+      render: (_: unknown, record: IBooking) => {
+        const dealerSent = !!record.registrationSentToDealerAt;
+        const customerSent = !!record.registrationSentToCustomerAt;
+        const bothSent = dealerSent && customerSent;
+        return (
+          <div className="flex flex-col items-center gap-1">
+            {record.transferredRegistrationUrl && (
               <Button size="small" onClick={() => window.open(record.transferredRegistrationUrl!, '_blank')}>
                 보기
               </Button>
-            </>
-          ) : (
-            <Button size="small" type="primary" onClick={() => openRegistrationModal(record)}>
-              등록증 보내기
+            )}
+            {bothSent ? (
+              <Tag color="green">전송완료</Tag>
+            ) : (
+              <div className="flex gap-1">
+                {dealerSent && <Tag color="green">딜러✓</Tag>}
+                {customerSent && <Tag color="green">고객✓</Tag>}
+              </div>
+            )}
+            <Button size="small" type={record.transferredRegistrationUrl ? "default" : "primary"} onClick={() => openRegistrationModal(record)}>
+              {record.transferredRegistrationUrl ? (bothSent ? '사진 재업로드' : '추가 전송') : '등록증 보내기'}
             </Button>
-          )}
-        </div>
-      ),
+          </div>
+        );
+      },
     }] : [{
       title: "수정 요청",
       key: "requestUpdate",
@@ -1459,7 +1489,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         onOk={confirmSendRegistration}
         onCancel={() => setRegistrationTarget(null)}
         confirmLoading={uploadingRegistration}
-        okText="보내기"
+        okText={sendToDealer || sendToCustomer ? "보내기" : "교체"}
         okButtonProps={{ disabled: !registrationFile }}
         cancelText="취소"
       >
@@ -1467,8 +1497,44 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           <Alert
             type="warning"
             showIcon
-            message="딜러/고객에게 각각 SMS 1건씩 발송되어 총 100원(건당 50원, VAT 포함)의 비용이 청구됩니다. 한 건당 1회만 전송할 수 있어요."
+            message="체크한 대상에게만 SMS가 발송돼요(건당 50원, VAT 포함). 대상별로 1회만 전송할 수 있고, 둘 다 체크 해제하면 SMS 없이 사진만 교체돼요."
           />
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={sendToDealer}
+                disabled={!!registrationTarget?.registrationSentToDealerAt}
+                onChange={e => setSendToDealer(e.target.checked)}
+              >
+                딜러에게 전송{registrationTarget?.registrationSentToDealerAt ? ' (전송완료)' : ''}
+              </Checkbox>
+              <Input
+                size="small"
+                value={dealerPhone}
+                onChange={e => setDealerPhone(e.target.value)}
+                disabled={!sendToDealer || !!registrationTarget?.registrationSentToDealerAt}
+                placeholder="딜러 연락처"
+                className="max-w-[160px]"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={sendToCustomer}
+                disabled={!!registrationTarget?.registrationSentToCustomerAt}
+                onChange={e => setSendToCustomer(e.target.checked)}
+              >
+                고객에게 전송{registrationTarget?.registrationSentToCustomerAt ? ' (전송완료)' : ''}
+              </Checkbox>
+              <Input
+                size="small"
+                value={customerPhone}
+                onChange={e => setCustomerPhone(e.target.value)}
+                disabled={!sendToCustomer || !!registrationTarget?.registrationSentToCustomerAt}
+                placeholder="고객 연락처"
+                className="max-w-[160px]"
+              />
+            </div>
+          </div>
           <div>
             <label className="block text-xs font-bold text-gray-400 mb-1">이전된 자동차등록증 사진</label>
             {registrationPreview ? (
