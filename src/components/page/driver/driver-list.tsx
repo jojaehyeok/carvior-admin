@@ -1,11 +1,13 @@
 'use client';
 
 import DefaultTable from "@/components/shared/ui/default-table";
-import { Button, Divider, Image, message, Modal, Statistic, Tag } from "antd";
+import { Button, Divider, Image, message, Modal, Select, Statistic, Tag } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { CheckCircle, RefreshCw, UserCog, XCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+
+type DriverTier = 'general' | 'certified' | 'agent';
 
 interface IDriver {
   id: number;
@@ -17,7 +19,14 @@ interface IDriver {
   status: 'PENDING' | 'APPROVED' | 'ACTIVE' | 'BANNED' | 'REJECTED';
   licenseImageUrl: string;
   createdAt: string;
+  tier?: DriverTier;
 }
+
+const TIER_CONFIG: Record<DriverTier, { color: string; label: string }> = {
+  general: { color: "default", label: "일반" },
+  certified: { color: "blue", label: "진단평가사" },
+  agent: { color: "purple", label: "에이전트" },
+};
 
 interface ICancelStats {
   totalAssigned: number;
@@ -34,6 +43,8 @@ const DriverList = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [cancelStats, setCancelStats] = useState<ICancelStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [tempTier, setTempTier] = useState<DriverTier>('general');
+  const [savingTier, setSavingTier] = useState(false);
 
   const API = process.env.NEXT_PUBLIC_API_ENDPOINT;
 
@@ -56,6 +67,7 @@ const DriverList = () => {
   const openModal = async (driver: IDriver) => {
     setSelectedDriver(driver);
     setCancelStats(null);
+    setTempTier(driver.tier || 'general');
     setIsModalOpen(true);
     setStatsLoading(true);
     try {
@@ -77,6 +89,26 @@ const DriverList = () => {
       }
     } catch {
       message.error("통신 오류 발생");
+    }
+  };
+
+  // 등급 변경 — 진단비 정산(settlement-history)에서 등급별 기본 진단비를 정하는 기준이 됨
+  const handleSaveTier = async () => {
+    if (!selectedDriver) return;
+    setSavingTier(true);
+    try {
+      const res = await fetch(`${API}/drivers/${selectedDriver.id}/tier`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier: tempTier }),
+      });
+      if (!res.ok) throw new Error();
+      message.success('등급이 변경되었습니다.');
+      fetchDrivers();
+    } catch {
+      message.error('등급 변경 중 오류가 발생했습니다.');
+    } finally {
+      setSavingTier(false);
     }
   };
 
@@ -110,6 +142,15 @@ const DriverList = () => {
         };
         const s = config[status] || { color: "default", text: status };
         return <Tag color={s.color}>{s.text}</Tag>;
+      },
+    },
+    {
+      title: "등급",
+      dataIndex: "tier",
+      align: 'center',
+      render: (tier?: DriverTier) => {
+        const config = TIER_CONFIG[tier || 'general'];
+        return <Tag color={config.color}>{config.label}</Tag>;
       },
     },
     {
@@ -147,6 +188,25 @@ const DriverList = () => {
               <div><p className="text-gray-400 text-xs">연락처</p><p className="font-semibold">{selectedDriver.phone}</p></div>
               <div><p className="text-gray-400 text-xs">활동 지역</p><p className="font-semibold">{selectedDriver.region || '-'}</p></div>
               <div><p className="text-gray-400 text-xs">경력 사항</p><p className="font-semibold whitespace-pre-wrap">{selectedDriver.experience || '-'}</p></div>
+            </div>
+
+            {/* 등급 관리 — 정산(settlement-history)의 등급별 기본 진단비 기준이 됨 */}
+            <Divider plain>등급 관리</Divider>
+            <div className="flex items-center gap-2">
+              <Select<DriverTier>
+                className="flex-1"
+                value={tempTier}
+                onChange={setTempTier}
+                options={(Object.keys(TIER_CONFIG) as DriverTier[]).map(t => ({ value: t, label: TIER_CONFIG[t].label }))}
+              />
+              <Button
+                type="primary"
+                loading={savingTier}
+                disabled={tempTier === (selectedDriver.tier || 'general')}
+                onClick={handleSaveTier}
+              >
+                저장
+              </Button>
             </div>
 
             <Divider plain>자격증 / 경력 사진</Divider>
