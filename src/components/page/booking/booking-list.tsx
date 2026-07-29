@@ -957,32 +957,15 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       width: 150,
       align: "center" as const,
       render: (_: unknown, record: IBooking) => {
-        const dealerSent = !!record.registrationSentToDealerAt;
-        const customerSent = !!record.registrationSentToCustomerAt;
-        const bothSent = dealerSent && customerSent;
-        return (
-          <div className="flex flex-col items-center gap-1">
-            {record.transferredRegistrationUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={record.transferredRegistrationUrl}
-                alt="이전 등록증"
-                className="w-16 h-16 object-cover rounded border cursor-pointer"
-                onClick={() => window.open(record.transferredRegistrationUrl!, '_blank')}
-              />
-            )}
-            {bothSent ? (
-              <Tag color="green">전송완료</Tag>
-            ) : (
-              <div className="flex gap-1">
-                {dealerSent && <Tag color="green">딜러✓</Tag>}
-                {customerSent && <Tag color="green">고객✓</Tag>}
-              </div>
-            )}
-            <Button size="small" type={record.transferredRegistrationUrl ? "default" : "primary"} onClick={() => openRegistrationModal(record)}>
-              {record.transferredRegistrationUrl ? (bothSent ? '사진 재업로드' : '추가 전송') : '등록증 보내기'}
-            </Button>
-          </div>
+        const bothSent = !!record.registrationSentToDealerAt && !!record.registrationSentToCustomerAt;
+        return bothSent ? (
+          <Tag color="green" className="cursor-pointer" onClick={() => openRegistrationModal(record)}>
+            전송완료
+          </Tag>
+        ) : (
+          <Button size="small" type="primary" onClick={() => openRegistrationModal(record)}>
+            등록증 보내기
+          </Button>
         );
       },
     }] : [{
@@ -1544,6 +1527,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             {registrationPreview ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={registrationPreview} alt="등록증 미리보기" className="w-full max-h-64 object-contain rounded border mb-2" />
+            ) : registrationTarget?.transferredRegistrationUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={registrationTarget.transferredRegistrationUrl} alt="보낸 등록증" className="w-full max-h-64 object-contain rounded border mb-2" />
             ) : (
               <div className="w-full h-32 flex items-center justify-center rounded border border-dashed text-gray-300 text-sm mb-2">
                 사진을 선택해주세요
