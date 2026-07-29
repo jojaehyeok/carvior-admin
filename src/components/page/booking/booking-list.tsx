@@ -293,21 +293,39 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     }
   };
 
-  // --- 명의이전 등록증 직접 업로드(애니원모터스 전용) ---
+  // --- 명의이전 등록증 전송 모달(애니원모터스 전용) — 수정요청 모달과 동일한 흐름:
+  // 버튼 클릭 → 모달에서 사진 선택(미리보기) + 안내 문구 확인 → 보내기 ---
+  const [registrationTarget, setRegistrationTarget] = useState<IBooking | null>(null);
+  const [registrationFile, setRegistrationFile] = useState<File | null>(null);
+  const [registrationPreview, setRegistrationPreview] = useState<string | null>(null);
+  const [registrationMessage, setRegistrationMessage] = useState("이전된 차량등록증을 보내드립니다.");
   const [uploadingRegistration, setUploadingRegistration] = useState(false);
-  const handleUploadTransferredRegistration = async (record: IBooking, file: File) => {
+
+  const openRegistrationModal = (record: IBooking) => {
+    setRegistrationTarget(record);
+    setRegistrationFile(null);
+    setRegistrationPreview(null);
+    setRegistrationMessage("이전된 차량등록증을 보내드립니다.");
+  };
+
+  const handleSelectRegistrationFile = (file: File) => {
+    setRegistrationFile(file);
+    setRegistrationPreview(URL.createObjectURL(file));
+  };
+
+  const handleSendRegistration = async () => {
+    if (!registrationTarget || !registrationFile) return;
     setUploadingRegistration(true);
     try {
       const form = new FormData();
-      form.append('photo', file);
-      const res = await fetch(`${API_BASE}/external/request/${record.id}/transferred-registration`, {
+      form.append('photo', registrationFile);
+      const res = await fetch(`${API_BASE}/external/request/${registrationTarget.id}/transferred-registration`, {
         method: 'POST',
         body: form,
       });
       if (!res.ok) throw new Error();
-      const updated = await res.json();
-      message.success('등록증이 업로드되었습니다.');
-      setEditingBooking(prev => prev && prev.id === record.id ? { ...prev, transferredRegistrationUrl: updated.transferredRegistrationUrl } : prev);
+      message.success('등록증을 보냈습니다.');
+      setRegistrationTarget(null);
       fetchBookings();
     } catch {
       message.error('업로드 중 오류가 발생했습니다.');
@@ -910,20 +928,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
               보기
             </Button>
           )}
-          <Button size="small" type={record.transferredRegistrationUrl ? "default" : "primary"} loading={uploadingRegistration}>
-            <label className="cursor-pointer">
-              {record.transferredRegistrationUrl ? '다시 업로드' : '등록증 보내기'}
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={e => {
-                  const file = e.target.files?.[0];
-                  if (file) handleUploadTransferredRegistration(record, file);
-                  e.target.value = '';
-                }}
-              />
-            </label>
+          <Button size="small" type={record.transferredRegistrationUrl ? "default" : "primary"} onClick={() => openRegistrationModal(record)}>
+            {record.transferredRegistrationUrl ? '다시 보내기' : '등록증 보내기'}
           </Button>
         </div>
       ),
@@ -1425,6 +1431,60 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           <p className="text-[11px] text-gray-400">
             링크 없이 짧은 안내 SMS만 발송돼요 — 받는 사람이 앱에서 직접 &ldquo;진단 내역 보기 → 수정하기&rdquo;로 들어가서 확인해야 해요.
           </p>
+        </div>
+      </Modal>
+
+      {/* 명의이전 등록증 전송 모달 (애니원모터스 전용) */}
+      <Modal
+        title={`등록증 전송 — ${registrationTarget?.carNumber}`}
+        open={!!registrationTarget}
+        onOk={handleSendRegistration}
+        onCancel={() => setRegistrationTarget(null)}
+        confirmLoading={uploadingRegistration}
+        okText="보내기"
+        okButtonProps={{ disabled: !registrationFile }}
+        cancelText="취소"
+      >
+        <div className="py-2 space-y-3">
+          <div>
+            <label className="block text-xs font-bold text-gray-400 mb-1">이전된 자동차등록증 사진</label>
+            {registrationTarget?.transferredRegistrationUrl && !registrationPreview && (
+              <p className="text-xs text-gray-400 mb-2">
+                이미 등록된 사진이 있어요.{' '}
+                <a href={registrationTarget.transferredRegistrationUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline">
+                  기존 등록증 보기
+                </a>
+              </p>
+            )}
+            {registrationPreview ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={registrationPreview} alt="등록증 미리보기" className="w-full max-h-64 object-contain rounded border mb-2" />
+            ) : (
+              <div className="w-full h-32 flex items-center justify-center rounded border border-dashed text-gray-300 text-sm mb-2">
+                사진을 선택해주세요
+              </div>
+            )}
+            <label className="inline-block cursor-pointer">
+              <span className="px-3 py-1.5 rounded border text-sm hover:bg-gray-50">사진 선택</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) handleSelectRegistrationFile(file);
+                }}
+              />
+            </label>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-400 mb-1">전달할 내용</label>
+            <Input.TextArea
+              value={registrationMessage}
+              onChange={e => setRegistrationMessage(e.target.value)}
+              rows={2}
+            />
+          </div>
         </div>
       </Modal>
     </div>
