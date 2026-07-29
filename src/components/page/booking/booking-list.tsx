@@ -88,6 +88,7 @@ interface IBooking {
   assignedByAgentId?: string | null; // 이 건을 다른 평가사에게 지정 배정한 에이전트 id
   agentBonus?: number | null; // 에이전트 관리수당(원)
   agentBonusMemo?: string | null;
+  transferredRegistrationUrl?: string | null; // 발주사가 직접 업로드하는 명의이전된 등록증 사진
   // 오더 기록 필드
   contractWriter?: string;
   vehicleTransferred?: boolean;
@@ -289,6 +290,29 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       message.error('등록증 조회 실패');
     } finally {
       setLoadingRegId(null);
+    }
+  };
+
+  // --- 명의이전 등록증 직접 업로드(애니원모터스 전용) ---
+  const [uploadingRegistration, setUploadingRegistration] = useState(false);
+  const handleUploadTransferredRegistration = async (record: IBooking, file: File) => {
+    setUploadingRegistration(true);
+    try {
+      const form = new FormData();
+      form.append('photo', file);
+      const res = await fetch(`${API_BASE}/external/request/${record.id}/transferred-registration`, {
+        method: 'POST',
+        body: form,
+      });
+      if (!res.ok) throw new Error();
+      const updated = await res.json();
+      message.success('등록증이 업로드되었습니다.');
+      setEditingBooking(prev => prev && prev.id === record.id ? { ...prev, transferredRegistrationUrl: updated.transferredRegistrationUrl } : prev);
+      fetchBookings();
+    } catch {
+      message.error('업로드 중 오류가 발생했습니다.');
+    } finally {
+      setUploadingRegistration(false);
     }
   };
 
@@ -555,6 +579,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 고객 직접신청(구매동행) 건은 딜러 계약 진행 여부를 관리할 대상이 아니라서
   // 계약상태/매입가/구전 컬럼이 의미가 없음 — 이 화면에서만 숨긴다.
   const isDirectConsumerView = effectiveCompany === 'CARVIOR_INSPECTION';
+  // 명의이전 등록증 직접 업로드는 애니원모터스 전용 요청 기능
+  const isAnyoneMotors = effectiveCompany === 'anyone-motors';
 
   const columns: ColumnsType<IBooking> = [
     {
@@ -1205,6 +1231,35 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             >
               계약 확인 완료
             </Checkbox>
+
+            {/* 명의이전 등록증 직접 업로드 — 애니원모터스가 이전 완료 즉시 사진을 남길 수 있게 */}
+            {isAnyoneMotors && editingBooking && (
+              <div className="mt-4 pt-3 border-t">
+                <label className="block text-xs font-bold text-gray-400 mb-1">명의이전 등록증</label>
+                <div className="flex items-center gap-2">
+                  {editingBooking.transferredRegistrationUrl && (
+                    <Button size="small" onClick={() => window.open(editingBooking.transferredRegistrationUrl!, '_blank')}>
+                      업로드된 등록증 보기
+                    </Button>
+                  )}
+                  <Button size="small" loading={uploadingRegistration}>
+                    <label className="cursor-pointer">
+                      {editingBooking.transferredRegistrationUrl ? '다시 업로드' : '등록증 업로드'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUploadTransferredRegistration(editingBooking, file);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 진단사 정산 — 슈퍼관리자 전용 */}
