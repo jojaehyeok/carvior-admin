@@ -56,7 +56,11 @@ interface IDriver {
   name: string;
   status: string;
   phone?: string;
+  tier?: 'general' | 'certified' | 'agent';
 }
+
+// 등급별 기본 진단비(원) — 진단사 정산(앱 정산내역)의 기준 금액
+const BASE_FEE_BY_TIER: Record<string, number> = { general: 50000, certified: 60000, agent: 65000 };
 
 interface IBooking {
   id: number;
@@ -91,6 +95,11 @@ interface IBooking {
   oldDealerFee?: number | null; // 구전 금액 (만원)
   oldDealerFeeSeen?: boolean;
   customerContact?: string | null; // 계약팀이 직접 확인·기록하는 차주(고객) 연락처
+  // 진단사 정산(오지/준오지/긴급 추가금, 기타 비용, 클레임 차감) — 슈퍼관리자 전용
+  remoteBonus?: number | null;
+  extraFee?: number | null;
+  extraFeeMemo?: string | null;
+  claimDeduction?: number | null;
   isUrgent?: boolean; // 관리자가 "긴급·당일배정"으로 전체 브로드캐스트한 건
   // /inspection(검차 신청 결제) 계좌이체 건 전용 — 입금 확인 전까지 자동배정/브로드캐스트 보류됨
   paymentMethod?: string | null;
@@ -150,6 +159,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [tempPurchasePrice, setTempPurchasePrice] = useState<number | null>(null);
   const [tempOldDealerFee, setTempOldDealerFee] = useState<number | null>(null);
   const [tempCustomerContact, setTempCustomerContact] = useState("");
+
+  // 진단사 정산(오지/준오지/긴급 추가금, 기타 비용, 클레임 차감) — 슈퍼관리자 전용
+  const [tempRemoteBonus, setTempRemoteBonus] = useState<number | null>(null);
+  const [tempExtraFee, setTempExtraFee] = useState<number | null>(null);
+  const [tempExtraFeeMemo, setTempExtraFeeMemo] = useState("");
+  const [tempClaimDeduction, setTempClaimDeduction] = useState<number | null>(null);
 
   // 주소 수정 — 접수 페이지(/inspection 등)와 동일하게 카카오 키워드검색으로.
   // 평소엔 접혀있다가(현재 주소만 텍스트로 표시) "변경" 눌렀을 때만 검색창이 펼쳐지게 해서
@@ -324,6 +339,15 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setTempPurchasePrice(record.purchasePrice ?? null);
     setTempOldDealerFee(record.oldDealerFee ?? null);
     setTempCustomerContact(record.customerContact || "");
+    // 오지/준오지/긴급 추가금은 아직 값이 없으면(처음 여는 경우) 기본 제안값을 미리 채워준다 —
+    // 관리자가 그대로 저장하거나 수정할 수 있음. 이미 값이 저장돼 있으면 그 값 그대로 사용.
+    const defaultRemoteBonus =
+      (record.remoteTier === 'remote' ? 20000 : record.remoteTier === 'semi_remote' ? 10000 : 0) +
+      (record.isUrgent ? 10000 : 0);
+    setTempRemoteBonus(record.remoteBonus ?? (defaultRemoteBonus > 0 ? defaultRemoteBonus : null));
+    setTempExtraFee(record.extraFee ?? null);
+    setTempExtraFeeMemo(record.extraFeeMemo || "");
+    setTempClaimDeduction(record.claimDeduction ?? null);
     setIsModalOpen(true);
   };
 
@@ -355,6 +379,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           purchasePrice: tempPurchasePrice,
           oldDealerFee: tempOldDealerFee,
           customerContact: tempCustomerContact.trim() || null,
+          ...(isSuperAdminView ? {
+            remoteBonus: tempRemoteBonus,
+            extraFee: tempExtraFee,
+            extraFeeMemo: tempExtraFeeMemo.trim() || null,
+            claimDeduction: tempClaimDeduction,
+          } : {}),
           ...(isUnassigning ? { assignedDriverId: null, assignedDriverName: null } : {}),
         })
       });
@@ -1158,6 +1188,79 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
               계약 확인 완료
             </Checkbox>
           </div>
+
+          {/* 진단사 정산 — 슈퍼관리자 전용 */}
+          {isSuperAdminView && (
+            <div className="border-t pt-4">
+              <p className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">진단사 정산</p>
+
+              <div className="mb-3">
+                <label className="block text-xs font-bold text-gray-400 mb-1">
+                  오지/준오지/긴급 추가금 (원)
+                  {editingBooking?.remoteTier && (
+                    <span className="ml-1 text-[11px] font-normal text-red-500">
+                      {editingBooking.remoteTier === 'remote' ? '오지' : '준오지'}
+                      {editingBooking.isUrgent ? ' · 긴급' : ''} 건 — 기본값 제안됨
+                    </span>
+                  )}
+                </label>
+                <InputNumber
+                  className="w-full"
+                  value={tempRemoteBonus}
+                  onChange={val => setTempRemoteBonus(val)}
+                  placeholder="예: 20000"
+                  min={0}
+                  step={1000}
+                  formatter={val => val ? `${Number(val).toLocaleString()}` : ''}
+                />
+              </div>
+
+              <div className="mb-3">
+                <label className="block text-xs font-bold text-gray-400 mb-1">기타 비용/인센티브 (원)</label>
+                <InputNumber
+                  className="w-full mb-2"
+                  value={tempExtraFee}
+                  onChange={val => setTempExtraFee(val)}
+                  placeholder="예: 10000 (유류비, 톨비, 고생하신 것에 대한 성과급 등)"
+                  min={0}
+                  step={1000}
+                  formatter={val => val ? `${Number(val).toLocaleString()}` : ''}
+                />
+                <Input
+                  value={tempExtraFeeMemo}
+                  onChange={e => setTempExtraFeeMemo(e.target.value)}
+                  placeholder="무엇에 대한 금액인지 메모 (예: 왕복 톨비, 고생하셔서 인센티브 등)"
+                />
+              </div>
+
+              <div className="mb-3">
+                <label className="block text-xs font-bold text-gray-400 mb-1">클레임 차감액 (원)</label>
+                <InputNumber
+                  className="w-full"
+                  value={tempClaimDeduction}
+                  onChange={val => setTempClaimDeduction(val)}
+                  placeholder="예: 30000"
+                  min={0}
+                  step={1000}
+                  formatter={val => val ? `${Number(val).toLocaleString()}` : ''}
+                />
+              </div>
+
+              {(() => {
+                const assignedDriver = drivers.find(d => String(d.id) === String(editingBooking?.assignedDriverId));
+                const baseFee = assignedDriver?.tier ? BASE_FEE_BY_TIER[assignedDriver.tier] : null;
+                if (baseFee == null) return null;
+                const total = baseFee + (tempRemoteBonus || 0) + (tempExtraFee || 0) - (tempClaimDeduction || 0);
+                return (
+                  <p className="text-xs text-gray-500 bg-gray-50 rounded px-3 py-2">
+                    기본 진단비 {baseFee.toLocaleString()}원 + 추가금 {(tempRemoteBonus || 0).toLocaleString()}원
+                    + 기타 {(tempExtraFee || 0).toLocaleString()}원 − 클레임 {(tempClaimDeduction || 0).toLocaleString()}원
+                    {' = '}<b className="text-gray-800">총 {total.toLocaleString()}원</b>
+                  </p>
+                );
+              })()}
+            </div>
+          )}
 
           {/* 관리자 메모 */}
           <div>
