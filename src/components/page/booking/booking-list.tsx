@@ -923,11 +923,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                     <Button onClick={searchPlace} loading={searchingPlace}>검색</Button>
                     <Button onClick={() => { setIsEditingAddress(false); setShowPlaceResults(false); }}>취소</Button>
                   </div>
-                  {showPlaceResults && (
+                  {showPlaceResults && placeResults.length > 0 && (
                     <div className="mt-2 border rounded overflow-hidden divide-y max-h-48 overflow-y-auto">
-                      {placeResults.length === 0 ? (
-                        <p className="text-xs text-gray-400 px-3 py-2">검색 결과가 없습니다.</p>
-                      ) : placeResults.map((p, i) => (
+                      {placeResults.map((p, i) => (
                         <button
                           key={i}
                           type="button"
@@ -939,6 +937,33 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                         </button>
                       ))}
                     </div>
+                  )}
+                  {/* 시골 지번주소 등 카카오 검색에 안 잡히는 주소를 위한 폴백 —
+                      /inspection 고객 페이지와 동일하게 입력한 텍스트를 그대로 등록 가능 */}
+                  {showPlaceResults && placeQuery.trim() && (
+                    placeResults.length === 0 ? (
+                      <div className="mt-2 bg-purple-50 border border-purple-100 rounded p-3">
+                        <p className="text-xs text-purple-700 mb-2">
+                          검색 결과가 없어요. 시골 지번주소 등은 검색에 안 잡힐 수 있어서, 입력하신 주소를 그대로 등록할 수 있어요.
+                        </p>
+                        <Button
+                          type="primary"
+                          size="small"
+                          block
+                          onClick={() => selectPlace({ name: '', address: placeQuery.trim() })}
+                        >
+                          &ldquo;{placeQuery.trim()}&rdquo; 그대로 등록하기
+                        </Button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => selectPlace({ name: '', address: placeQuery.trim() })}
+                        className="w-full text-left px-3 py-2 mt-2 border border-dashed rounded text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                      >
+                        검색결과에 없나요? <span className="font-bold text-gray-900">&ldquo;{placeQuery.trim()}&rdquo;</span> 그대로 등록하기
+                      </button>
+                    )
                   )}
                 </div>
               )}
