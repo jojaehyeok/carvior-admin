@@ -504,6 +504,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 스마트옥션 매물 등록/수정은 슈퍼 관리자 전용 기능 — 발주사 계정에서 보는
   // 회사 스코프 목록(companyFilter가 있는 경우)에서는 컬럼 자체를 숨긴다.
   const isSuperAdminView = !effectiveCompany;
+  // 고객 직접신청(구매동행) 건은 딜러 계약 진행 여부를 관리할 대상이 아니라서
+  // 계약상태/매입가/구전 컬럼이 의미가 없음 — 이 화면에서만 숨긴다.
+  const isDirectConsumerView = effectiveCompany === 'CARVIOR_INSPECTION';
 
   const columns: ColumnsType<IBooking> = [
     {
@@ -660,10 +663,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         </Tag>
       ),
     },
-    {
+    // 계약상태/매입가/구전은 딜러 계약 진행을 관리하기 위한 컬럼 — 고객 직접신청(구매동행)
+    // 건은 딜러 계약 자체가 없어서 의미가 없으므로 이 화면에서는 숨긴다.
+    ...(!isDirectConsumerView ? [{
       title: "계약상태",
       dataIndex: "contractConfirmed",
-      align: "center",
+      align: "center" as const,
       render: (value: boolean, record: IBooking) => (
         <Tag
           color={value ? "blue" : "red"}
@@ -677,7 +682,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     {
       title: "매입가",
       dataIndex: "purchasePrice",
-      align: "center",
+      align: "center" as const,
       render: (value: number | null, record: IBooking) => {
         if (value == null) return <span className="text-gray-300">-</span>;
         const done = record.purchasePriceSeen ?? true;
@@ -698,7 +703,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     {
       title: "구전",
       dataIndex: "oldDealerFee",
-      align: "center",
+      align: "center" as const,
       render: (value: number | null, record: IBooking) => {
         if (value == null) return <span className="text-gray-300">-</span>;
         const done = record.oldDealerFeeSeen ?? true;
@@ -715,7 +720,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           </div>
         );
       },
-    },
+    }] : []),
     {
       title: "상태",
       dataIndex: "status",
