@@ -329,7 +329,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 실제 전송 전, 선택한 대상만큼 비용이 나간다는 걸 한 번 더 확인시키고
   // 여기서 취소하면(Cancel) 업로드 자체가 실행되지 않도록 함
   const confirmSendRegistration = () => {
-    if (!registrationTarget || !registrationFile) return;
+    if (!registrationTarget || (!registrationFile && !registrationTarget.transferredRegistrationUrl)) return;
     const count = (sendToDealer ? 1 : 0) + (sendToCustomer ? 1 : 0);
     const content = count === 0
       ? 'SMS 발송 없이 사진만 교체합니다. 계속하시겠습니까?'
@@ -344,11 +344,11 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   };
 
   const handleSendRegistration = async () => {
-    if (!registrationTarget || !registrationFile) return;
+    if (!registrationTarget || (!registrationFile && !registrationTarget.transferredRegistrationUrl)) return;
     setUploadingRegistration(true);
     try {
       const form = new FormData();
-      form.append('photo', registrationFile);
+      if (registrationFile) form.append('photo', registrationFile);
       form.append('message', registrationMessage);
       form.append('sendToDealer', String(sendToDealer));
       form.append('sendToCustomer', String(sendToCustomer));
@@ -1477,7 +1477,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         onCancel={() => setRegistrationTarget(null)}
         confirmLoading={uploadingRegistration}
         okText={sendToDealer || sendToCustomer ? "보내기" : "교체"}
-        okButtonProps={{ disabled: !registrationFile }}
+        okButtonProps={{ disabled: !registrationFile && !registrationTarget?.transferredRegistrationUrl }}
         cancelText="취소"
       >
         <div className="py-2 space-y-3">
