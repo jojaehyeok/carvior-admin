@@ -78,6 +78,7 @@ interface IBooking {
   assignedDriverName?: string | null;
   cancelledByDriverAt?: string | null; // 진단사 취소로 재대기된 시각
   driverSeenAt?: string | null; // 배정된 진단사가 앱에서 이 건 상세를 처음 연 시각(자동배정 놓침 확인용)
+  reviewRequestedAt?: string | null; // 리뷰 요청 SMS 발송 시각(건당 1회만 발송 가능)
   // 오더 기록 필드
   contractWriter?: string;
   vehicleTransferred?: boolean;
@@ -414,18 +415,21 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 계약상태를 상세 모달까지 안 들어가고 목록에서 태그 클릭 한 번으로 바로 토글 —
   // 체크박스 찾으러 상세 들어가는 게 불편하다는 피드백으로 추가. 즉시 반응하도록
   // 먼저 화면(data)을 낙관적으로 바꾸고, 실패하면 목록을 다시 불러와 원상복구한다.
-  // 구매동행(카비어 검차) 완료 고객에게 리뷰 요청 SMS 재발송
+  // 구매동행(카비어 검차) 완료 고객에게 리뷰 요청 SMS 발송 — 건당 1회만 가능(서버에서도 중복 차단)
   const [requestingReviewId, setRequestingReviewId] = useState<number | null>(null);
   const handleRequestReview = async (record: IBooking) => {
     setRequestingReviewId(record.id);
     try {
-      await fetch(`${API_BASE}/external/inspection/${record.id}/request-review`, {
+      const res = await fetch(`${API_BASE}/external/inspection/${record.id}/request-review`, {
         method: 'POST',
         headers: INTERNAL_HEADERS,
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || '리뷰 요청 발송 실패');
       message.success("리뷰 요청 문자를 보냈습니다.");
-    } catch {
-      message.error("리뷰 요청 발송 중 오류 발생");
+      fetchBookings();
+    } catch (e: any) {
+      message.error(e.message || "리뷰 요청 발송 중 오류 발생");
     } finally {
       setRequestingReviewId(null);
     }
@@ -754,14 +758,14 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           >
             {isReportEditExpired(record) ? '수정마감' : '리포트 수정'}
           </Button>
-          {record.source === 'CARVIOR_INSPECTION' && (
+          {isSuperAdminView && record.source === 'CARVIOR_INSPECTION' && (
             <Button
               size="small"
-              disabled={record.status !== 'COMPLETED' || !record.carHash}
+              disabled={record.status !== 'COMPLETED' || !record.carHash || !!record.reviewRequestedAt}
               loading={requestingReviewId === record.id}
               onClick={() => handleRequestReview(record)}
             >
-              리뷰 요청
+              {record.reviewRequestedAt ? '요청 완료' : '리뷰 요청'}
             </Button>
           )}
         </div>
