@@ -359,7 +359,15 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         body: form,
       });
       if (!res.ok) throw new Error();
-      message.success(sendToDealer || sendToCustomer ? '등록증을 보냈습니다.' : '사진을 교체했습니다.');
+      const data = await res.json();
+      const failures: string[] = data?.sendFailures || [];
+      if (!sendToDealer && !sendToCustomer) {
+        message.success('사진을 교체했습니다.');
+      } else if (failures.length > 0) {
+        message.error(`일부 전송에 실패했습니다 — ${failures.join(' / ')}`);
+      } else {
+        message.success('등록증을 보냈습니다.');
+      }
       setRegistrationTarget(null);
       fetchBookings();
     } catch {
