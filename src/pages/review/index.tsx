@@ -42,6 +42,25 @@ interface IAssignLogBooking {
   createdAt: string;
 }
 
+interface ISmsBillingLog {
+  id: number;
+  source: string;
+  bookingId: number;
+  carNumber: string;
+  purpose: string;
+  amount: number;
+  createdAt: string;
+}
+
+interface ISmsBillingSummaryEntry {
+  source: string;
+  count: number;
+  totalAmount: number;
+}
+
+const INTERNAL_KEY = process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? '';
+const INTERNAL_HEADERS = { 'x-internal-key': INTERNAL_KEY };
+
 const ratingColor = (r: number) =>
   r >= 4 ? "green" : r === 3 ? "orange" : "red";
 
@@ -102,7 +121,25 @@ const ReviewListPage: IDefaultLayoutPage = () => {
     finally { setAssignLoading(false); }
   }, [API, company]);
 
-  useEffect(() => { fetchReviews(); fetchCancelLogs(); fetchAssignLogs(); }, [fetchReviews, fetchCancelLogs, fetchAssignLogs]);
+  // --- SMS 과금(수정 요청) — 회사별 누적, 실제 결제/차감은 없고 수동 청구 참고용 ---
+  const [billingLogs, setBillingLogs] = useState<ISmsBillingLog[]>([]);
+  const [billingSummary, setBillingSummary] = useState<ISmsBillingSummaryEntry[]>([]);
+  const [billingLoading, setBillingLoading] = useState(false);
+
+  const fetchBillingSummary = useCallback(async () => {
+    setBillingLoading(true);
+    try {
+      const url = new URL(`${API}/external/inspection/sms-billing-summary`);
+      if (company) url.searchParams.set('source', company);
+      const res = await fetch(url.toString(), { headers: INTERNAL_HEADERS });
+      const json = await res.json();
+      setBillingLogs(Array.isArray(json?.logs) ? json.logs : []);
+      setBillingSummary(Array.isArray(json?.summary) ? json.summary : []);
+    } catch { /* ignore */ }
+    finally { setBillingLoading(false); }
+  }, [API, company]);
+
+  useEffect(() => { fetchReviews(); fetchCancelLogs(); fetchAssignLogs(); fetchBillingSummary(); }, [fetchReviews, fetchCancelLogs, fetchAssignLogs, fetchBillingSummary]);
 
   const todayReviews = reviews.filter(r => dayjs(r.createdAt).isSame(dayjs(), 'day'));
   const avgAll = reviews.length
@@ -195,6 +232,29 @@ const ReviewListPage: IDefaultLayoutPage = () => {
     },
   ];
 
+  const billingColumns: ColumnsType<ISmsBillingLog> = [
+    { title: "발주사", dataIndex: "source", render: (v) => v || "-" },
+    { title: "차량번호", dataIndex: "carNumber", render: (v) => v || "-" },
+    {
+      title: "사유",
+      dataIndex: "purpose",
+      render: (v) => v === "request-update" ? "진단사/매니저 수정 요청" : v,
+    },
+    {
+      title: "과금액",
+      dataIndex: "amount",
+      align: "right",
+      render: (v) => `${Number(v).toLocaleString()}원`,
+    },
+    {
+      title: "발생일시",
+      dataIndex: "createdAt",
+      width: 140,
+      render: (d) => dayjs(d).format("MM-DD HH:mm"),
+    },
+  ];
+  const billingTotal = billingSummary.reduce((s, e) => s + e.totalAmount, 0);
+
   return (
     <div>
       <Tabs
@@ -285,6 +345,52 @@ const ReviewListPage: IDefaultLayoutPage = () => {
                   loading={assignLoading}
                   rowKey="id"
                 />
+              </div>
+            ),
+          },
+          {
+            key: "smsBilling",
+            label: "SMS 과금",
+            children: (
+              <div>
+                <Row gutter={16} className="mb-6">
+                  {billingSummary.map((entry) => (
+                    <Col span={6} key={entry.source}>
+                      <Card>
+                        <Statistic
+                          title={entry.source}
+                          value={entry.totalAmount}
+                          suffix="원"
+                          valueStyle={{ color: '#cf6800' }}
+                        />
+                        <p className="text-xs text-slate-400 mt-1">{entry.count}건</p>
+                      </Card>
+                    </Col>
+                  ))}
+                  {!company && (
+                    <Col span={6}>
+                      <Card>
+                        <Statistic title="전체 합계" value={billingTotal} suffix="원" valueStyle={{ color: '#cf1322' }} />
+                      </Card>
+                    </Col>
+                  )}
+                </Row>
+
+                <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-sm text-slate-500">
+                      총 {billingLogs.length}건 · 진단사/매니저 수정 요청 SMS 건당 50원(원가 13원, 마진 참고용) · 실제 청구는 수동
+                    </span>
+                    <Button icon={<RefreshCw size={14} className={billingLoading ? "animate-spin" : ""} />}
+                      onClick={fetchBillingSummary} loading={billingLoading}>새로고침</Button>
+                  </div>
+                  <DefaultTable<ISmsBillingLog>
+                    columns={billingColumns}
+                    dataSource={billingLogs}
+                    loading={billingLoading}
+                    rowKey="id"
+                  />
+                </div>
               </div>
             ),
           },
