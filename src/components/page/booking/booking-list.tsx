@@ -963,9 +963,13 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         return (
           <div className="flex flex-col items-center gap-1">
             {record.transferredRegistrationUrl && (
-              <Button size="small" onClick={() => window.open(record.transferredRegistrationUrl!, '_blank')}>
-                보기
-              </Button>
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={record.transferredRegistrationUrl}
+                alt="이전 등록증"
+                className="w-16 h-16 object-cover rounded border cursor-pointer"
+                onClick={() => window.open(record.transferredRegistrationUrl!, '_blank')}
+              />
             )}
             {bothSent ? (
               <Tag color="green">전송완료</Tag>
