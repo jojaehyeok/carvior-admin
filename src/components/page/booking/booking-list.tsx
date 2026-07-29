@@ -765,7 +765,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           >
             {isReportEditExpired(record) ? '수정마감' : '리포트 수정'}
           </Button>
-          {isSuperAdminView && record.source === 'CARVIOR_INSPECTION' && (
+          {record.source === 'CARVIOR_INSPECTION' && (
             <Button
               size="small"
               disabled={record.status !== 'COMPLETED' || !record.carHash || !!record.reviewRequestedAt}
