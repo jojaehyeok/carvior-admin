@@ -85,6 +85,9 @@ interface IBooking {
   reviewRequestedAt?: string | null; // 리뷰 요청 SMS 발송 시각(건당 1회만 발송 가능)
   assignedAt?: string | null; // 현재 배정이 이뤄진 시각
   assignSource?: 'auto' | 'manual' | 'agent' | null; // 현재 배정 경로
+  assignedByAgentId?: string | null; // 이 건을 다른 평가사에게 지정 배정한 에이전트 id
+  agentBonus?: number | null; // 에이전트 관리수당(원)
+  agentBonusMemo?: string | null;
   // 오더 기록 필드
   contractWriter?: string;
   vehicleTransferred?: boolean;
@@ -165,6 +168,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [tempExtraFee, setTempExtraFee] = useState<number | null>(null);
   const [tempExtraFeeMemo, setTempExtraFeeMemo] = useState("");
   const [tempClaimDeduction, setTempClaimDeduction] = useState<number | null>(null);
+  const [tempAgentBonus, setTempAgentBonus] = useState<number | null>(null);
+  const [tempAgentBonusMemo, setTempAgentBonusMemo] = useState("");
 
   // 주소 수정 — 접수 페이지(/inspection 등)와 동일하게 카카오 키워드검색으로.
   // 평소엔 접혀있다가(현재 주소만 텍스트로 표시) "변경" 눌렀을 때만 검색창이 펼쳐지게 해서
@@ -348,6 +353,17 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setTempExtraFee(record.extraFee ?? null);
     setTempExtraFeeMemo(record.extraFeeMemo || "");
     setTempClaimDeduction(record.claimDeduction ?? null);
+    // 에이전트 관리수당 — 에이전트가 지정 배정한 건(assignedByAgentId)만 해당. 배정 대상
+    // 평가사 등급 기준 기본 제안값(일반 +1만원/진단평가사 +5천원)을 채워주되, 라운딩 이관
+    // 등 등급으로 자동 판단이 안 되는 경우는 관리자가 직접 금액/메모를 입력한다.
+    if (record.assignedByAgentId) {
+      const assignedTier = drivers.find(d => String(d.id) === String(record.assignedDriverId))?.tier;
+      const defaultAgentBonus = assignedTier === 'general' ? 10000 : assignedTier === 'certified' ? 5000 : null;
+      setTempAgentBonus(record.agentBonus ?? defaultAgentBonus);
+    } else {
+      setTempAgentBonus(record.agentBonus ?? null);
+    }
+    setTempAgentBonusMemo(record.agentBonusMemo || "");
     setIsModalOpen(true);
   };
 
@@ -384,6 +400,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             extraFee: tempExtraFee,
             extraFeeMemo: tempExtraFeeMemo.trim() || null,
             claimDeduction: tempClaimDeduction,
+            agentBonus: tempAgentBonus,
+            agentBonusMemo: tempAgentBonusMemo.trim() || null,
           } : {}),
           ...(isUnassigning ? { assignedDriverId: null, assignedDriverName: null } : {}),
         })
@@ -1245,6 +1263,28 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                   formatter={val => val ? `${Number(val).toLocaleString()}` : ''}
                 />
               </div>
+
+              {editingBooking?.assignedByAgentId && (
+                <div className="mb-3 bg-violet-50 border border-violet-100 rounded p-3">
+                  <label className="block text-xs font-bold text-violet-500 mb-1">
+                    에이전트 관리수당 (원) — 배정한 에이전트 본인 몫, 실제 진단자 정산과 별개
+                  </label>
+                  <InputNumber
+                    className="w-full mb-2"
+                    value={tempAgentBonus}
+                    onChange={val => setTempAgentBonus(val)}
+                    placeholder="예: 10000 (일반 배정 +1만/진단평가사 배정 +5천 기본 제안)"
+                    min={0}
+                    step={1000}
+                    formatter={val => val ? `${Number(val).toLocaleString()}` : ''}
+                  />
+                  <Input
+                    value={tempAgentBonusMemo}
+                    onChange={e => setTempAgentBonusMemo(e.target.value)}
+                    placeholder="메모 (예: 일반평가사 배정, 라운딩 이관 등)"
+                  />
+                </div>
+              )}
 
               {(() => {
                 const assignedDriver = drivers.find(d => String(d.id) === String(editingBooking?.assignedDriverId));
