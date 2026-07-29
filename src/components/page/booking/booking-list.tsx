@@ -79,6 +79,8 @@ interface IBooking {
   cancelledByDriverAt?: string | null; // 진단사 취소로 재대기된 시각
   driverSeenAt?: string | null; // 배정된 진단사가 앱에서 이 건 상세를 처음 연 시각(자동배정 놓침 확인용)
   reviewRequestedAt?: string | null; // 리뷰 요청 SMS 발송 시각(건당 1회만 발송 가능)
+  assignedAt?: string | null; // 현재 배정이 이뤄진 시각
+  assignSource?: 'auto' | 'manual' | 'agent' | null; // 현재 배정 경로
   // 오더 기록 필드
   contractWriter?: string;
   vehicleTransferred?: boolean;
@@ -624,11 +626,16 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             <Tag color="volcano" className="text-xs">🔄 재대기중</Tag>
           )}
           {/* 자동배정 알림톡을 놓칠 수 있어서 추가한 확인 여부 표시 — 배정 상태(ASSIGNED)일 때만
-              의미가 있음(완료되면 어차피 이미 확인하고 진단까지 마친 것이므로 표시하지 않음) */}
+              의미가 있음(완료되면 어차피 이미 확인하고 진단까지 마친 것이므로 표시하지 않음).
+              수동배정은 관리자가 이미 진단사에게 직접 안내한 것으로 보고 배정 시각을
+              그대로 "확인" 시각으로 표시 — driverSeenAt(앱에서 연락하기/시간변경 등 반응)은
+              자동배정 건에만 의미가 있음. */}
           {value && record.status === 'ASSIGNED' && (
-            record.driverSeenAt
-              ? <Tag color="green" className="text-xs">✅ 확인 {dayjs(record.driverSeenAt).format('MM/DD HH:mm')}</Tag>
-              : <Tag color="red" className="text-xs">👀 미확인</Tag>
+            record.assignSource === 'manual'
+              ? <Tag color="green" className="text-xs">✅ 확인 {record.assignedAt ? dayjs(record.assignedAt).format('MM/DD HH:mm') : ''}</Tag>
+              : record.driverSeenAt
+                ? <Tag color="green" className="text-xs">✅ 확인 {dayjs(record.driverSeenAt).format('MM/DD HH:mm')}</Tag>
+                : <Tag color="red" className="text-xs">👀 미확인</Tag>
           )}
         </div>
       ),
