@@ -749,6 +749,44 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       render: (value?: string | null) => formatPhone(value) || <span className="text-gray-300">-</span>,
     },
     {
+      title: "진단 리포트",
+      key: "report",
+      width: 200,
+      align: "center",
+      render: (_, record) => (
+        <div className="flex items-center justify-center gap-1.5">
+          <Button
+            size="small"
+            type="primary"
+            ghost
+            disabled={record.status !== 'COMPLETED' || !record.carHash}
+            icon={<Eye size={14} />}
+            onClick={() => window.open(`/report/${record.carHash}`, '_blank')}
+          >
+            리포트 보기
+          </Button>
+          <Button
+            size="small"
+            disabled={record.status !== 'COMPLETED' || isReportEditExpired(record)}
+            icon={<PenSquare size={14} />}
+            onClick={() => router.push(`/report/edit?bookingId=${record.id}`)}
+          >
+            {isReportEditExpired(record) ? '수정마감' : '리포트 수정'}
+          </Button>
+          {record.source === 'CARVIOR_INSPECTION' && (
+            <Button
+              size="small"
+              disabled={record.status !== 'COMPLETED' || !record.carHash || !!record.reviewRequestedAt}
+              loading={requestingReviewId === record.id}
+              onClick={() => handleRequestReview(record)}
+            >
+              {record.reviewRequestedAt ? '요청 완료' : '리뷰 요청'}
+            </Button>
+          )}
+        </div>
+      ),
+    },
+    {
       title: "출처",
       dataIndex: "source",
       align: "center",
@@ -900,44 +938,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       sorter: (a, b) => (a.preferredDateTime || '').replace('T', ' ').localeCompare((b.preferredDateTime || '').replace('T', ' ')),
       defaultSortOrder: "ascend",
       render: (value: string | null) => value ? <span className="text-red-500 font-bold">{value}</span> : <span className="text-gray-300">-</span>,
-    },
-    {
-      title: "진단 리포트",
-      key: "report",
-      width: 200,
-      align: "center",
-      render: (_, record) => (
-        <div className="flex items-center justify-center gap-1.5">
-          <Button
-            size="small"
-            type="primary"
-            ghost
-            disabled={record.status !== 'COMPLETED' || !record.carHash}
-            icon={<Eye size={14} />}
-            onClick={() => window.open(`/report/${record.carHash}`, '_blank')}
-          >
-            리포트 보기
-          </Button>
-          <Button
-            size="small"
-            disabled={record.status !== 'COMPLETED' || isReportEditExpired(record)}
-            icon={<PenSquare size={14} />}
-            onClick={() => router.push(`/report/edit?bookingId=${record.id}`)}
-          >
-            {isReportEditExpired(record) ? '수정마감' : '리포트 수정'}
-          </Button>
-          {record.source === 'CARVIOR_INSPECTION' && (
-            <Button
-              size="small"
-              disabled={record.status !== 'COMPLETED' || !record.carHash || !!record.reviewRequestedAt}
-              loading={requestingReviewId === record.id}
-              onClick={() => handleRequestReview(record)}
-            >
-              {record.reviewRequestedAt ? '요청 완료' : '리뷰 요청'}
-            </Button>
-          )}
-        </div>
-      ),
     },
     {
       title: "등록증",
