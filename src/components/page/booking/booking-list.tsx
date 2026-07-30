@@ -132,6 +132,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [drivers, setDrivers] = useState<IDriver[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [reportOnly, setReportOnly] = useState(false);
+  const [purchasePriceOnly, setPurchasePriceOnly] = useState(false);
   // bookingId → storeItemId (스마트옥션 매물로 이미 등록됐는지 확인용)
   const [storeItemMap, setStoreItemMap] = useState<Record<number, string>>({});
 
@@ -636,9 +637,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       // 리포트 있는 건만 보기 토글 — 진단완료 + carHash(리포트 해시)가 실제로 있는 건만
       if (reportOnly && !(item.status === 'COMPLETED' && item.carHash)) return false;
 
+      // 매입가 적혀있는 건만 보기 토글
+      if (purchasePriceOnly && item.purchasePrice == null) return false;
+
       return true;
     });
-  }, [data, router.query, reportOnly]);
+  }, [data, router.query, reportOnly, purchasePriceOnly]);
 
   // 스마트옥션 매물 등록/수정은 슈퍼 관리자 전용 기능 — 발주사 계정에서 보는
   // 회사 스코프 목록(companyFilter가 있는 경우)에서는 컬럼 자체를 숨긴다.
@@ -1021,6 +1025,10 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
             <Switch size="small" checked={reportOnly} onChange={setReportOnly} />
             리포트 있는 건만
+          </label>
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <Switch size="small" checked={purchasePriceOnly} onChange={setPurchasePriceOnly} />
+            매입가 적힌 건만
           </label>
         </div>
         <Button type="primary" icon={<RefreshCw size={14} />} onClick={fetchBookings} loading={isLoading}>새로고침</Button>
