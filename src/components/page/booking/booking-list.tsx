@@ -957,13 +957,16 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       width: 150,
       align: "center" as const,
       render: (_: unknown, record: IBooking) => {
-        const bothSent = !!record.registrationSentToDealerAt && !!record.registrationSentToCustomerAt;
-        return bothSent ? (
-          <Tag color="green" className="cursor-pointer" onClick={() => openRegistrationModal(record)}>
-            전송완료
-          </Tag>
-        ) : (
-          <Button size="small" type="primary" onClick={() => openRegistrationModal(record)}>
+        // 빨강: 등록증 미업로드 / 초록: 등록증은 올렸지만 아직 아무도 전송 안 함 / 파랑: 딜러·고객 중 하나라도 전송됨
+        const anySent = !!record.registrationSentToDealerAt || !!record.registrationSentToCustomerAt;
+        const hasPhoto = !!record.transferredRegistrationUrl;
+        const color = anySent ? '#1677ff' : hasPhoto ? '#52c41a' : '#ff4d4f';
+        return (
+          <Button
+            size="small"
+            style={{ backgroundColor: color, borderColor: color, color: '#fff' }}
+            onClick={() => openRegistrationModal(record)}
+          >
             등록증 보내기
           </Button>
         );
