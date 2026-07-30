@@ -465,7 +465,7 @@ const ReviewListPage: IDefaultLayoutPage = () => {
                 <tr className="bg-gray-50 text-gray-500">
                   <th className="p-2 text-left">진단사</th>
                   <th className="p-2 text-right">거리</th>
-                  <th className="p-2 text-right">오늘 배정건수</th>
+                  <th className="p-2 text-right">방문예정일 배정건수</th>
                   <th className="p-2 text-center">비고</th>
                 </tr>
               </thead>
