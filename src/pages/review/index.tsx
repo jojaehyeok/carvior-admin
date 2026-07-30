@@ -477,7 +477,12 @@ const ReviewListPage: IDefaultLayoutPage = () => {
                   >
                     <td className="p-2">{c.driverName}</td>
                     <td className="p-2 text-right">{c.km != null ? `${c.km}km` : '-'}</td>
-                    <td className="p-2 text-right">{c.todayCount}건</td>
+                    <td className="p-2 text-right">
+                      {c.todayCount}건
+                      {!!c.penaltyCount && (
+                        <span className="text-red-500 ml-1">(실{c.rawCount}+페널티{c.penaltyCount})</span>
+                      )}
+                    </td>
                     <td className="p-2 text-center">
                       {c.driverId === assignLogTarget.autoAssignLog?.chosenDriverId
                         ? <Tag color="purple">선정</Tag>
