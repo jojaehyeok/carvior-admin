@@ -717,13 +717,13 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       align: "center",
       render: (value?: string) => formatPhone(value) || <span className="text-gray-300">-</span>,
     },
-    {
+    ...(isDirectConsumerView ? [{
       title: "매물링크",
       dataIndex: "listingUrl",
-      align: "center",
+      align: "center" as const,
       render: (value?: string | null) =>
         value ? <a href={value} target="_blank" rel="noreferrer" className="text-blue-600 underline">보기</a> : <span className="text-gray-300">-</span>,
-    },
+    }] : []),
     {
       title: "차주이름",
       dataIndex: "carOwner",
