@@ -787,12 +787,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       ),
     },
     {
-      title: "출처",
-      dataIndex: "source",
-      align: "center",
-      render: (value: string) => value ? <Tag>{value}</Tag> : <span className="text-gray-300">-</span>,
-    },
-    {
       title: "배정 진단사",
       dataIndex: "assignedDriverName",
       align: "center",
@@ -938,6 +932,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       sorter: (a, b) => (a.preferredDateTime || '').replace('T', ' ').localeCompare((b.preferredDateTime || '').replace('T', ' ')),
       defaultSortOrder: "ascend",
       render: (value: string | null) => value ? <span className="text-red-500 font-bold">{value}</span> : <span className="text-gray-300">-</span>,
+    },
+    {
+      title: "출처",
+      dataIndex: "source",
+      align: "center",
+      render: (value: string) => value ? <Tag>{value}</Tag> : <span className="text-gray-300">-</span>,
     },
     {
       title: "등록증",
