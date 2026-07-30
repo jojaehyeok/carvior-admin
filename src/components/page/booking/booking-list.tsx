@@ -9,7 +9,7 @@ import dayjs from "dayjs";
 import { Eye, FileText, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const CAVIOR_BASE = (process.env.NEXT_PUBLIC_API_ENDPOINT || 'https://carvior.store/api/v1').replace('/api/v1', '');
 const INTERNAL_KEY = process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? '';
@@ -307,6 +307,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [registrationTarget, setRegistrationTarget] = useState<IBooking | null>(null);
   const [registrationFile, setRegistrationFile] = useState<File | null>(null);
   const [registrationPreview, setRegistrationPreview] = useState<string | null>(null);
+  const [isDraggingRegistration, setIsDraggingRegistration] = useState(false);
+  const registrationFileInputRef = useRef<HTMLInputElement>(null);
   const [registrationMessage, setRegistrationMessage] = useState("이전된 차량등록증을 보내드립니다.");
   const [sendToDealer, setSendToDealer] = useState(false);
   const [sendToCustomer, setSendToCustomer] = useState(false);
@@ -1572,29 +1574,42 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           </div>
           <div>
             <label className="block text-xs font-bold text-gray-400 mb-1">이전된 자동차등록증 사진</label>
-            {registrationPreview ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={registrationPreview} alt="등록증 미리보기" className="w-full max-h-64 object-contain rounded border mb-2" />
-            ) : registrationTarget?.transferredRegistrationUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={registrationTarget.transferredRegistrationUrl} alt="보낸 등록증" className="w-full max-h-64 object-contain rounded border mb-2" />
-            ) : (
-              <div className="w-full h-32 flex items-center justify-center rounded border border-dashed text-gray-300 text-sm mb-2">
-                사진을 선택해주세요
-              </div>
-            )}
-            <label className="inline-block cursor-pointer">
-              <span className="px-3 py-1.5 rounded border text-sm hover:bg-gray-50">사진 선택</span>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={e => {
-                  const file = e.target.files?.[0];
-                  if (file) handleSelectRegistrationFile(file);
-                }}
-              />
-            </label>
+            <div
+              onClick={() => registrationFileInputRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); setIsDraggingRegistration(true); }}
+              onDragLeave={() => setIsDraggingRegistration(false)}
+              onDrop={e => {
+                e.preventDefault();
+                setIsDraggingRegistration(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file) handleSelectRegistrationFile(file);
+              }}
+              className={`cursor-pointer rounded border border-dashed transition-colors mb-2 ${
+                isDraggingRegistration ? 'border-violet-500 bg-violet-50' : 'border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              {registrationPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={registrationPreview} alt="등록증 미리보기" className="w-full max-h-64 object-contain rounded" />
+              ) : registrationTarget?.transferredRegistrationUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={registrationTarget.transferredRegistrationUrl} alt="보낸 등록증" className="w-full max-h-64 object-contain rounded" />
+              ) : (
+                <div className="w-full h-32 flex items-center justify-center text-gray-300 text-sm">
+                  사진을 드래그하거나 클릭해서 선택하세요
+                </div>
+              )}
+            </div>
+            <input
+              ref={registrationFileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) handleSelectRegistrationFile(file);
+              }}
+            />
           </div>
           <div>
             <label className="block text-xs font-bold text-gray-400 mb-1">전달할 내용</label>
