@@ -95,7 +95,9 @@ interface IBooking {
   contractWriter?: string;
   vehicleTransferred?: boolean;
   contractConfirmed?: boolean; // 계약 상태 확인 여부(계약완료 확인/미확인)
-  purchasePrice?: number | null;
+  purchasePrice?: number | null; // 계약금+잔금 합계로 자동 계산됨
+  contractDeposit?: number | null; // 계약금 (만원)
+  contractBalance?: number | null; // 잔금 (만원)
   purchasePriceSeen?: boolean; // false면 새로 적힌 값(목록에서 빨간색), 클릭해서 확인하면 true
   isOldDealerPurchase?: boolean;
   oldDealerFee?: number | null; // 구전 금액 (만원)
@@ -162,7 +164,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [tempContractWriter, setTempContractWriter] = useState("");
   const [tempVehicleTransferred, setTempVehicleTransferred] = useState(false);
   const [tempContractConfirmed, setTempContractConfirmed] = useState(false);
-  const [tempPurchasePrice, setTempPurchasePrice] = useState<number | null>(null);
+  const [tempContractDeposit, setTempContractDeposit] = useState<number | null>(null);
+  const [tempContractBalance, setTempContractBalance] = useState<number | null>(null);
   const [tempOldDealerFee, setTempOldDealerFee] = useState<number | null>(null);
   const [tempCustomerContact, setTempCustomerContact] = useState("");
 
@@ -426,7 +429,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setTempContractWriter(record.contractWriter || "");
     setTempVehicleTransferred(record.vehicleTransferred ?? false);
     setTempContractConfirmed(record.contractConfirmed ?? false);
-    setTempPurchasePrice(record.purchasePrice ?? null);
+    setTempContractDeposit(record.contractDeposit ?? null);
+    setTempContractBalance(record.contractBalance ?? null);
     setTempOldDealerFee(record.oldDealerFee ?? null);
     setTempCustomerContact(record.customerContact || "");
     // 오지/준오지/긴급 추가금은 아직 값이 없으면(처음 여는 경우) 기본 제안값을 미리 채워준다 —
@@ -477,7 +481,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           contractWriter: tempContractWriter,
           vehicleTransferred: tempVehicleTransferred,
           contractConfirmed: tempContractConfirmed,
-          purchasePrice: tempPurchasePrice,
+          purchasePrice: (tempContractDeposit || 0) + (tempContractBalance || 0),
+          contractDeposit: tempContractDeposit,
+          contractBalance: tempContractBalance,
           oldDealerFee: tempOldDealerFee,
           customerContact: tempCustomerContact.trim() || null,
           ...(isSuperAdminView ? {
@@ -811,11 +817,22 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       dataIndex: "purchasePrice",
       align: "center" as const,
       render: (value: number | null, record: IBooking) => {
-        if (value == null) return <span className="text-gray-300">-</span>;
+        if (value == null) {
+          return (
+            <span className="text-gray-300 cursor-pointer underline" onClick={() => openModal(record)}>
+              -
+            </span>
+          );
+        }
         const done = record.purchasePriceSeen ?? true;
         return (
           <div className="flex flex-col items-center gap-1">
-            <span className={`font-bold ${done ? "text-blue-600" : "text-red-600"}`}>{value.toLocaleString()}만원</span>
+            <span
+              className={`font-bold cursor-pointer ${done ? "text-blue-600" : "text-red-600"}`}
+              onClick={() => openModal(record)}
+            >
+              {value.toLocaleString()}만원
+            </span>
             <Tag
               color={done ? "blue" : "red"}
               style={{ cursor: "pointer", fontWeight: 700 }}
@@ -832,7 +849,13 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       dataIndex: "oldDealerFee",
       align: "center" as const,
       render: (value: number | null, record: IBooking) => {
-        if (value == null) return <span className="text-gray-300">-</span>;
+        if (value == null) {
+          return (
+            <span className="text-gray-300 cursor-pointer underline" onClick={() => openModal(record)}>
+              -
+            </span>
+          );
+        }
         const done = record.oldDealerFeeSeen ?? true;
         return (
           <div className="flex flex-col items-center gap-1">
@@ -1265,17 +1288,31 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
               />
             </div>
 
-            {/* 매입가 */}
+            {/* 매입가 = 계약금 + 잔금 */}
             <div className="mb-3">
-              <label className="block text-xs font-bold text-gray-400 mb-1">매입가 (만원)</label>
-              <InputNumber
-                className="w-full"
-                value={tempPurchasePrice}
-                onChange={val => setTempPurchasePrice(val)}
-                placeholder="예: 1500"
-                min={0}
-                formatter={val => val ? `${Number(val).toLocaleString()}` : ''}
-              />
+              <label className="block text-xs font-bold text-gray-400 mb-1">매입가 (만원) — 계약금 + 잔금</label>
+              <div className="flex gap-2 items-center">
+                <InputNumber
+                  className="w-full"
+                  value={tempContractDeposit}
+                  onChange={val => setTempContractDeposit(val)}
+                  placeholder="계약금"
+                  min={0}
+                  formatter={val => val ? `${Number(val).toLocaleString()}` : ''}
+                />
+                <span className="text-gray-400">+</span>
+                <InputNumber
+                  className="w-full"
+                  value={tempContractBalance}
+                  onChange={val => setTempContractBalance(val)}
+                  placeholder="잔금"
+                  min={0}
+                  formatter={val => val ? `${Number(val).toLocaleString()}` : ''}
+                />
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                합계: {((tempContractDeposit || 0) + (tempContractBalance || 0)).toLocaleString()}만원
+              </p>
             </div>
 
             {/* 구전 금액 */}
