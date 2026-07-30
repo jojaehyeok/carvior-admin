@@ -718,14 +718,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       render: (value?: string) => formatPhone(value) || <span className="text-gray-300">-</span>,
     },
     {
-      // 구매동행(/inspection) 신청 시 딜러를 통해 거래 중인 매물이면 채워지는 값 —
-      // 신청자가 차주가 아니라 매수자라서 위 "딜러번호"(contact, 신청자 본인 번호)와는 별개
-      title: "딜러연락처",
-      dataIndex: "dealerContact",
-      align: "center",
-      render: (value?: string | null) => value ? formatPhone(value) : <span className="text-gray-300">-</span>,
-    },
-    {
       title: "매물링크",
       dataIndex: "listingUrl",
       align: "center",
