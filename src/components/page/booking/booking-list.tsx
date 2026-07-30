@@ -88,6 +88,7 @@ interface IBooking {
   assignedByAgentId?: string | null; // 이 건을 다른 평가사에게 지정 배정한 에이전트 id
   agentBonus?: number | null; // 에이전트 관리수당(원)
   agentBonusMemo?: string | null;
+  companyBillingAmount?: number | null; // 발주사 청구액(VAT포함, 원) 직접입력 — 오지/수입차 등 예외건용
   transferredRegistrationUrl?: string | null; // 발주사가 직접 업로드하는 명의이전된 등록증 사진
   registrationSentToDealerAt?: string | null; // 딜러에게 등록증 SMS를 보낸 시각(건당 1회 제한)
   registrationSentToCustomerAt?: string | null; // 고객에게 등록증 SMS를 보낸 시각(건당 1회 제한)
@@ -177,6 +178,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [tempClaimDeduction, setTempClaimDeduction] = useState<number | null>(null);
   const [tempAgentBonus, setTempAgentBonus] = useState<number | null>(null);
   const [tempAgentBonusMemo, setTempAgentBonusMemo] = useState("");
+  // 발주사 청구액(VAT포함, 원) 직접입력 — 오지/수입차 등 단가표에 고정값이 없는 예외건용.
+  // 기본/준오지/긴급은 정산서(settlement.tsx)에서 고정 단가로 자동계산되므로 평소엔 비워둔다.
+  const [tempCompanyBillingAmount, setTempCompanyBillingAmount] = useState<number | null>(null);
 
   // 주소 수정 — 접수 페이지(/inspection 등)와 동일하게 카카오 키워드검색으로.
   // 평소엔 접혀있다가(현재 주소만 텍스트로 표시) "변경" 눌렀을 때만 검색창이 펼쳐지게 해서
@@ -456,6 +460,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       setTempAgentBonus(record.agentBonus ?? null);
     }
     setTempAgentBonusMemo(record.agentBonusMemo || "");
+    setTempCompanyBillingAmount(record.companyBillingAmount ?? null);
     setIsModalOpen(true);
   };
 
@@ -496,6 +501,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             claimDeduction: tempClaimDeduction,
             agentBonus: tempAgentBonus,
             agentBonusMemo: tempAgentBonusMemo.trim() || null,
+            companyBillingAmount: tempCompanyBillingAmount,
           } : {}),
           ...(isUnassigning ? { assignedDriverId: null, assignedDriverName: null } : {}),
         })
@@ -1374,6 +1380,26 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                   value={tempRemoteBonus}
                   onChange={val => setTempRemoteBonus(val)}
                   placeholder="예: 20000"
+                  min={0}
+                  step={1000}
+                  formatter={val => val ? `${Number(val).toLocaleString()}` : ''}
+                />
+              </div>
+
+              <div className="mb-3">
+                <label className="block text-xs font-bold text-gray-400 mb-1">
+                  발주사 청구액 (VAT포함, 원)
+                  {editingBooking?.remoteTier === 'remote' ? (
+                    <span className="ml-1 text-[11px] font-normal text-red-500">오지건 — 단가표상 117,000~127,000원 협의, 직접 입력 필요</span>
+                  ) : (
+                    <span className="ml-1 text-[11px] font-normal text-gray-400">기본/준오지/긴급은 정산서에서 자동계산되므로 예외건만 입력</span>
+                  )}
+                </label>
+                <InputNumber
+                  className="w-full"
+                  value={tempCompanyBillingAmount}
+                  onChange={val => setTempCompanyBillingAmount(val)}
+                  placeholder="예: 120000 (오지·수입차 등 협의 금액)"
                   min={0}
                   step={1000}
                   formatter={val => val ? `${Number(val).toLocaleString()}` : ''}

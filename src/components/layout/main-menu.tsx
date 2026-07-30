@@ -78,6 +78,12 @@ const superAdminMenuData: IMenu[] = [
     link: { path: "/store/management" },
   },
   {
+    id: "settlement",
+    name: "발주사 정산",
+    icon: <BarChart2 className="w-5 h-5" />,
+    link: { path: "/store/settlement" },
+  },
+  {
     id: "cs",
     name: "CS / 리뷰",
     icon: <Star className="w-5 h-5" />,
