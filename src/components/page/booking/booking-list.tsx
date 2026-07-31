@@ -660,6 +660,10 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const isDirectConsumerView = effectiveCompany === 'CARVIOR_INSPECTION';
   // 명의이전 등록증 직접 업로드는 애니원모터스 전용 요청 기능
   const isAnyoneMotors = effectiveCompany === 'anyone-motors';
+  // 매입가/구전 확인·미확인 토글 — 같은 회사에 관리자 계정이 여러 개일 때, 이 권한이
+  // 있는 계정(예: 사무장)만 토글 가능하고 나머지는 조회만 가능하게 제한할 수 있다.
+  // 슈퍼관리자는 항상 가능.
+  const canConfirmBilling = isSuperAdminView || !!session?.user?.canConfirmBilling;
 
   const columns: ColumnsType<IBooking> = [
     {
@@ -879,8 +883,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             </span>
             <Tag
               color={done ? "blue" : "red"}
-              style={{ cursor: "pointer", fontWeight: 700 }}
-              onClick={() => handleToggleBoolField(record, "purchasePriceSeen", "매입가")}
+              style={{ cursor: canConfirmBilling ? "pointer" : "default", fontWeight: 700 }}
+              onClick={canConfirmBilling ? () => handleToggleBoolField(record, "purchasePriceSeen", "매입가") : undefined}
             >
               {done ? "완료" : "미완료"}
             </Tag>
@@ -906,8 +910,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             <span className={`font-bold ${done ? "text-blue-600" : "text-red-600"}`}>{value.toLocaleString()}만원</span>
             <Tag
               color={done ? "blue" : "red"}
-              style={{ cursor: "pointer", fontWeight: 700 }}
-              onClick={() => handleToggleBoolField(record, "oldDealerFeeSeen", "구전")}
+              style={{ cursor: canConfirmBilling ? "pointer" : "default", fontWeight: 700 }}
+              onClick={canConfirmBilling ? () => handleToggleBoolField(record, "oldDealerFeeSeen", "구전") : undefined}
             >
               {done ? "완료" : "미완료"}
             </Tag>

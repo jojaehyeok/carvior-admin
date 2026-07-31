@@ -69,6 +69,7 @@ const credentialsProviderOption: CredentialsConfig<{}> = {
         role: user.company ? "COMPANY_ADMIN" : "SUPER_ADMIN",
         company: user.company ?? null,
         logoUrl: user.logoUrl ?? null,
+        canConfirmBilling: !!user.canConfirmBilling,
       };
     } catch {
       return null;
@@ -116,6 +117,7 @@ export default NextAuth({
         token.role = (user as any).role ?? "SUPER_ADMIN";
         token.company = (user as any).company ?? null;
         token.logoUrl = (user as any).logoUrl ?? null;
+        token.canConfirmBilling = !!(user as any).canConfirmBilling;
       }
       return token;
     },
@@ -127,6 +129,7 @@ export default NextAuth({
         role: token.role as string,
         company: (token.company as string | null) ?? null,
         logoUrl: (token.logoUrl as string | null) ?? null,
+        canConfirmBilling: !!token.canConfirmBilling,
       };
       return session;
     },

@@ -15,6 +15,8 @@ declare module "next-auth" {
       company: string | null;
       /** 발주사 화이트라벨 로고 URL. 없으면 카비어 기본 로고 */
       logoUrl: string | null;
+      /** 같은 회사 다른 관리자와 달리 매입가/구전 확인·미확인 토글 권한이 있는 계정인지 */
+      canConfirmBilling: boolean;
     } & DefaultSession["user"];
   }
 }

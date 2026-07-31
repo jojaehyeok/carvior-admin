@@ -16,6 +16,7 @@ interface AdminUser {
   company?: string | null;
   logoUrl?: string | null;
   isExportOnly?: boolean;
+  canConfirmBilling?: boolean;
   createdAt: string;
 }
 
@@ -59,7 +60,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
 
   useEffect(() => { fetchAdmins(); }, [fetchAdmins]);
 
-  const handleCreate = async (values: { username: string; password: string; name: string; phone?: string; company?: string; isExportOnly?: boolean }) => {
+  const handleCreate = async (values: { username: string; password: string; name: string; phone?: string; company?: string; isExportOnly?: boolean; canConfirmBilling?: boolean }) => {
     setCreating(true);
     try {
       const { username, ...rest } = values;
@@ -104,7 +105,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
     }
   };
 
-  const handleEditInfo = async (values: { name: string; phone?: string; company?: string; isExportOnly?: boolean }) => {
+  const handleEditInfo = async (values: { name: string; phone?: string; company?: string; isExportOnly?: boolean; canConfirmBilling?: boolean }) => {
     if (!editOpen) return;
     setEditing(true);
     try {
@@ -193,6 +194,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
             <Tag color="purple">슈퍼 관리자</Tag>
           )}
           {record.isExportOnly && <Tag color="gold">수출전용</Tag>}
+          {record.canConfirmBilling && <Tag color="green">매입가/구전 확인권한</Tag>}
         </div>
       ),
     },
@@ -212,7 +214,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
             onClick={() => {
               setEditOpen(record);
               setEditLogoUrl(record.logoUrl ?? null);
-              editForm.setFieldsValue({ name: record.name, phone: record.phone, company: record.company ?? "", isExportOnly: !!record.isExportOnly });
+              editForm.setFieldsValue({ name: record.name, phone: record.phone, company: record.company ?? "", isExportOnly: !!record.isExportOnly, canConfirmBilling: !!record.canConfirmBilling });
             }}
           >
             정보 수정
@@ -322,6 +324,14 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
             <Switch />
           </Form.Item>
           <Form.Item
+            name="canConfirmBilling"
+            label="매입가/구전 확인 권한 (같은 회사 다른 관리자는 조회만 가능, 이 계정만 확인·미확인 토글 가능)"
+            valuePropName="checked"
+            initialValue={false}
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
             name="password"
             label="비밀번호"
             rules={[
@@ -405,6 +415,13 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
           <Form.Item
             name="isExportOnly"
             label="수출전용 발주사 (datrade처럼 수출용 차량만 다룸)"
+            valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            name="canConfirmBilling"
+            label="매입가/구전 확인 권한 (같은 회사 다른 관리자는 조회만 가능, 이 계정만 확인·미확인 토글 가능)"
             valuePropName="checked"
           >
             <Switch />
