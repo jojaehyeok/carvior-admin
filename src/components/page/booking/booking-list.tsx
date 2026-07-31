@@ -862,38 +862,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       ),
     },
     {
-      title: "매입가",
-      dataIndex: "purchasePrice",
-      align: "center" as const,
-      render: (value: number | null, record: IBooking) => {
-        if (value == null) {
-          return (
-            <span className="text-gray-300 cursor-pointer underline" onClick={() => openModal(record)}>
-              -
-            </span>
-          );
-        }
-        const done = record.purchasePriceSeen ?? true;
-        return (
-          <div className="flex flex-col items-center gap-1">
-            <span
-              className={`font-bold cursor-pointer ${done ? "text-blue-600" : "text-red-600"}`}
-              onClick={() => openModal(record)}
-            >
-              {value.toLocaleString()}만원
-            </span>
-            <Tag
-              color={done ? "blue" : "red"}
-              style={{ cursor: canConfirmBilling ? "pointer" : "default", fontWeight: 700 }}
-              onClick={canConfirmBilling ? () => handleToggleBoolField(record, "purchasePriceSeen", "매입가") : undefined}
-            >
-              {done ? "완료" : "미완료"}
-            </Tag>
-          </div>
-        );
-      },
-    },
-    {
       title: "계약금",
       dataIndex: "contractDeposit",
       align: "center" as const,
@@ -918,6 +886,38 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
               color={done ? "blue" : "red"}
               style={{ cursor: canConfirmBilling ? "pointer" : "default", fontWeight: 700 }}
               onClick={canConfirmBilling ? () => handleToggleBoolField(record, "contractDepositSeen", "계약금") : undefined}
+            >
+              {done ? "완료" : "미완료"}
+            </Tag>
+          </div>
+        );
+      },
+    },
+    {
+      title: "매입가",
+      dataIndex: "purchasePrice",
+      align: "center" as const,
+      render: (value: number | null, record: IBooking) => {
+        if (value == null) {
+          return (
+            <span className="text-gray-300 cursor-pointer underline" onClick={() => openModal(record)}>
+              -
+            </span>
+          );
+        }
+        const done = record.purchasePriceSeen ?? true;
+        return (
+          <div className="flex flex-col items-center gap-1">
+            <span
+              className={`font-bold cursor-pointer ${done ? "text-blue-600" : "text-red-600"}`}
+              onClick={() => openModal(record)}
+            >
+              {value.toLocaleString()}만원
+            </span>
+            <Tag
+              color={done ? "blue" : "red"}
+              style={{ cursor: canConfirmBilling ? "pointer" : "default", fontWeight: 700 }}
+              onClick={canConfirmBilling ? () => handleToggleBoolField(record, "purchasePriceSeen", "매입가") : undefined}
             >
               {done ? "완료" : "미완료"}
             </Tag>
