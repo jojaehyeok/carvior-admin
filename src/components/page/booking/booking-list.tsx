@@ -100,6 +100,7 @@ interface IBooking {
   contractDeposit?: number | null; // 계약금 (만원)
   contractBalance?: number | null; // 잔금 (만원)
   purchasePriceSeen?: boolean; // false면 새로 적힌 값(목록에서 빨간색), 클릭해서 확인하면 true
+  contractDepositSeen?: boolean; // 계약금 전용 확인 여부 — purchasePriceSeen과 별개
   isOldDealerPurchase?: boolean;
   oldDealerFee?: number | null; // 구전 금액 (만원)
   oldDealerFeeSeen?: boolean;
@@ -587,7 +588,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
 
   const handleToggleBoolField = async (
     record: IBooking,
-    field: 'contractConfirmed' | 'vehicleTransferred' | 'purchasePriceSeen' | 'oldDealerFeeSeen',
+    field: 'contractConfirmed' | 'vehicleTransferred' | 'purchasePriceSeen' | 'contractDepositSeen' | 'oldDealerFeeSeen',
     label: string,
   ) => {
     const next = !record[field];
@@ -893,6 +894,38 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       },
     },
     {
+      title: "계약금",
+      dataIndex: "contractDeposit",
+      align: "center" as const,
+      render: (value: number | null, record: IBooking) => {
+        if (value == null) {
+          return (
+            <span className="text-gray-300 cursor-pointer underline" onClick={() => openModal(record)}>
+              -
+            </span>
+          );
+        }
+        const done = record.contractDepositSeen ?? true;
+        return (
+          <div className="flex flex-col items-center gap-1">
+            <span
+              className={`font-bold cursor-pointer ${done ? "text-blue-600" : "text-red-600"}`}
+              onClick={() => openModal(record)}
+            >
+              {value.toLocaleString()}만원
+            </span>
+            <Tag
+              color={done ? "blue" : "red"}
+              style={{ cursor: canConfirmBilling ? "pointer" : "default", fontWeight: 700 }}
+              onClick={canConfirmBilling ? () => handleToggleBoolField(record, "contractDepositSeen", "계약금") : undefined}
+            >
+              {done ? "완료" : "미완료"}
+            </Tag>
+          </div>
+        );
+      },
+    },
+    {
       title: "구전",
       dataIndex: "oldDealerFee",
       align: "center" as const,
@@ -942,12 +975,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       sorter: (a, b) => (a.preferredDateTime || '').replace('T', ' ').localeCompare((b.preferredDateTime || '').replace('T', ' ')),
       defaultSortOrder: "ascend",
       render: (value: string | null) => value ? <span className="text-red-500 font-bold">{value}</span> : <span className="text-gray-300">-</span>,
-    },
-    {
-      title: "출처",
-      dataIndex: "source",
-      align: "center",
-      render: (value: string) => value ? <Tag>{value}</Tag> : <span className="text-gray-300">-</span>,
     },
     {
       title: "등록증",
@@ -1027,6 +1054,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         </Button>
       ),
     }]),
+    {
+      title: "출처",
+      dataIndex: "source",
+      align: "center",
+      render: (value: string) => value ? <Tag>{value}</Tag> : <span className="text-gray-300">-</span>,
+    },
   ];
 
   return (
