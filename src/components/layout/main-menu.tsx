@@ -214,13 +214,22 @@ const MainMenu = () => {
       try {
         const res = await fetch(`${API}/users/admins`);
         const data = await res.json();
-        const links: IMenu[] = (Array.isArray(data) ? data : [])
-          .filter((u: { company?: string | null }) => !!u.company)
-          .map((u: { name: string; company: string }) => ({
-            id: `company-${u.company}`,
-            name: u.name || u.company,
-            link: { path: COMPANY_BOOKING_PAGES[u.company] ?? `/diagnosis/${u.company}` },
-          }));
+        // 같은 발주사 코드로 계정을 여러 개 만드는 경우(예: 사무장 전용 계정)가 있어서,
+        // "발주사 관리" 메뉴에는 회사당 하나만 — 가장 먼저 생성된(원본) 계정 기준으로 노출한다.
+        const admins: { name: string; company: string; createdAt?: string }[] = (Array.isArray(data) ? data : [])
+          .filter((u: { company?: string | null }) => !!u.company);
+        const earliestByCompany = new Map<string, { name: string; company: string; createdAt?: string }>();
+        for (const u of admins) {
+          const existing = earliestByCompany.get(u.company);
+          if (!existing || (u.createdAt && existing.createdAt && u.createdAt < existing.createdAt)) {
+            earliestByCompany.set(u.company, u);
+          }
+        }
+        const links: IMenu[] = Array.from(earliestByCompany.values()).map((u) => ({
+          id: `company-${u.company}`,
+          name: u.name || u.company,
+          link: { path: COMPANY_BOOKING_PAGES[u.company] ?? `/diagnosis/${u.company}` },
+        }));
         if (!cancelled) setCompanyLinks(links);
       } catch {
         if (!cancelled) setCompanyLinks([]);
