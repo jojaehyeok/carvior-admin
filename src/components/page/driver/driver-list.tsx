@@ -1,10 +1,11 @@
 'use client';
 
 import DefaultTable from "@/components/shared/ui/default-table";
-import { Button, Divider, Image, message, Modal, Select, Statistic, Tag } from "antd";
+import { Button, Divider, Image, Input, InputNumber, message, Modal, Popconfirm, Select, Statistic, Tag } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { CheckCircle, RefreshCw, UserCog, XCircle } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
 
 type DriverTier = 'general' | 'certified' | 'agent';
@@ -36,6 +37,17 @@ interface ICancelStats {
   recentLogs: { carNumber: string; carOwner: string; cancelReason: string; createdAt: string }[];
 }
 
+interface IDriverPenalty {
+  id: number;
+  driverId: string;
+  driverName: string;
+  type: 'penalty' | 'advantage';
+  reason: string | null;
+  bookingId: number | null;
+  createdAt: string;
+  expiresAt: string;
+}
+
 const DriverList = () => {
   const [data, setData] = useState<IDriver[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -45,6 +57,15 @@ const DriverList = () => {
   const [statsLoading, setStatsLoading] = useState(false);
   const [tempTier, setTempTier] = useState<DriverTier>('general');
   const [savingTier, setSavingTier] = useState(false);
+  const [penalties, setPenalties] = useState<IDriverPenalty[]>([]);
+  const [newPenaltyType, setNewPenaltyType] = useState<'penalty' | 'advantage'>('penalty');
+  const [newPenaltyDays, setNewPenaltyDays] = useState(7);
+  const [newPenaltyReason, setNewPenaltyReason] = useState('');
+  const [savingPenalty, setSavingPenalty] = useState(false);
+
+  const { data: session } = useSession();
+  // 자동배정 페널티/우대 수동 부여는 슈퍼관리자만 — 발주사 계정에는 노출하지 않는다
+  const isSuperAdmin = !session?.user?.company;
 
   const API = process.env.NEXT_PUBLIC_API_ENDPOINT;
 
@@ -67,6 +88,8 @@ const DriverList = () => {
   const openModal = async (driver: IDriver) => {
     setSelectedDriver(driver);
     setCancelStats(null);
+    setPenalties([]);
+    setNewPenaltyReason('');
     setTempTier(driver.tier || 'general');
     setIsModalOpen(true);
     setStatsLoading(true);
@@ -75,6 +98,53 @@ const DriverList = () => {
       if (res.ok) setCancelStats(await res.json());
     } catch { /* 통계 실패해도 모달은 열림 */ }
     finally { setStatsLoading(false); }
+    fetchPenalties(driver);
+  };
+
+  // 페널티/우대는 driverId(문자열, Driver.id 기준)로 저장되므로 accountId가 아닌 id로 필터링
+  const fetchPenalties = async (driver: IDriver) => {
+    try {
+      const res = await fetch(`${API}/external/request/driver-penalties`);
+      if (!res.ok) return;
+      const all: IDriverPenalty[] = await res.json();
+      setPenalties(all.filter(p => String(p.driverId) === String(driver.id)));
+    } catch { /* 조회 실패해도 모달은 정상 동작 */ }
+  };
+
+  const handleAddPenalty = async () => {
+    if (!selectedDriver) return;
+    setSavingPenalty(true);
+    try {
+      const res = await fetch(`${API}/external/request/driver-penalty`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          driverId: String(selectedDriver.id),
+          type: newPenaltyType,
+          days: newPenaltyDays,
+          reason: newPenaltyReason.trim() || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      message.success(newPenaltyType === 'penalty' ? '페널티를 부여했습니다.' : '우대를 부여했습니다.');
+      setNewPenaltyReason('');
+      fetchPenalties(selectedDriver);
+    } catch {
+      message.error('처리 중 오류가 발생했습니다.');
+    } finally {
+      setSavingPenalty(false);
+    }
+  };
+
+  const handleDeletePenalty = async (id: number) => {
+    try {
+      const res = await fetch(`${API}/external/request/driver-penalty/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      message.success('삭제했습니다.');
+      setPenalties(prev => prev.filter(p => p.id !== id));
+    } catch {
+      message.error('삭제 중 오류가 발생했습니다.');
+    }
   };
 
   const handleUpdateStatus = async (id: number, status: 'approve' | 'reject') => {
@@ -261,6 +331,48 @@ const DriverList = () => {
             ) : (
               <p className="text-center text-gray-300 text-sm">통계를 불러올 수 없습니다.</p>
             )}
+
+            {/* 자동배정 페널티 / 우대 — 페널티는 자동배정 로드밸런싱에서 가상 건수를 더해 뒤로 밀고,
+                우대는 반대로 빼서 우선순위를 높인다. 부여/삭제는 슈퍼관리자만 가능. */}
+            <Divider plain>자동배정 페널티 / 우대</Divider>
+            <div className="space-y-3">
+              {penalties.length > 0 ? (
+                <div className="space-y-1.5">
+                  {penalties.map(p => (
+                    <div key={p.id} className="flex justify-between items-center text-xs bg-gray-50 rounded px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <Tag color={p.type === 'penalty' ? 'red' : 'blue'}>{p.type === 'penalty' ? '페널티' : '우대'}</Tag>
+                        <span className="text-gray-600">{p.reason || (p.bookingId ? `건 #${p.bookingId} 재배정으로 자동 부여` : '-')}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-300">~{dayjs(p.expiresAt).format('MM/DD')}</span>
+                        {isSuperAdmin && (
+                          <Popconfirm title="삭제할까요?" onConfirm={() => handleDeletePenalty(p.id)} okText="삭제" cancelText="취소">
+                            <Button size="small" danger type="text">삭제</Button>
+                          </Popconfirm>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-gray-300 text-sm">현재 적용 중인 페널티/우대가 없습니다.</p>
+              )}
+
+              {isSuperAdmin && (
+                <div className="flex flex-wrap items-center gap-2 bg-gray-50 rounded-lg p-3">
+                  <Select
+                    value={newPenaltyType}
+                    onChange={setNewPenaltyType}
+                    style={{ width: 100 }}
+                    options={[{ value: 'penalty', label: '페널티' }, { value: 'advantage', label: '우대' }]}
+                  />
+                  <InputNumber min={1} max={90} value={newPenaltyDays} onChange={(v) => setNewPenaltyDays(v || 7)} addonAfter="일" style={{ width: 110 }} />
+                  <Input placeholder="사유 (선택)" value={newPenaltyReason} onChange={(e) => setNewPenaltyReason(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
+                  <Button type="primary" loading={savingPenalty} onClick={handleAddPenalty}>부여</Button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </Modal>
