@@ -614,7 +614,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
 
   // BookingSearch가 URL 쿼리로 넘긴 조건을 읽어 클라이언트 필터링
   const filteredData = useMemo(() => {
-    const { searchType, searchText, status, adminMemo, searchDateType, dateStart, dateEnd } = router.query;
+    const { searchType, searchText, status, adminMemo, searchDateType, dateStart, dateEnd, contractWriterMissing } = router.query;
 
     return data.filter((item) => {
       // 검색어 필터
@@ -649,6 +649,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       // 매입가 적혀있는 건만 보기 토글
       if (purchasePriceOnly && item.purchasePrice == null) return false;
 
+      // "계약서 미작성 목록" 메뉴 전용 — 계약서 작성자가 비어있는 건만
+      if (contractWriterMissing === 'true' && item.contractWriter) return false;
+
       return true;
     });
   }, [data, router.query, reportOnly, purchasePriceOnly]);
@@ -665,6 +668,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 있는 계정(예: 사무장)만 토글 가능하고 나머지는 조회만 가능하게 제한할 수 있다.
   // 슈퍼관리자는 항상 가능.
   const canConfirmBilling = isSuperAdminView || !!session?.user?.canConfirmBilling;
+  // 구전은 계약금/매입가와 달리 애니원모터스 계정이면(사무장 권한 여부와 무관하게) 누구나 토글 가능
+  const canConfirmOldDealerFee = canConfirmBilling || isAnyoneMotors;
 
   const columns: ColumnsType<IBooking> = [
     {
@@ -943,8 +948,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             <span className={`font-bold ${done ? "text-blue-600" : "text-red-600"}`}>{value.toLocaleString()}만원</span>
             <Tag
               color={done ? "blue" : "red"}
-              style={{ cursor: canConfirmBilling ? "pointer" : "default", fontWeight: 700 }}
-              onClick={canConfirmBilling ? () => handleToggleBoolField(record, "oldDealerFeeSeen", "구전") : undefined}
+              style={{ cursor: canConfirmOldDealerFee ? "pointer" : "default", fontWeight: 700 }}
+              onClick={canConfirmOldDealerFee ? () => handleToggleBoolField(record, "oldDealerFeeSeen", "구전") : undefined}
             >
               {done ? "완료" : "미완료"}
             </Tag>
@@ -1075,6 +1080,11 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             <Switch size="small" checked={purchasePriceOnly} onChange={setPurchasePriceOnly} />
             매입가 적힌 건만
           </label>
+          {router.query.contractWriterMissing === 'true' && (
+            <Tag color="orange" closable onClose={() => router.push(router.pathname)}>
+              계약서 미작성 건만 표시 중
+            </Tag>
+          )}
         </div>
         <Button type="primary" icon={<RefreshCw size={14} />} onClick={fetchBookings} loading={isLoading}>새로고침</Button>
       </DefaultTableBtn>
