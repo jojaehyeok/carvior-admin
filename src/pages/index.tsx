@@ -2,7 +2,19 @@ import { getDefaultLayout, IDefaultLayoutPage, IPageHeader } from "@/components/
 import { useAuth } from "@/lib/auth/auth-provider";
 import Link from "next/link";
 import { Divider, Skeleton, Tag } from "antd";
+import dayjs from "dayjs";
 import { useEffect, useRef, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  LabelList,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import {
   AlertCircle,
   Car,
@@ -38,6 +50,46 @@ interface Stats {
   user: { total: number; today: number; week: number };
   driver: { approved: number; pending: number };
   generatedAt: string;
+}
+
+interface IMonthlyPurchaseStat {
+  month: string;      // "1월", "2월" 등 표시용 라벨
+  총접수: number;
+  매입성공: number;
+  rate: number;        // 매입성공 / 총접수 * 100 (반올림)
+}
+
+// 계약서 작성자(contractWriter)가 채워진 건 = 매입 성공으로 간주 — 발주사(딜러) 의뢰
+// 건에만 의미가 있는 지표라 구매동행(CARVIOR_INSPECTION) 건은 집계에서 제외한다.
+function buildMonthlyPurchaseStats(bookings: { createdAt: string; contractWriter?: string | null; source?: string }[]): IMonthlyPurchaseStat[] {
+  const buckets = new Map<string, { total: number; success: number }>();
+  for (const b of bookings) {
+    if (b.source === "CARVIOR_INSPECTION") continue;
+    const key = dayjs(b.createdAt).format("YYYY-MM");
+    if (!buckets.has(key)) buckets.set(key, { total: 0, success: 0 });
+    const bucket = buckets.get(key)!;
+    bucket.total += 1;
+    if (b.contractWriter && b.contractWriter.trim()) bucket.success += 1;
+  }
+  return Array.from(buckets.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-6) // 최근 6개월만
+    .map(([key, { total, success }]) => ({
+      month: dayjs(key, "YYYY-MM").format("M월"),
+      총접수: total,
+      매입성공: success,
+      rate: total > 0 ? Math.round((success / total) * 100) : 0,
+    }));
+}
+
+function PurchaseRateLabel({ x, y, width, index, data }: any) {
+  const rate = data?.[index]?.rate;
+  if (rate == null) return null;
+  return (
+    <text x={x + width / 2} y={y - 8} textAnchor="middle" fontSize={12} fontWeight={700} fill="#0b0b0b">
+      {rate}%
+    </text>
+  );
 }
 
 const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
@@ -108,6 +160,7 @@ const IndexPage: IDefaultLayoutPage = () => {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [monthlyPurchaseStats, setMonthlyPurchaseStats] = useState<IMonthlyPurchaseStat[] | null>(null);
 
   const fetchStats = async () => {
     try {
@@ -124,8 +177,23 @@ const IndexPage: IDefaultLayoutPage = () => {
     }
   };
 
+  // 매입권 성공율(계약서 작성자 유무) 월별 추이 — 딜러 의뢰 전체를 받아 클라이언트에서 월별 집계
+  const fetchMonthlyPurchaseStats = async () => {
+    try {
+      const url = new URL(`${API}/external/request/list`);
+      if (company) url.searchParams.set('source', company);
+      else url.searchParams.set('includeSelf', 'true');
+      const res = await fetch(url.toString());
+      const bookings = await res.json();
+      setMonthlyPurchaseStats(buildMonthlyPurchaseStats(Array.isArray(bookings) ? bookings : []));
+    } catch {
+      // 실패해도 나머지 모니터링 화면은 그대로 보여줌
+    }
+  };
+
   useEffect(() => {
     fetchStats();
+    fetchMonthlyPurchaseStats();
     timerRef.current = setInterval(fetchStats, 60_000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [company]);
@@ -299,6 +367,27 @@ const IndexPage: IDefaultLayoutPage = () => {
               </div>
             </div>
           </div>
+
+          {/* 매입권 성공율 — 계약서 작성자가 채워진 건을 매입 성공으로 집계한 월별 추이 */}
+          {monthlyPurchaseStats && monthlyPurchaseStats.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm mb-6">
+              <p className="text-sm font-bold text-gray-700 mb-1">매입권 성공율 (최근 6개월)</p>
+              <p className="text-xs text-gray-400 mb-4">월별 총 접수 건수 대비 계약서 작성 완료(매입 성공) 건수</p>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={monthlyPurchaseStats} margin={{ top: 24, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid vertical={false} stroke="#e1e0d9" />
+                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: "#898781" }} axisLine={{ stroke: "#c3c2b7" }} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "#898781" }} axisLine={false} tickLine={false} />
+                  <RechartsTooltip formatter={(value: any, name: any) => [`${value}건`, name]} labelFormatter={(label: any) => `${label} 접수`} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="총접수" fill="#2a78d6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                  <Bar dataKey="매입성공" fill="#008300" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                    <LabelList dataKey="rate" content={(props: any) => <PurchaseRateLabel {...props} data={monthlyPurchaseStats} />} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
           <Divider />
 
