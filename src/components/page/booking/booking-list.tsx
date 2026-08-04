@@ -171,6 +171,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [tempContractBalance, setTempContractBalance] = useState<number | null>(null);
   const [tempOldDealerFee, setTempOldDealerFee] = useState<number | null>(null);
   const [tempCustomerContact, setTempCustomerContact] = useState("");
+  // 진단 시작시간(방문예정) 수정 — 재배정/자동배정 로직에 영향을 주는 값이라 슈퍼관리자만 변경 가능
+  const [tempPreferredDateTime, setTempPreferredDateTime] = useState("");
 
   // 진단사 정산(오지/준오지/긴급 추가금, 기타 비용, 클레임 차감) — 슈퍼관리자 전용
   const [tempRemoteBonus, setTempRemoteBonus] = useState<number | null>(null);
@@ -441,6 +443,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setTempContractBalance(record.contractBalance ?? null);
     setTempOldDealerFee(record.oldDealerFee ?? null);
     setTempCustomerContact(record.customerContact || "");
+    setTempPreferredDateTime(record.preferredDateTime || "");
     // 오지/준오지/긴급 추가금은 아직 값이 없으면(처음 여는 경우) 기본 제안값을 미리 채워준다 —
     // 관리자가 그대로 저장하거나 수정할 수 있음. 이미 값이 저장돼 있으면 그 값 그대로 사용.
     const defaultRemoteBonus =
@@ -496,6 +499,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           oldDealerFee: tempOldDealerFee,
           customerContact: tempCustomerContact.trim() || null,
           ...(isSuperAdminView ? {
+            preferredDateTime: tempPreferredDateTime.trim() || editingBooking.preferredDateTime,
             remoteBonus: tempRemoteBonus,
             extraFee: tempExtraFee,
             extraFeeMemo: tempExtraFeeMemo.trim() || null,
@@ -1202,7 +1206,20 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 </div>
               )}
             </div>
-            <p className="text-gray-500">진단시작시간: {editingBooking?.preferredDateTime || "-"}</p>
+            {isSuperAdminView ? (
+              <div className="flex items-center gap-2">
+                <label className="text-gray-500 shrink-0">진단시작시간</label>
+                <Input
+                  value={tempPreferredDateTime}
+                  onChange={(e) => setTempPreferredDateTime(e.target.value)}
+                  placeholder="YYYY-MM-DD HH:mm"
+                  className="max-w-[220px]"
+                />
+                <span className="text-xs text-gray-300">재배정 로직에 영향을 주니 신중하게 변경(슈퍼관리자 전용)</span>
+              </div>
+            ) : (
+              <p className="text-gray-500">진단시작시간: {editingBooking?.preferredDateTime || "-"}</p>
+            )}
             <p className="text-gray-500">
               진단완료일시: {editingBooking?.firstCompletedAt ? dayjs(editingBooking.firstCompletedAt).format("YYYY-MM-DD HH:mm") : "-"}
               {(() => {
