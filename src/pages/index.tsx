@@ -82,12 +82,14 @@ function buildMonthlyPurchaseStats(bookings: { createdAt: string; contractWriter
     }));
 }
 
-function PurchaseRateLabel({ x, y, width, index, data }: any) {
-  const rate = data?.[index]?.rate;
-  if (rate == null) return null;
+// dataKey="rate"로 LabelList를 붙이면 recharts가 그 바에 해당하는 값을 value로 직접
+// 넘겨준다 — 이전엔 index로 data 배열을 직접 찾았는데, 그 매칭이 어긋나 엉뚱한 달의
+// rate(대개 0)를 표시하는 문제가 있었다. value를 그대로 쓰면 항상 정확히 대응된다.
+function PurchaseRateLabel({ x, y, width, value }: any) {
+  if (value == null) return null;
   return (
     <text x={x + width / 2} y={y - 8} textAnchor="middle" fontSize={12} fontWeight={700} fill="#0b0b0b">
-      {rate}%
+      {value}%
     </text>
   );
 }
@@ -382,7 +384,7 @@ const IndexPage: IDefaultLayoutPage = () => {
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="총접수" fill="#2a78d6" radius={[4, 4, 0, 0]} maxBarSize={40} />
                   <Bar dataKey="매입성공" fill="#008300" radius={[4, 4, 0, 0]} maxBarSize={40}>
-                    <LabelList dataKey="rate" content={(props: any) => <PurchaseRateLabel {...props} data={monthlyPurchaseStats} />} />
+                    <LabelList dataKey="rate" content={PurchaseRateLabel} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
