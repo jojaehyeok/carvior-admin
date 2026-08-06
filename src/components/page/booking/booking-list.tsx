@@ -3,10 +3,10 @@
 import DefaultTable from "@/components/shared/ui/default-table";
 import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
 import { ISO8601DateTime } from "@/types/common";
-import { Alert, Button, Checkbox, Input, InputNumber, Modal, Select, Spin, Switch, Tag, Tooltip, message } from "antd";
+import { Alert, Button, Checkbox, Input, InputNumber, Modal, Popover, Select, Spin, Switch, Tag, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
-import { Eye, FileText, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
+import { Copy, Eye, FileText, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -812,13 +812,37 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       align: "center",
       render: (value: string, record: IBooking) => {
         const assignedDriver = drivers.find(d => String(d.id) === String(record.assignedDriverId));
+        const phone = assignedDriver?.phone;
         return (
           <div className="flex flex-col items-center gap-1">
             {value
               ? (
-                <Tooltip title={assignedDriver?.phone || "번호 없음"}>
+                <Popover
+                  trigger="hover"
+                  content={
+                    phone ? (
+                      <div className="flex items-center gap-2">
+                        <a href={`tel:${phone}`} className="text-lg font-bold text-gray-900 hover:text-violet-600">
+                          {phone}
+                        </a>
+                        <Button
+                          size="small"
+                          icon={<Copy size={13} />}
+                          onClick={() => {
+                            navigator.clipboard.writeText(phone);
+                            message.success("번호가 복사되었습니다.");
+                          }}
+                        >
+                          복사
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">번호 없음</span>
+                    )
+                  }
+                >
                   <Tag icon={<UserPlus size={12} />} color="blue">{value}</Tag>
-                </Tooltip>
+                </Popover>
               )
               : <span className="text-gray-300">미배정</span>
             }
