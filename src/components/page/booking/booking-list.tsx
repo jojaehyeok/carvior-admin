@@ -1155,24 +1155,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         <div className="space-y-4 py-4">
           {/* 기본 정보 */}
           <div className="p-3 bg-gray-50 rounded-lg text-sm space-y-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-gray-400 mb-1">딜러이름</label>
-                <Input
-                  value={tempDealerName}
-                  onChange={e => setTempDealerName(e.target.value)}
-                  placeholder="딜러이름"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-400 mb-1">딜러번호</label>
-                <Input
-                  value={tempContact}
-                  onChange={e => setTempContact(e.target.value)}
-                  placeholder="딜러번호"
-                />
-              </div>
-            </div>
             <div>
               <label className="block text-xs font-bold text-gray-400 mb-1">주소</label>
               {!isEditingAddress ? (
@@ -1379,14 +1361,24 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           <div className="border-t pt-4">
             <p className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">오더 기록</p>
 
-            {/* 계약서 작성자 */}
-            <div className="mb-3">
-              <label className="block text-xs font-bold text-gray-400 mb-1">계약서 작성자</label>
-              <Input
-                value={tempContractWriter}
-                onChange={e => setTempContractWriter(e.target.value)}
-                placeholder="작성자 성함"
-              />
+            {/* 딜러이름 / 딜러번호 */}
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-400 mb-1">딜러이름</label>
+                <Input
+                  value={tempDealerName}
+                  onChange={e => setTempDealerName(e.target.value)}
+                  placeholder="딜러이름"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 mb-1">딜러번호</label>
+                <Input
+                  value={tempContact}
+                  onChange={e => setTempContact(e.target.value)}
+                  placeholder="딜러번호"
+                />
+              </div>
             </div>
 
             {/* 고객번호 — 접수 시 받은 contact(신청자 번호)와 별개로, 계약 진행 중 확인한 실제 차주 연락처 */}
@@ -1396,6 +1388,16 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 value={tempCustomerContact}
                 onChange={e => setTempCustomerContact(e.target.value)}
                 placeholder="01012345678"
+              />
+            </div>
+
+            {/* 계약서 작성자 */}
+            <div className="mb-3">
+              <label className="block text-xs font-bold text-gray-400 mb-1">계약서 작성자</label>
+              <Input
+                value={tempContractWriter}
+                onChange={e => setTempContractWriter(e.target.value)}
+                placeholder="작성자 성함"
               />
             </div>
 
