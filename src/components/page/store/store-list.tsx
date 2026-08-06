@@ -5,9 +5,10 @@ import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
 import { Button, Checkbox, Form, Input, InputNumber, message, Modal, Select, Statistic, Tag } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
-import { Edit, Eye, RefreshCw, Trash2 } from "lucide-react";
+import { Edit, Eye, Gavel, RefreshCw, Trash2 } from "lucide-react";
 import { useRouter } from "next/router";
 import React, { useCallback, useEffect, useState } from "react";
+import BidStatusModal from "./bid-status-modal";
 
 const CAVIOR_BASE = (process.env.NEXT_PUBLIC_API_ENDPOINT || 'https://carvior.store/api/v1').replace('/api/v1', '');
 const INTERNAL_KEY = process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? '';
@@ -49,6 +50,9 @@ interface IStoreItem {
   hidePrice?: boolean;
   registeredAt: string;
   photos?: Record<string, string[]>;
+  saleStage?: string;
+  ownerRequestedBidId?: number | null;
+  transferredRegistrationUrl?: string | null;
 }
 
 
@@ -85,6 +89,7 @@ const StoreList = () => {
 
   const [blurringId, setBlurringId] = useState<string | null>(null);
   const [pausingId, setPausingId] = useState<string | null>(null);
+  const [bidsModalItem, setBidsModalItem] = useState<IStoreItem | null>(null);
 
   // ── fetch ──────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -346,6 +351,13 @@ const StoreList = () => {
             onClick={() => handleBlur(item)}
           >
             번호판
+          </Button>
+          <Button
+            size="small"
+            icon={<Gavel size={13} />}
+            onClick={() => setBidsModalItem(item)}
+          >
+            입찰현황
           </Button>
           {item.status === 'active' ? (
             <Button
@@ -624,6 +636,12 @@ const StoreList = () => {
           )}
         </Form>
       </Modal>
+
+      <BidStatusModal
+        item={bidsModalItem}
+        onClose={() => setBidsModalItem(null)}
+        onChanged={fetchData}
+      />
     </div>
   );
 };
