@@ -1,5 +1,5 @@
 import { Divider } from "antd";
-import { BarChart2, Building2, Home, MessageCircle, Monitor, Package2, Settings, ShoppingBag, Star } from "lucide-react";
+import { BarChart2, Building2, Home, KeyRound, MessageCircle, Monitor, Package2, Settings, ShoppingBag, Star } from "lucide-react";
 import { useSession } from "next-auth/react";
 import React, { useEffect, useState } from "react";
 import Menu, { IMenu } from "./nav";
@@ -76,6 +76,12 @@ const superAdminMenuData: IMenu[] = [
     name: "스마트옥션 관리",
     icon: <ShoppingBag className="w-5 h-5" />,
     link: { path: "/store/management" },
+  },
+  {
+    id: "rental",
+    name: "렌트카 승계 (베타)",
+    icon: <KeyRound className="w-5 h-5" />,
+    link: { path: "/rental/management" },
   },
   {
     id: "settlement",
