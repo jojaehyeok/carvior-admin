@@ -3,7 +3,7 @@
 import DefaultTable from "@/components/shared/ui/default-table";
 import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
 import { ISO8601DateTime } from "@/types/common";
-import { Alert, Button, Checkbox, Input, InputNumber, Modal, Select, Spin, Switch, Tag, message } from "antd";
+import { Alert, Button, Checkbox, Input, InputNumber, Modal, Select, Spin, Switch, Tag, Tooltip, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { Eye, FileText, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
@@ -84,7 +84,7 @@ interface IBooking {
   driverSeenAt?: string | null; // 배정된 진단사가 앱에서 이 건 상세를 처음 연 시각(자동배정 놓침 확인용)
   reviewRequestedAt?: string | null; // 리뷰 요청 SMS 발송 시각(건당 1회만 발송 가능)
   assignedAt?: string | null; // 현재 배정이 이뤄진 시각
-  assignSource?: 'auto' | 'manual' | 'agent' | null; // 현재 배정 경로
+  assignSource?: 'auto' | 'manual' | 'agent' | 'self' | null; // 현재 배정 경로
   assignedByAgentId?: string | null; // 이 건을 다른 평가사에게 지정 배정한 에이전트 id
   agentBonus?: number | null; // 에이전트 관리수당(원)
   agentBonusMemo?: string | null;
@@ -810,29 +810,36 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "배정 진단사",
       dataIndex: "assignedDriverName",
       align: "center",
-      render: (value: string, record: IBooking) => (
-        <div className="flex flex-col items-center gap-1">
-          {value
-            ? <Tag icon={<UserPlus size={12} />} color="blue">{value}</Tag>
-            : <span className="text-gray-300">미배정</span>
-          }
-          {record.cancelledByDriverAt && (
-            <Tag color="volcano" className="text-xs">🔄 재대기중</Tag>
-          )}
-          {/* 자동배정 알림톡을 놓칠 수 있어서 추가한 확인 여부 표시 — 배정 상태(ASSIGNED)일 때만
-              의미가 있음(완료되면 어차피 이미 확인하고 진단까지 마친 것이므로 표시하지 않음).
-              수동배정은 관리자가 이미 진단사에게 직접 안내한 것으로 보고 배정 시각을
-              그대로 "확인" 시각으로 표시 — driverSeenAt(앱에서 연락하기/시간변경 등 반응)은
-              자동배정 건에만 의미가 있음. */}
-          {value && record.status === 'ASSIGNED' && (
-            record.assignSource === 'manual'
-              ? <Tag color="green" className="text-xs">✅ 확인 {record.assignedAt ? dayjs(record.assignedAt).format('MM/DD HH:mm') : ''}</Tag>
-              : record.driverSeenAt
-                ? <Tag color="green" className="text-xs">✅ 확인 {dayjs(record.driverSeenAt).format('MM/DD HH:mm')}</Tag>
-                : <Tag color="red" className="text-xs">👀 미확인</Tag>
-          )}
-        </div>
-      ),
+      render: (value: string, record: IBooking) => {
+        const assignedDriver = drivers.find(d => String(d.id) === String(record.assignedDriverId));
+        return (
+          <div className="flex flex-col items-center gap-1">
+            {value
+              ? (
+                <Tooltip title={assignedDriver?.phone || "번호 없음"}>
+                  <Tag icon={<UserPlus size={12} />} color="blue">{value}</Tag>
+                </Tooltip>
+              )
+              : <span className="text-gray-300">미배정</span>
+            }
+            {record.cancelledByDriverAt && (
+              <Tag color="volcano" className="text-xs">🔄 재대기중</Tag>
+            )}
+            {/* 자동배정 알림톡을 놓칠 수 있어서 추가한 확인 여부 표시 — 배정 상태(ASSIGNED)일 때만
+                의미가 있음(완료되면 어차피 이미 확인하고 진단까지 마친 것이므로 표시하지 않음).
+                수동배정/셀프클레임은 진단사가 이미 그 순간에 인지한 배정이므로 배정 시각을
+                그대로 "확인" 시각으로 표시 — driverSeenAt(앱에서 연락하기/시간변경 등 반응)은
+                자동배정 건에만 의미가 있음. */}
+            {value && record.status === 'ASSIGNED' && (
+              record.assignSource === 'manual' || record.assignSource === 'self'
+                ? <Tag color="green" className="text-xs">✅ 확인 {record.assignedAt ? dayjs(record.assignedAt).format('MM/DD HH:mm') : ''}</Tag>
+                : record.driverSeenAt
+                  ? <Tag color="green" className="text-xs">✅ 확인 {dayjs(record.driverSeenAt).format('MM/DD HH:mm')}</Tag>
+                  : <Tag color="red" className="text-xs">👀 미확인</Tag>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: "계약서 작성자",
