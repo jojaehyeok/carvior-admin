@@ -24,6 +24,7 @@ interface IBooking {
   assignedDriverName?: string;
   updatedAt?: string;
   completedAt?: string;
+  contractWriter?: string;
 }
 
 interface IStoreItem {
@@ -110,10 +111,12 @@ const StoreList = () => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 미등록: 아직 storeItem 없는 완료된 예약
+  // 미등록: 아직 storeItem 없는 완료된 예약 중, 발주사 쪽에서 계약자성함이 이미 작성된
+  // (=이미 매칭되어 거래가 진행 중인) 건은 스마트옥션 이중등록 방지를 위해 제외
   const registeredIds = new Set(storeItems.map(i => i.bookingId));
   const filtered = bookings.filter(b => {
     if (registeredIds.has(b.id)) return false;
+    if (b.contractWriter && b.contractWriter.trim()) return false;
     if (search) {
       const q = search.toLowerCase();
       return b.carNumber?.toLowerCase().includes(q)
