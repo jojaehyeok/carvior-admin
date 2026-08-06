@@ -2,7 +2,7 @@
 
 import DefaultTable from "@/components/shared/ui/default-table";
 import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
-import { Button, Form, Input, InputNumber, message, Modal, Select, Statistic, Steps, Tag } from "antd";
+import { Button, Form, Input, InputNumber, message, Modal, Select, Statistic, Tag } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { Copy, Edit, Gavel, RefreshCw, Trash2 } from "lucide-react";
@@ -246,7 +246,7 @@ const RentalList = () => {
   return (
     <div>
       <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6 text-xs text-amber-700 font-semibold">
-        ⚠️ 베타 기능입니다 — 고객용 페이지는 아직 사이트에 공개 링크가 걸려있지 않고, 관리자가 이 화면에서 매물을 등록/관리하고 "차주링크"로 개별 안내하는 방식입니다.
+        ⚠️ 베타 기능입니다 — 고객용 페이지는 아직 사이트에 공개 링크가 걸려있지 않고, 관리자가 이 화면에서 매물을 등록/관리하고 &quot;차주링크&quot;로 개별 안내하는 방식입니다.
       </div>
 
       <div className="grid grid-cols-3 gap-4 mb-6">
