@@ -20,6 +20,18 @@ interface AdminUser {
   createdAt: string;
 }
 
+interface PartnerApplication {
+  id: number;
+  name: string;
+  phone: string;
+  email?: string;
+  companyName?: string;
+  message?: string;
+  qualifyingCount: number;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+}
+
 async function uploadLogoFile(file: File): Promise<string> {
   const formData = new FormData();
   formData.append('file', file);
@@ -59,6 +71,45 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
   }, []);
 
   useEffect(() => { fetchAdmins(); }, [fetchAdmins]);
+
+  // 파트너패널(/marketing/partner-panel) 제휴신청 접수 목록
+  const [partnerApps, setPartnerApps] = useState<PartnerApplication[]>([]);
+  const [partnerAppsLoading, setPartnerAppsLoading] = useState(false);
+
+  const fetchPartnerApps = useCallback(async () => {
+    setPartnerAppsLoading(true);
+    try {
+      const res = await fetch(`${API}/admin/partner-applications`, { headers: { 'x-internal-key': INTERNAL_KEY } });
+      const data = await res.json();
+      setPartnerApps(Array.isArray(data) ? data : []);
+    } catch {
+      message.error("제휴신청 목록을 불러오지 못했습니다.");
+    } finally {
+      setPartnerAppsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchPartnerApps(); }, [fetchPartnerApps]);
+
+  const handleCreateFromApplication = (app: PartnerApplication) => {
+    createForm.resetFields();
+    createForm.setFieldsValue({ name: app.name, phone: app.phone });
+    setCreateOpen(true);
+  };
+
+  const handleUpdateApplicationStatus = async (app: PartnerApplication, status: 'approved' | 'rejected') => {
+    try {
+      await fetch(`${API}/admin/partner-applications/${app.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-internal-key': INTERNAL_KEY },
+        body: JSON.stringify({ status }),
+      });
+      message.success(status === 'approved' ? '처리완료로 표시했습니다.' : '거절 처리했습니다.');
+      fetchPartnerApps();
+    } catch {
+      message.error('상태 변경에 실패했습니다.');
+    }
+  };
 
   const handleCreate = async (values: { username: string; password: string; name: string; phone?: string; company?: string; isExportOnly?: boolean; canConfirmBilling?: boolean }) => {
     setCreating(true);
@@ -251,6 +302,52 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
         >
           + 관리자 추가
         </Button>
+      </div>
+
+      {/* 파트너패널(/marketing/partner-panel) 제휴신청 접수 */}
+      <div className="mb-8">
+        <h2 className="text-sm font-black text-gray-700 mb-3">파트너패널 제휴신청</h2>
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          <Table
+            dataSource={partnerApps}
+            loading={partnerAppsLoading}
+            rowKey="id"
+            pagination={false}
+            locale={{ emptyText: "제휴신청 내역이 없습니다." }}
+            columns={[
+              { title: "이름", dataIndex: "name" },
+              { title: "연락처", dataIndex: "phone" },
+              { title: "이메일", dataIndex: "email", render: (v?: string) => v ?? <span className="text-gray-300">-</span> },
+              { title: "회사명", dataIndex: "companyName", render: (v?: string) => v ?? <span className="text-gray-300">-</span> },
+              { title: "개별건수", dataIndex: "qualifyingCount", render: (v: number) => `${v}회` },
+              { title: "메모", dataIndex: "message", render: (v?: string) => v ?? <span className="text-gray-300">-</span> },
+              {
+                title: "상태", dataIndex: "status",
+                render: (v: string) => (
+                  <Tag color={v === "approved" ? "green" : v === "rejected" ? "red" : "blue"}>
+                    {v === "approved" ? "처리완료" : v === "rejected" ? "거절됨" : "대기중"}
+                  </Tag>
+                ),
+              },
+              {
+                title: "작업", render: (_: any, app: PartnerApplication) =>
+                  app.status === "pending" ? (
+                    <div className="flex gap-2">
+                      <Button size="small" type="primary" onClick={() => handleCreateFromApplication(app)}>계정 생성</Button>
+                      <Popconfirm title="처리완료로 표시할까요?" onConfirm={() => handleUpdateApplicationStatus(app, "approved")}>
+                        <Button size="small">완료 표시</Button>
+                      </Popconfirm>
+                      <Popconfirm title="거절할까요?" onConfirm={() => handleUpdateApplicationStatus(app, "rejected")}>
+                        <Button size="small" danger>거절</Button>
+                      </Popconfirm>
+                    </div>
+                  ) : (
+                    <span className="text-gray-300 text-xs">-</span>
+                  ),
+              },
+            ]}
+          />
+        </div>
       </div>
 
       {loading ? (
