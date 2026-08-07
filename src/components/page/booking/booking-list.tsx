@@ -162,6 +162,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [broadcasting, setBroadcasting] = useState(false);
   const [confirmingDeposit, setConfirmingDeposit] = useState(false);
+  const [retryingAutoAssign, setRetryingAutoAssign] = useState(false);
 
   // 오더 기록 필드 상태
   const [tempContractWriter, setTempContractWriter] = useState("");
@@ -564,6 +565,31 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       message.error("입금 확인 처리 중 오류 발생");
     } finally {
       setConfirmingDeposit(false);
+    }
+  };
+
+  // 슈퍼관리자 전용 — 주소/희망일시를 수정한 뒤 배정을 초기화하고 자동배정을 다시 태운다.
+  // "장소변경+시간변경+배정초기화"를 손으로 반복하던 걸 버튼 하나로 묶은 것 — 사유 있는
+  // 변경이므로 백엔드에서 기존 담당 진단사에게 페널티를 주지 않는다.
+  const handleRetryAutoAssign = async () => {
+    if (!editingBooking) return;
+    setRetryingAutoAssign(true);
+    try {
+      await fetch(`${API_BASE}/external/request/${editingBooking.id}/retry-auto-assign`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address: tempAddress.trim(),
+          preferredDateTime: tempPreferredDateTime.trim(),
+        }),
+      });
+      message.success("배정을 초기화하고 자동배정을 재시도했습니다.");
+      setIsModalOpen(false);
+      fetchBookings();
+    } catch (e) {
+      message.error("자동배정 재시도 중 오류 발생");
+    } finally {
+      setRetryingAutoAssign(false);
     }
   };
 
@@ -1230,7 +1256,22 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 />
                 <span className="text-xs text-gray-300">재배정 로직에 영향을 주니 신중하게 변경(슈퍼관리자 전용)</span>
               </div>
-            ) : (
+            ) : null}
+            {isSuperAdminView && (
+              <div className="mt-1">
+                <Button
+                  size="small"
+                  loading={retryingAutoAssign}
+                  onClick={handleRetryAutoAssign}
+                >
+                  🔁 수정한 주소/시간으로 배정 초기화 후 자동배정 재시도
+                </Button>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  주소·진단시작시간을 위에서 수정한 뒤 눌러주세요. 배정을 초기화하고 새 조건에 맞는 진단사를 다시 찾습니다 — 기존 담당자에게 페널티가 가지 않습니다.
+                </p>
+              </div>
+            )}
+            {!isSuperAdminView && (
               <p className="text-gray-500">진단시작시간: {editingBooking?.preferredDateTime || "-"}</p>
             )}
             <p className="text-gray-500">

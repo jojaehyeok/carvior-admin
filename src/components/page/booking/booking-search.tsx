@@ -21,6 +21,9 @@ const statusOptions = [
 const BookingSearch = () => {
   const [form] = useForm();
   const router = useRouter();
+  // 진단희망일(미래 예약 일정) 조회는 시작일을 오늘에 고정하고 종료일이 앞으로 이동해야
+  // 자연스럽다 — 접수일자(과거 기록 조회)와는 반대 방향이라 선택된 기준에 맞춰 전환한다.
+  const searchDateType = Form.useWatch("searchDateType", form) ?? "createdAt";
 
   // 검색 버튼 클릭 시 URL 쿼리 파라미터 업데이트
   const handleFinish = useCallback(
@@ -52,7 +55,7 @@ const BookingSearch = () => {
             </Select>
           </Form.Item>
           <Form.Item name="searchDatePeriod">
-            <DateRangeField />
+            <DateRangeField direction={searchDateType === "preferredDate" ? "future" : "past"} />
           </Form.Item>
         </FieldInline>
 

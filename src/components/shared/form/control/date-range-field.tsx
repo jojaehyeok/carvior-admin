@@ -5,6 +5,9 @@ import React from "react";
 interface IDateRangeFieldProps {
   value?: (dayjs.Dayjs | null)[];
   onChange?: (value: (dayjs.Dayjs | null)[]) => void;
+  // "past"(기본): 오늘을 종료일에 고정하고 시작일이 과거로 이동 — 접수일자처럼 지난 기록을 조회할 때.
+  // "future": 오늘을 시작일에 고정하고 종료일이 미래로 이동 — 진단희망일처럼 앞으로의 예약 일정을 조회할 때.
+  direction?: "past" | "future";
 }
 
 const dateRangeOptions = [
@@ -16,21 +19,29 @@ const dateRangeOptions = [
   { label: "1년", value: "1year" },
 ];
 
-const DateRangeField = ({ value, onChange }: IDateRangeFieldProps) => {
+const DATE_RANGE_UNITS: Record<string, [number, dayjs.ManipulateType]> = {
+  "1week": [1, "week"],
+  "1month": [1, "month"],
+  "3months": [3, "month"],
+  "6months": [6, "month"],
+  "1year": [1, "year"],
+};
+
+const DateRangeField = ({ value, onChange, direction = "past" }: IDateRangeFieldProps) => {
   const handleDateRangeChange = (e: RadioChangeEvent) => {
+    const today = dayjs();
     if (e.target.value === "today") {
-      onChange?.([dayjs(), dayjs()]);
-    } else if (e.target.value === "1week") {
-      onChange?.([dayjs().subtract(1, "week"), dayjs()]);
-    } else if (e.target.value === "1month") {
-      onChange?.([dayjs().subtract(1, "month"), dayjs()]);
-    } else if (e.target.value === "3months") {
-      onChange?.([dayjs().subtract(3, "months"), dayjs()]);
-    } else if (e.target.value === "6months") {
-      onChange?.([dayjs().subtract(6, "months"), dayjs()]);
-    } else if (e.target.value === "1year") {
-      onChange?.([dayjs().subtract(1, "year"), dayjs()]);
+      onChange?.([today, today]);
+      return;
     }
+    const unit = DATE_RANGE_UNITS[e.target.value];
+    if (!unit) return;
+    const [amount, type] = unit;
+    onChange?.(
+      direction === "future"
+        ? [today, today.add(amount, type)]
+        : [today.subtract(amount, type), today]
+    );
   };
 
   return (
