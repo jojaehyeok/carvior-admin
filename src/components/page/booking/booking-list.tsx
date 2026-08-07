@@ -78,6 +78,7 @@ interface IBooking {
   carHash?: string | null;
   firstCompletedAt?: string | null;
   adminMemo?: string;
+  additionalMemo?: string | null; // 접수폼(간편신청/당근 등)에서 딜러가 직접 입력한 요청사항 원본
   assignedDriverId?: string | null;
   assignedDriverName?: string | null;
   cancelledByDriverAt?: string | null; // 진단사 취소로 재대기된 시각
@@ -1610,6 +1611,15 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                   </p>
                 );
               })()}
+            </div>
+          )}
+
+          {/* 접수 시 입력된 요청사항 — adminMemo에 아직 반영 안 된 과거 건(이 기능 배포 이전 접수)만
+              표시. 배포 이후 접수 건은 백엔드에서 접수 시점에 이미 관리자 메모로 복사해서 넣어준다. */}
+          {editingBooking?.additionalMemo && !tempMemo.includes(editingBooking.additionalMemo) && (
+            <div>
+              <label className="block text-xs font-bold text-amber-500 mb-1">⚠️ 접수 시 입력된 요청사항 (원본, 관리자 메모에 미반영)</label>
+              <p className="text-xs text-gray-600 bg-amber-50 rounded px-3 py-2 whitespace-pre-wrap">{editingBooking.additionalMemo}</p>
             </div>
           )}
 
