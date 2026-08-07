@@ -1363,7 +1363,11 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             )}
             {isSuperAdminView && editingBooking?.remoteTier && (
               <p className="text-xs text-red-500 mt-1">
-                {editingBooking.remoteTier === 'remote' ? '🏔 오지' : '🗺 준오지'} 지역입니다(가장 가까운 진단사 편도 약 {editingBooking.nearestDriverKm}km) — 필요시 발주사와 가격협상 후 관리자메모에 직접 기록해주세요.
+                {editingBooking.remoteTier === 'remote' ? '🏔 오지' : '🗺 준오지'} 지역입니다(
+                {editingBooking.assignedDriverId
+                  ? `배정된 진단사(${editingBooking.assignedDriverName || '-'}) 기준 편도 약 ${editingBooking.nearestDriverKm}km`
+                  : `가장 가까운 진단사 편도 약 ${editingBooking.nearestDriverKm}km`}
+                ) — 필요시 발주사와 가격협상 후 관리자메모에 직접 기록해주세요.
               </p>
             )}
             {isSuperAdminView && editingBooking?.paymentMethod === 'BANK_TRANSFER' && !editingBooking?.depositConfirmed && (
