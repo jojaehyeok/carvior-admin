@@ -91,9 +91,14 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
 
   useEffect(() => { fetchPartnerApps(); }, [fetchPartnerApps]);
 
+  // 제휴신청에서 "계정 생성"으로 들어온 경우, 계정이 실제로 만들어지면 그 신청서
+  // status도 자동으로 approved로 넘겨주기 위해 어떤 신청서에서 왔는지 기억해둠.
+  const [creatingFromApp, setCreatingFromApp] = useState<PartnerApplication | null>(null);
+
   const handleCreateFromApplication = (app: PartnerApplication) => {
     createForm.resetFields();
     createForm.setFieldsValue({ name: app.name, phone: app.phone });
+    setCreatingFromApp(app);
     setCreateOpen(true);
   };
 
@@ -129,6 +134,11 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
       createForm.resetFields();
       setCreateLogoUrl(null);
       fetchAdmins();
+
+      if (creatingFromApp) {
+        await handleUpdateApplicationStatus(creatingFromApp, 'approved');
+        setCreatingFromApp(null);
+      }
     } catch (e: any) {
       message.error(e.message);
     } finally {
@@ -297,7 +307,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
         <h1 className="text-2xl font-bold">관리자 계정 관리</h1>
         <Button
           type="primary"
-          onClick={() => { setCreateOpen(true); createForm.resetFields(); }}
+          onClick={() => { setCreateOpen(true); createForm.resetFields(); setCreatingFromApp(null); }}
           style={{ background: "#7c3aed", border: "none" }}
         >
           + 관리자 추가
@@ -368,11 +378,16 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
       <Modal
         title="관리자 계정 추가"
         open={createOpen}
-        onCancel={() => { setCreateOpen(false); setCreateLogoUrl(null); }}
+        onCancel={() => { setCreateOpen(false); setCreateLogoUrl(null); setCreatingFromApp(null); }}
         footer={null}
         destroyOnClose
       >
         <Form form={createForm} layout="vertical" onFinish={handleCreate} className="pt-2">
+          {creatingFromApp && (
+            <p className="text-xs text-violet-600 bg-violet-50 rounded-lg px-3 py-2 mb-4">
+              #{creatingFromApp.id} 제휴신청에서 생성 — 계정이 만들어지면 그 신청서도 자동으로 처리완료 처리됩니다.
+            </p>
+          )}
           <Form.Item label="로고 (선택 — 발주사 화이트라벨용, 대시보드 사이드바에 표시)">
             <div className="flex items-center gap-3">
               {createLogoUrl ? (
@@ -455,7 +470,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
             <Input.Password placeholder="비밀번호 재입력" />
           </Form.Item>
           <div className="flex gap-2 justify-end mt-4">
-            <Button onClick={() => setCreateOpen(false)}>취소</Button>
+            <Button onClick={() => { setCreateOpen(false); setCreatingFromApp(null); }}>취소</Button>
             <Button
               type="primary"
               htmlType="submit"
