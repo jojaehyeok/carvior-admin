@@ -9,6 +9,9 @@ const CAVIOR_BASE = (process.env.NEXT_PUBLIC_API_ENDPOINT || 'https://carvior.st
 const INTERNAL_KEY = process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? '';
 const INTERNAL_HEADERS = { 'x-internal-key': INTERNAL_KEY };
 
+// 차대금 입금계좌 — settlement.tsx 등 기존 정산 화면에서 쓰는 카비어 법인계좌와 동일
+const BANK_INFO = { bank: '카카오뱅크', number: '3333-35-1997303', holder: '(주)카비어' };
+
 interface IBid {
   id: number;
   storeItemId: number;
@@ -23,6 +26,10 @@ interface IBidStatusItem {
   titleKo: string;
   status: string;
   saleStage?: string;
+  priceKRW?: number;
+  winningBidId?: number | null;
+  depositConfirmed?: boolean;
+  depositConfirmedAt?: string | null;
   ownerRequestedBidId?: number | null;
   transferredRegistrationUrl?: string | null;
 }
@@ -59,6 +66,7 @@ export default function BidStatusModal({
   const [selectingId, setSelectingId] = useState<number | null>(null);
   const [advancing, setAdvancing] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [confirmingDeposit, setConfirmingDeposit] = useState(false);
 
   const fetchBids = useCallback(async () => {
     if (!item) return;
@@ -79,6 +87,11 @@ export default function BidStatusModal({
 
   const stageIndex = Math.max(0, STAGE_STEPS.findIndex(s => s.key === (item.saleStage ?? 'bidding')));
   const nextStage = NEXT_STAGE[item.saleStage ?? ''];
+  // winner_selected → in_transit로 넘어가려면 차대금 입금 확인이 먼저 필요함
+  const awaitingDeposit = item.saleStage === 'winner_selected' && !item.depositConfirmed;
+  const canAdvance = !!nextStage && !awaitingDeposit;
+  const winningBid = bids.find(b => b.id === item.winningBidId);
+  const depositAmount = winningBid?.amount ?? item.priceKRW;
 
   const handleSelectWinner = (bid: IBid) => {
     Modal.confirm({
@@ -125,6 +138,23 @@ export default function BidStatusModal({
     }
   };
 
+  const handleConfirmDeposit = async () => {
+    setConfirmingDeposit(true);
+    try {
+      const res = await fetch(`${CAVIOR_BASE}/api/v1/admin/store-items/${item.id}/confirm-deposit`, {
+        method: 'PATCH',
+        headers: INTERNAL_HEADERS,
+      });
+      if (!res.ok) throw new Error();
+      message.success('입금이 확인되었습니다.');
+      onChanged();
+    } catch {
+      message.error('입금 확인에 실패했습니다.');
+    } finally {
+      setConfirmingDeposit(false);
+    }
+  };
+
   const handleUploadRegistration = async (file: File) => {
     setUploading(true);
     try {
@@ -156,9 +186,23 @@ export default function BidStatusModal({
     >
       <Steps size="small" current={stageIndex} items={STAGE_STEPS.map(s => ({ title: s.title }))} className="mb-6" />
 
-      {(nextStage || item.saleStage === 'transit_done') && (
+      {awaitingDeposit && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          <p className="text-xs font-bold text-amber-700 mb-2">
+            차대금 입금 대기중{depositAmount ? ` · ${fmtKRW(depositAmount)}` : ''}
+          </p>
+          <div className="text-xs text-gray-600 space-y-0.5 mb-3">
+            <p>은행 {BANK_INFO.bank} · 계좌번호 {BANK_INFO.number} · 예금주 {BANK_INFO.holder}</p>
+          </div>
+          <Button type="primary" loading={confirmingDeposit} onClick={handleConfirmDeposit}>
+            입금 확인
+          </Button>
+        </div>
+      )}
+
+      {(canAdvance || item.saleStage === 'transit_done') && (
         <div className="flex items-center gap-3 mb-6 bg-slate-50 border border-slate-100 rounded-lg px-4 py-3">
-          {nextStage && (
+          {canAdvance && (
             <Button type="primary" loading={advancing} onClick={handleAdvanceStage}>
               다음 단계로 ({STAGE_STEPS.find(s => s.key === nextStage)?.title})
             </Button>

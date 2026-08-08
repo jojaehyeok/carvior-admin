@@ -52,6 +52,9 @@ interface IStoreItem {
   registeredAt: string;
   photos?: Record<string, string[]>;
   saleStage?: string;
+  winningBidId?: number | null;
+  depositConfirmed?: boolean;
+  depositConfirmedAt?: string | null;
   ownerRequestedBidId?: number | null;
   transferredRegistrationUrl?: string | null;
 }
