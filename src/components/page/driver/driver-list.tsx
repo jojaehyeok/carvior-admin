@@ -1,12 +1,44 @@
 'use client';
 
 import DefaultTable from "@/components/shared/ui/default-table";
-import { Button, Divider, Image, Input, InputNumber, message, Modal, Popconfirm, Select, Statistic, Tag, Upload } from "antd";
+import { Button, Divider, Image, Input, InputNumber, message, Modal, Popconfirm, Select, Slider, Statistic, Tag, Upload } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { CheckCircle, RefreshCw, UserCog, XCircle } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
+import Cropper, { type Area } from "react-easy-crop";
+
+// react-easy-crop 공식 예제와 동일한 방식 — croppedAreaPixels 영역만 canvas에 그려서
+// 잘라낸 정사각형 이미지를 Blob으로 뽑아낸다. 명함/마케팅 이미지처럼 인물이 한쪽에
+// 치우쳐 있어도, 관리자가 드래그/줌으로 위치를 맞춘 뒤 이 함수로 최종 프로필 사진을 만든다.
+const getCroppedImageBlob = (imageSrc: string, cropPixels: Area): Promise<Blob> =>
+  new Promise((resolve, reject) => {
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const OUTPUT_SIZE = 400; // 정사각형 프로필 사진 — 원 안에 꽉 차게
+      canvas.width = OUTPUT_SIZE;
+      canvas.height = OUTPUT_SIZE;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return reject(new Error("canvas context 생성 실패"));
+      ctx.drawImage(
+        img,
+        cropPixels.x,
+        cropPixels.y,
+        cropPixels.width,
+        cropPixels.height,
+        0,
+        0,
+        OUTPUT_SIZE,
+        OUTPUT_SIZE,
+      );
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("crop 실패"))), "image/jpeg", 0.92);
+    };
+    img.onerror = reject;
+    img.src = imageSrc;
+  });
 
 type DriverTier = 'general' | 'certified' | 'agent';
 
@@ -163,15 +195,33 @@ const DriverList = () => {
     }
   };
 
-  // 프로필 사진 — 진단리포트/평가사 소개에 노출할 얼굴 사진. antd Upload의 beforeUpload에서
-  // false를 반환해 자체 업로드를 막고, 대신 여기서 FormData로 직접 백엔드에 PATCH한다.
+  // 프로필 사진 — 진단리포트/평가사 소개에 노출할 얼굴 사진. 명함/마케팅 이미지처럼 인물이
+  // 한쪽에 치우친 원본도 그대로 쓸 수 있게, 업로드 직후 바로 저장하지 않고 크롭 모달에서
+  // 드래그로 위치를 옮기고 확대/축소한 뒤 저장한다.
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const handlePhotoUpload = async (file: File) => {
-    if (!selectedDriver) return;
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+
+  const openCropModal = (file: File) => {
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+    const reader = new FileReader();
+    reader.onload = () => setCropImageSrc(reader.result as string);
+    reader.readAsDataURL(file);
+    setCropModalOpen(true);
+  };
+
+  const handleSaveCroppedPhoto = async () => {
+    if (!selectedDriver || !cropImageSrc || !croppedAreaPixels) return;
     setUploadingPhoto(true);
     try {
+      const blob = await getCroppedImageBlob(cropImageSrc, croppedAreaPixels);
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', blob, 'profile.jpg');
       const res = await fetch(`${API}/drivers/${selectedDriver.id}/photo`, {
         method: 'PATCH',
         body: formData,
@@ -181,6 +231,8 @@ const DriverList = () => {
       message.success('프로필 사진을 변경했습니다.');
       setSelectedDriver(updated);
       fetchDrivers();
+      setCropModalOpen(false);
+      setCropImageSrc(null);
     } catch {
       message.error('사진 업로드 중 오류가 발생했습니다.');
     } finally {
@@ -300,7 +352,7 @@ const DriverList = () => {
               <Upload
                 accept="image/*"
                 showUploadList={false}
-                beforeUpload={(file) => { handlePhotoUpload(file); return false; }}
+                beforeUpload={(file) => { openCropModal(file); return false; }}
               >
                 <Button loading={uploadingPhoto}>{selectedDriver.photoUrl ? '사진 변경' : '사진 등록'}</Button>
               </Upload>
@@ -421,6 +473,43 @@ const DriverList = () => {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* 프로필 사진 크롭 — 명함/마케팅 이미지처럼 인물이 한쪽에 치우친 원본도 드래그로
+          위치를 옮기고 확대/축소해서 원형 프로필에 맞게 잘라낼 수 있다. */}
+      <Modal
+        title="프로필 사진 위치 조정"
+        open={cropModalOpen}
+        onCancel={() => { setCropModalOpen(false); setCropImageSrc(null); }}
+        onOk={handleSaveCroppedPhoto}
+        okText="저장"
+        confirmLoading={uploadingPhoto}
+        width={480}
+      >
+        <p className="text-xs text-gray-400 mb-3">
+          가이드라인: 얼굴(또는 캐릭터 얼굴)이 원 안 정중앙에 오도록 드래그하고, 어깨까지 살짝
+          여유 있게 보이는 정도로 확대해주세요. 명함처럼 인물이 한쪽에 치우친 이미지도
+          그대로 올린 뒤 여기서 위치만 맞추면 됩니다.
+        </p>
+        {cropImageSrc && (
+          <div style={{ position: 'relative', width: '100%', height: 320, background: '#111' }}>
+            <Cropper
+              image={cropImageSrc}
+              crop={crop}
+              zoom={zoom}
+              aspect={1}
+              cropShape="round"
+              showGrid={false}
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={(_, pixels) => setCroppedAreaPixels(pixels)}
+            />
+          </div>
+        )}
+        <div className="flex items-center gap-3 mt-3">
+          <span className="text-xs text-gray-400 shrink-0">확대/축소</span>
+          <Slider min={1} max={3} step={0.01} value={zoom} onChange={setZoom} style={{ flex: 1 }} />
+        </div>
       </Modal>
     </div>
   );
