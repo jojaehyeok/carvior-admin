@@ -55,6 +55,8 @@ interface IStoreItem {
   winningBidId?: number | null;
   depositConfirmed?: boolean;
   depositConfirmedAt?: string | null;
+  sellerPayoutConfirmed?: boolean;
+  sellerPayoutConfirmedAt?: string | null;
   ownerRequestedBidId?: number | null;
   transferredRegistrationUrl?: string | null;
 }

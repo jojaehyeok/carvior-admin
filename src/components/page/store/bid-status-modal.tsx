@@ -30,6 +30,8 @@ interface IBidStatusItem {
   winningBidId?: number | null;
   depositConfirmed?: boolean;
   depositConfirmedAt?: string | null;
+  sellerPayoutConfirmed?: boolean;
+  sellerPayoutConfirmedAt?: string | null;
   ownerRequestedBidId?: number | null;
   transferredRegistrationUrl?: string | null;
 }
@@ -67,6 +69,7 @@ export default function BidStatusModal({
   const [advancing, setAdvancing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [confirmingDeposit, setConfirmingDeposit] = useState(false);
+  const [confirmingPayout, setConfirmingPayout] = useState(false);
 
   const fetchBids = useCallback(async () => {
     if (!item) return;
@@ -87,11 +90,12 @@ export default function BidStatusModal({
 
   const stageIndex = Math.max(0, STAGE_STEPS.findIndex(s => s.key === (item.saleStage ?? 'bidding')));
   const nextStage = NEXT_STAGE[item.saleStage ?? ''];
-  // winner_selected → in_transit로 넘어가려면 차대금 입금 확인이 먼저 필요함
+  // winner_selected → in_transit로 넘어가려면 딜러가 입금한 차대금(에스크로 예치)을 관리자가
+  // 먼저 확인해야 함. 이 돈은 탁송이 시작되는 시점에 차주에게 지급(release)됨 — 지급 확인은
+  // sellerPayoutConfirmed로 별도 추적(아래 "차주 정산 지급 확인" 버튼).
   const awaitingDeposit = item.saleStage === 'winner_selected' && !item.depositConfirmed;
   const canAdvance = !!nextStage && !awaitingDeposit;
   const winningBid = bids.find(b => b.id === item.winningBidId);
-  const depositAmount = winningBid?.amount ?? item.priceKRW;
 
   const handleSelectWinner = (bid: IBid) => {
     Modal.confirm({
@@ -155,6 +159,23 @@ export default function BidStatusModal({
     }
   };
 
+  const handleConfirmPayout = async () => {
+    setConfirmingPayout(true);
+    try {
+      const res = await fetch(`${CAVIOR_BASE}/api/v1/admin/store-items/${item.id}/confirm-seller-payout`, {
+        method: 'PATCH',
+        headers: INTERNAL_HEADERS,
+      });
+      if (!res.ok) throw new Error();
+      message.success('차주 정산 지급이 확인되었습니다.');
+      onChanged();
+    } catch {
+      message.error('정산 지급 확인에 실패했습니다.');
+    } finally {
+      setConfirmingPayout(false);
+    }
+  };
+
   const handleUploadRegistration = async (file: File) => {
     setUploading(true);
     try {
@@ -189,15 +210,34 @@ export default function BidStatusModal({
       {awaitingDeposit && (
         <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
           <p className="text-xs font-bold text-amber-700 mb-2">
-            차대금 입금 대기중{depositAmount ? ` · ${fmtKRW(depositAmount)}` : ''}
+            차대금 입금 대기중(에스크로 예치){winningBid ? ` · ${fmtKRW(winningBid.amount)}` : ''}
           </p>
           <div className="text-xs text-gray-600 space-y-0.5 mb-3">
             <p>은행 {BANK_INFO.bank} · 계좌번호 {BANK_INFO.number} · 예금주 {BANK_INFO.holder}</p>
+            <p className="text-gray-400">딜러가 입금한 차대금은 카비어가 잠시 보관하고, 탁송이 시작되면 차주에게 지급합니다.</p>
           </div>
           <Button type="primary" loading={confirmingDeposit} onClick={handleConfirmDeposit}>
             입금 확인
           </Button>
         </div>
+      )}
+
+      {item.depositConfirmed && !item.sellerPayoutConfirmed && (item.saleStage === 'in_transit' || item.saleStage === 'transit_done') && (
+        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+          <p className="text-xs font-bold text-blue-700 mb-2">
+            차주 정산 지급 대기중{winningBid ? ` · ${fmtKRW(winningBid.amount)}` : ''}
+          </p>
+          <p className="text-xs text-gray-500 mb-3">탁송이 시작됐으니 차주 계좌로 차대금을 지급하고, 실제 송금 후 아래 버튼을 눌러주세요.</p>
+          <Button type="primary" loading={confirmingPayout} onClick={handleConfirmPayout}>
+            정산 지급 확인
+          </Button>
+        </div>
+      )}
+
+      {item.sellerPayoutConfirmed && (
+        <p className="text-xs text-emerald-600 font-bold mb-4">
+          ✓ 차주 정산 지급 완료{item.sellerPayoutConfirmedAt ? ` (${dayjs(item.sellerPayoutConfirmedAt).format('YYYY-MM-DD HH:mm')})` : ''}
+        </p>
       )}
 
       {(canAdvance || item.saleStage === 'transit_done') && (
