@@ -1370,7 +1370,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 ) — 필요시 발주사와 가격협상 후 관리자메모에 직접 기록해주세요.
               </p>
             )}
-            {isSuperAdminView && editingBooking?.paymentMethod === 'BANK_TRANSFER' && !editingBooking?.depositConfirmed && (
+            {(isSuperAdminView || isDirectConsumerView) && editingBooking?.paymentMethod === 'BANK_TRANSFER' && !editingBooking?.depositConfirmed && (
               <div className="mt-2">
                 <Button
                   type="primary"
