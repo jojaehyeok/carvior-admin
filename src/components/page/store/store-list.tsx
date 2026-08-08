@@ -57,6 +57,8 @@ interface IStoreItem {
   depositConfirmedAt?: string | null;
   sellerPayoutConfirmed?: boolean;
   sellerPayoutConfirmedAt?: string | null;
+  transportPreferredDateTime?: string | null;
+  transportRequestedAt?: string | null;
   ownerRequestedBidId?: number | null;
   transferredRegistrationUrl?: string | null;
 }

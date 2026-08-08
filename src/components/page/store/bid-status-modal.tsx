@@ -32,6 +32,8 @@ interface IBidStatusItem {
   depositConfirmedAt?: string | null;
   sellerPayoutConfirmed?: boolean;
   sellerPayoutConfirmedAt?: string | null;
+  transportPreferredDateTime?: string | null;
+  transportRequestedAt?: string | null;
   ownerRequestedBidId?: number | null;
   transferredRegistrationUrl?: string | null;
 }
@@ -237,6 +239,12 @@ export default function BidStatusModal({
       {item.sellerPayoutConfirmed && (
         <p className="text-xs text-emerald-600 font-bold mb-4">
           ✓ 차주 정산 지급 완료{item.sellerPayoutConfirmedAt ? ` (${dayjs(item.sellerPayoutConfirmedAt).format('YYYY-MM-DD HH:mm')})` : ''}
+        </p>
+      )}
+
+      {item.transportRequestedAt && (
+        <p className="text-xs text-gray-500 mb-4">
+          🚚 차주 탁송 신청 · 희망일시: {item.transportPreferredDateTime ? dayjs(item.transportPreferredDateTime).format('YYYY-MM-DD HH:mm') : '-'}
         </p>
       )}
 
