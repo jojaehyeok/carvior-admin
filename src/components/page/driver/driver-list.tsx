@@ -1,7 +1,7 @@
 'use client';
 
 import DefaultTable from "@/components/shared/ui/default-table";
-import { Button, Divider, Image, Input, InputNumber, message, Modal, Popconfirm, Select, Statistic, Tag } from "antd";
+import { Button, Divider, Image, Input, InputNumber, message, Modal, Popconfirm, Select, Statistic, Tag, Upload } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { CheckCircle, RefreshCw, UserCog, XCircle } from "lucide-react";
@@ -19,6 +19,7 @@ interface IDriver {
   experience: string;
   status: 'PENDING' | 'APPROVED' | 'ACTIVE' | 'BANNED' | 'REJECTED';
   licenseImageUrl: string;
+  photoUrl?: string | null;
   createdAt: string;
   tier?: DriverTier;
 }
@@ -162,6 +163,31 @@ const DriverList = () => {
     }
   };
 
+  // 프로필 사진 — 진단리포트/평가사 소개에 노출할 얼굴 사진. antd Upload의 beforeUpload에서
+  // false를 반환해 자체 업로드를 막고, 대신 여기서 FormData로 직접 백엔드에 PATCH한다.
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const handlePhotoUpload = async (file: File) => {
+    if (!selectedDriver) return;
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${API}/drivers/${selectedDriver.id}/photo`, {
+        method: 'PATCH',
+        body: formData,
+      });
+      if (!res.ok) throw new Error();
+      const updated: IDriver = await res.json();
+      message.success('프로필 사진을 변경했습니다.');
+      setSelectedDriver(updated);
+      fetchDrivers();
+    } catch {
+      message.error('사진 업로드 중 오류가 발생했습니다.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
   // 등급 변경 — 진단비 정산(settlement-history)에서 등급별 기본 진단비를 정하는 기준이 됨
   const handleSaveTier = async () => {
     if (!selectedDriver) return;
@@ -258,6 +284,26 @@ const DriverList = () => {
               <div><p className="text-gray-400 text-xs">연락처</p><p className="font-semibold">{selectedDriver.phone}</p></div>
               <div><p className="text-gray-400 text-xs">활동 지역</p><p className="font-semibold">{selectedDriver.region || '-'}</p></div>
               <div><p className="text-gray-400 text-xs">경력 사항</p><p className="font-semibold whitespace-pre-wrap">{selectedDriver.experience || '-'}</p></div>
+            </div>
+
+            {/* 프로필 사진 — 진단리포트/평가사 소개에 노출용 */}
+            <Divider plain>프로필 사진</Divider>
+            <div className="flex flex-col items-center gap-3 bg-gray-50 p-4 rounded-lg">
+              <Image
+                alt="프로필 사진"
+                src={selectedDriver.photoUrl || undefined}
+                fallback="https://via.placeholder.com/150?text=No+Photo"
+                width={120}
+                height={120}
+                style={{ borderRadius: '9999px', objectFit: 'cover' }}
+              />
+              <Upload
+                accept="image/*"
+                showUploadList={false}
+                beforeUpload={(file) => { handlePhotoUpload(file); return false; }}
+              >
+                <Button loading={uploadingPhoto}>{selectedDriver.photoUrl ? '사진 변경' : '사진 등록'}</Button>
+              </Upload>
             </div>
 
             {/* 등급 관리 — 정산(settlement-history)의 등급별 기본 진단비 기준이 됨 */}
