@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Form, Input, message, Modal, Table, Tag } from "antd";
+import { Button, Form, Input, InputNumber, message, Modal, Table, Tag } from "antd";
 import { useCallback, useEffect, useState } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_ENDPOINT;
@@ -46,6 +46,9 @@ export default function UnmatchedVehiclesList() {
   const [editing, setEditing] = useState<IVehicle | null>(null);
   const [editForm] = Form.useForm();
   const [saving, setSaving] = useState(false);
+  const [listing, setListing] = useState<IVehicle | null>(null);
+  const [listingForm] = Form.useForm();
+  const [creatingListing, setCreatingListing] = useState(false);
 
   const fetchVehicles = useCallback(async () => {
     setLoading(true);
@@ -106,6 +109,34 @@ export default function UnmatchedVehiclesList() {
       message.error('저장에 실패했습니다.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openListingModal = (vehicle: IVehicle) => {
+    setListing(vehicle);
+    listingForm.resetFields();
+  };
+
+  const handleCreateListing = async (values: { askingPrice: number; minimumAcceptablePrice?: number }) => {
+    if (!listing) return;
+    setCreatingListing(true);
+    try {
+      const res = await fetch(`${API}/admin/vehicles/${listing.id}/create-listing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...INTERNAL_HEADERS },
+        body: JSON.stringify(values),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.message || '매물 전환 실패');
+      }
+      message.success('판매매물로 전환되었습니다. "판매매물" 메뉴에서 확인하세요.');
+      setListing(null);
+      fetchVehicles();
+    } catch (e: any) {
+      message.error(e?.message || '매물 전환에 실패했습니다.');
+    } finally {
+      setCreatingListing(false);
     }
   };
 
@@ -205,7 +236,9 @@ export default function UnmatchedVehiclesList() {
                     </Button>
                   )}
                   {v.saleStatus === 'OWNER_AGREED_TO_SELL' && (
-                    <span className="text-xs text-gray-400">판매매물 전환은 다음 단계에서 지원 예정</span>
+                    <Button size="small" type="primary" onClick={() => openListingModal(v)}>
+                      판매매물로 전환
+                    </Button>
                   )}
                 </div>
               </div>
@@ -234,6 +267,34 @@ export default function UnmatchedVehiclesList() {
           <div className="flex justify-end gap-2">
             <Button onClick={() => setEditing(null)}>취소</Button>
             <Button type="primary" htmlType="submit" loading={saving}>저장</Button>
+          </div>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={`판매매물로 전환 — ${listing?.carNumber ?? ''}`}
+        open={!!listing}
+        onCancel={() => setListing(null)}
+        footer={null}
+        destroyOnClose
+      >
+        <p className="text-xs text-gray-400 mb-4">
+          차주가 판매에 동의한 차량입니다. 통화로 확인한 희망가격을 입력하면 딜러 입찰이 가능한 판매매물로 전환됩니다.
+        </p>
+        <Form form={listingForm} layout="vertical" onFinish={handleCreateListing} className="pt-2">
+          <Form.Item label="차주 희망가격 (원)" name="askingPrice" rules={[{ required: true, message: '희망가격을 입력해주세요.' }]}>
+            <InputNumber className="w-full" min={0} step={100000} placeholder="예: 20000000"
+              formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              parser={(v) => Number((v ?? '').replace(/,/g, '')) as any} />
+          </Form.Item>
+          <Form.Item label="최저 수용가격 (선택)" name="minimumAcceptablePrice">
+            <InputNumber className="w-full" min={0} step={100000} placeholder="이 금액 밑으로는 승인 안 함(선택)"
+              formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              parser={(v) => Number((v ?? '').replace(/,/g, '')) as any} />
+          </Form.Item>
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setListing(null)}>취소</Button>
+            <Button type="primary" htmlType="submit" loading={creatingListing}>매물 생성</Button>
           </div>
         </Form>
       </Modal>

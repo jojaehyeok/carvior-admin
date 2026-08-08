@@ -78,6 +78,12 @@ const superAdminMenuData: IMenu[] = [
     link: { path: "/vehicles/unmatched" },
   },
   {
+    id: "saleListings",
+    name: "판매매물",
+    icon: <ShoppingBag className="w-5 h-5" />,
+    link: { path: "/sale-listings" },
+  },
+  {
     id: "store",
     name: "스마트옥션 관리",
     icon: <ShoppingBag className="w-5 h-5" />,
