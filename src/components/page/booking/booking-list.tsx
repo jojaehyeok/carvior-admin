@@ -176,6 +176,11 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 진단 시작시간(방문예정) 수정 — 재배정/자동배정 로직에 영향을 주는 값이라 슈퍼관리자만 변경 가능
   const [tempPreferredDateTime, setTempPreferredDateTime] = useState("");
 
+  // --- 진단일시 테이블 인라인 편집(모달 안 열고 셀에서 바로 수정) ---
+  const [inlineEditingId, setInlineEditingId] = useState<number | null>(null);
+  const [inlineDateTimeValue, setInlineDateTimeValue] = useState("");
+  const [savingInlineDateTime, setSavingInlineDateTime] = useState(false);
+
   // 진단사 정산(오지/준오지/긴급 추가금, 기타 비용, 클레임 차감) — 슈퍼관리자 전용
   const [tempRemoteBonus, setTempRemoteBonus] = useState<number | null>(null);
   const [tempExtraFee, setTempExtraFee] = useState<number | null>(null);
@@ -469,6 +474,36 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setTempAgentBonusMemo(record.agentBonusMemo || "");
     setTempCompanyBillingAmount(record.companyBillingAmount ?? null);
     setIsModalOpen(true);
+  };
+
+  // --- 진단일시 테이블 인라인 편집 — 모달 안 열고 셀에서 바로 더블클릭→입력→저장 ---
+  const startInlineDateTimeEdit = (record: IBooking) => {
+    if (!isSuperAdminView) return;
+    setInlineEditingId(record.id);
+    setInlineDateTimeValue((record.preferredDateTime || "").replace('T', ' '));
+  };
+
+  const saveInlineDateTime = async (record: IBooking) => {
+    const value = inlineDateTimeValue.trim();
+    if (!value || value === (record.preferredDateTime || "").replace('T', ' ')) {
+      setInlineEditingId(null);
+      return;
+    }
+    setSavingInlineDateTime(true);
+    try {
+      await fetch(`${API_BASE}/external/request/${record.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preferredDateTime: value }),
+      });
+      message.success("진단일시가 변경되었습니다.");
+      setInlineEditingId(null);
+      fetchBookings();
+    } catch {
+      message.error("저장 중 오류가 발생했습니다.");
+    } finally {
+      setSavingInlineDateTime(false);
+    }
   };
 
   // --- 💾 저장 로직 ---
@@ -1042,17 +1077,37 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       // 소스마다 구분자가 다를 수 있어("YYYY-MM-DD HH:mm" vs "YYYY-MM-DDTHH:mm") 비교 전에 통일
       sorter: (a, b) => (a.preferredDateTime || '').replace('T', ' ').localeCompare((b.preferredDateTime || '').replace('T', ' ')),
       defaultSortOrder: "ascend",
-      // 더블클릭하면 기존 수정 모달을 진단일시가 바로 보이는 상태로 염 — 실제 수정 가능 여부는
-      // 모달 안에서 슈퍼관리자 여부로 이미 걸려있음(1249행 부근)
-      render: (value: string | null, record) => (
-        <span
-          onDoubleClick={() => openModal(record)}
-          title="더블클릭하여 수정"
-          className={value ? "text-red-500 font-bold cursor-pointer" : "text-gray-300 cursor-pointer"}
-        >
-          {value ? value.replace('T', ' ') : "-"}
-        </span>
-      ),
+      // 더블클릭하면 모달 없이 셀 안에서 바로 입력창으로 바뀜(슈퍼관리자만) — Enter/포커스아웃 시 저장
+      render: (value: string | null, record) => {
+        if (inlineEditingId === record.id) {
+          return (
+            <Input
+              autoFocus
+              size="small"
+              value={inlineDateTimeValue}
+              disabled={savingInlineDateTime}
+              onChange={(e) => setInlineDateTimeValue(e.target.value)}
+              onPressEnter={() => saveInlineDateTime(record)}
+              onBlur={() => saveInlineDateTime(record)}
+              placeholder="YYYY-MM-DD HH:mm"
+              style={{ maxWidth: 160 }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          );
+        }
+        return (
+          <span
+            onDoubleClick={() => startInlineDateTimeEdit(record)}
+            title={isSuperAdminView ? "더블클릭하여 수정" : undefined}
+            className={
+              (value ? "text-red-500 font-bold" : "text-gray-300") +
+              (isSuperAdminView ? " cursor-pointer" : "")
+            }
+          >
+            {value ? value.replace('T', ' ') : "-"}
+          </span>
+        );
+      },
     },
     {
       title: "등록증",
