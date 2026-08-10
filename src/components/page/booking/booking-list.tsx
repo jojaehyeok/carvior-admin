@@ -445,7 +445,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setTempContractBalance(record.contractBalance ?? null);
     setTempOldDealerFee(record.oldDealerFee ?? null);
     setTempCustomerContact(record.customerContact || "");
-    setTempPreferredDateTime(record.preferredDateTime || "");
+    // 개인거래 등 일부 소스는 "YYYY-MM-DDTHH:mm" 형식으로 저장되어 있어 편집창에서도 통일해서 보여줌
+    setTempPreferredDateTime((record.preferredDateTime || "").replace('T', ' '));
     // 오지/준오지/긴급 추가금은 아직 값이 없으면(처음 여는 경우) 기본 제안값을 미리 채워준다 —
     // 관리자가 그대로 저장하거나 수정할 수 있음. 이미 값이 저장돼 있으면 그 값 그대로 사용.
     const defaultRemoteBonus =
@@ -1041,7 +1042,17 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       // 소스마다 구분자가 다를 수 있어("YYYY-MM-DD HH:mm" vs "YYYY-MM-DDTHH:mm") 비교 전에 통일
       sorter: (a, b) => (a.preferredDateTime || '').replace('T', ' ').localeCompare((b.preferredDateTime || '').replace('T', ' ')),
       defaultSortOrder: "ascend",
-      render: (value: string | null) => value ? <span className="text-red-500 font-bold">{value}</span> : <span className="text-gray-300">-</span>,
+      // 더블클릭하면 기존 수정 모달을 진단일시가 바로 보이는 상태로 염 — 실제 수정 가능 여부는
+      // 모달 안에서 슈퍼관리자 여부로 이미 걸려있음(1249행 부근)
+      render: (value: string | null, record) => (
+        <span
+          onDoubleClick={() => openModal(record)}
+          title="더블클릭하여 수정"
+          className={value ? "text-red-500 font-bold cursor-pointer" : "text-gray-300 cursor-pointer"}
+        >
+          {value ? value.replace('T', ' ') : "-"}
+        </span>
+      ),
     },
     {
       title: "등록증",
