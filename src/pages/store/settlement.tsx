@@ -84,6 +84,27 @@ const SettlementPage: IDefaultLayoutPage = () => {
   const [etcCost, setEtcCost] = useState<number | null>(null);
 
   const API_BASE = process.env.NEXT_PUBLIC_API_ENDPOINT || 'http://localhost:4000/api/v1';
+  const INTERNAL_HEADERS = { 'x-internal-key': process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? '' };
+
+  // 기타비용은 예전엔 이 state로만 있어서 새로 조회할 때마다 0으로 초기화됐음 — 발주사+정산월
+  // 조합으로 백엔드에 저장해서 다시 조회해도 값이 유지되게 함.
+  const saveEtcCost = async (source: string | undefined, month: dayjs.Dayjs | null, amount: number | null) => {
+    if (!source || !month) return;
+    try {
+      await fetch(`${API_BASE}/admin/settlement-extra-cost`, {
+        method: 'PATCH',
+        headers: { ...INTERNAL_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source, month: month.format('YYYY-MM'), amount: amount ?? 0 }),
+      });
+    } catch {
+      message.error('기타비용 저장에 실패했습니다.');
+    }
+  };
+
+  const handleEtcCostChange = (value: number | null) => {
+    setEtcCost(value);
+    saveEtcCost(selectedSource, selectedMonth, value);
+  };
 
   const handleSearch = async () => {
     if (!selectedMonth) {
@@ -98,6 +119,23 @@ const SettlementPage: IDefaultLayoutPage = () => {
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error();
       const all: IBooking[] = await res.json();
+
+      // 저장해둔 기타비용 불러오기(발주사+정산월 기준) — "전체" 조회일 땐 특정 발주사 하나로
+      // 안 좁혀져서 저장/조회 대상이 모호하므로 스킵(입력만 가능, 저장은 소스 선택 시에만)
+      if (selectedSource) {
+        try {
+          const etcRes = await fetch(
+            `${API_BASE}/admin/settlement-extra-cost?source=${encodeURIComponent(selectedSource)}&month=${selectedMonth.format('YYYY-MM')}`,
+            { headers: INTERNAL_HEADERS },
+          );
+          if (etcRes.ok) {
+            const etcData = await etcRes.json();
+            setEtcCost(etcData.amount || null);
+          }
+        } catch {}
+      } else {
+        setEtcCost(null);
+      }
 
       // 선택한 월 + COMPLETED 상태만 필터 — 접수일이 아니라 방문예정일(preferredDateTime)
       // 기준으로 잡아야 실제로 그 달에 수행한 진단 건과 청구 내역이 일치한다.
@@ -268,9 +306,10 @@ const SettlementPage: IDefaultLayoutPage = () => {
           <InputNumber
             style={{ width: 160 }}
             value={etcCost}
-            onChange={setEtcCost}
+            onChange={handleEtcCostChange}
             placeholder="예: 108400"
             min={0}
+            disabled={!selectedSource}
             formatter={val => val ? `${Number(val).toLocaleString()}` : ''}
           />
         </div>
