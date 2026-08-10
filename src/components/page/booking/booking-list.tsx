@@ -477,8 +477,13 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   };
 
   // --- 진단일시 테이블 인라인 편집 — 모달 안 열고 셀에서 바로 더블클릭→입력→저장 ---
+  // 슈퍼관리자는 기존대로 항상 가능. 애니원 등 발주사 관리자는 진단평가사가 이미 배정된
+  // 건만 가능(배정 전 건은 자동배정 매칭에 영향 줄 수 있어 제외) — 백엔드 PATCH .../status는
+  // preferredDateTime만 단독으로 보내면 재배정/거리뱃지 재계산 등 다른 로직을 안 건드림.
+  const canEditPreferredDateTime = (record: IBooking) => isSuperAdminView || !!record.assignedDriverId;
+
   const startInlineDateTimeEdit = (record: IBooking) => {
-    if (!isSuperAdminView) return;
+    if (!canEditPreferredDateTime(record)) return;
     setInlineEditingId(record.id);
     setInlineDateTimeValue((record.preferredDateTime || "").replace('T', ' '));
   };
@@ -1095,13 +1100,14 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             />
           );
         }
+        const editable = canEditPreferredDateTime(record);
         return (
           <span
             onDoubleClick={() => startInlineDateTimeEdit(record)}
-            title={isSuperAdminView ? "더블클릭하여 수정" : undefined}
+            title={editable ? "더블클릭하여 수정" : undefined}
             className={
               (value ? "text-red-500 font-bold" : "text-gray-300") +
-              (isSuperAdminView ? " cursor-pointer" : "")
+              (editable ? " cursor-pointer" : "")
             }
           >
             {value ? value.replace('T', ' ') : "-"}
