@@ -456,9 +456,12 @@ const StoreRegisterPageInner = () => {
         { label: 'Displacement', value: values.displacement || '' },
       ].filter(s => s.value);
 
-      // 블러 fire-and-forget
+      // 블러 fire-and-forget — 신규 등록 시 관리자가 "번호판 블러" 버튼을 깜빡했을 때의
+      // 안전망으로만 쓴다. 수정(edit) 저장 때도 매번 돌리면 이미 수동으로 바로잡은 블러/로고
+      // 위치를 감지 결과로 덮어써버려서(같은 S3 키에 in-place 덮어쓰기), 방금 고친 게 저장할
+      // 때마다 다시 틀어지는 원인이 됐다 — 그래서 신규 등록일 때만 실행한다.
       const allUrls = Object.values(photoOrder).flat();
-      if (allUrls.length > 0) {
+      if (!isEditMode && allUrls.length > 0) {
         fetch(`${CAVIOR_BASE}/api/v1/admin/blur/photos`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
