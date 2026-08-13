@@ -1,9 +1,10 @@
 import { Button, Modal, message } from "antd";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const CAVIOR_BASE = (process.env.NEXT_PUBLIC_API_ENDPOINT || 'https://carvior.store/api/v1').replace('/api/v1', '');
 
 interface Rect { xFrac: number; yFrac: number; wFrac: number; hFrac: number }
+interface Version { versionId: string; lastModified: string; isLatest: boolean; sizeKB: number }
 
 export default function ManualBlurEditorModal({
   open,
@@ -21,6 +22,45 @@ export default function ManualBlurEditorModal({
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
   const [drawCur, setDrawCur] = useState<{ x: number; y: number } | null>(null);
   const [applying, setApplying] = useState(false);
+  const [versions, setVersions] = useState<Version[]>([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+
+  // 자동/수동 블러가 사진을 잘못 덮어썼을 때 되돌릴 수 있게, 열릴 때마다 S3 이전 버전 목록을 조회
+  // (버킷 버전관리를 2026-08-13에 켜서, 그 이후 덮어써진 사진만 이전 버전이 남아있음)
+  useEffect(() => {
+    if (!open || !imageUrl) { setVersions([]); return; }
+    setLoadingVersions(true);
+    fetch(`${CAVIOR_BASE}/api/v1/admin/blur/list-versions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageUrl }),
+    })
+      .then(res => res.json())
+      .then(data => setVersions(Array.isArray(data.versions) ? data.versions : []))
+      .catch(() => setVersions([]))
+      .finally(() => setLoadingVersions(false));
+  }, [open, imageUrl]);
+
+  const handleRestore = async (versionId: string) => {
+    setRestoringId(versionId);
+    try {
+      const res = await fetch(`${CAVIOR_BASE}/api/v1/admin/blur/restore-version`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl, versionId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) throw new Error();
+      message.success("이전 버전으로 복원했습니다.");
+      onApplied(data.url);
+      onClose();
+    } catch {
+      message.error("복원에 실패했습니다.");
+    } finally {
+      setRestoringId(null);
+    }
+  };
 
   const toFrac = (e: React.MouseEvent) => {
     const el = containerRef.current;
@@ -127,6 +167,34 @@ export default function ManualBlurEditorModal({
         )}
       </div>
       <p className="text-[11px] text-gray-400 mt-2">{regions.length}개 영역 지정됨</p>
+
+      <div className="mt-4 pt-4 border-t border-gray-100">
+        <p className="text-xs font-bold text-gray-600 mb-2">이전 버전으로 복원</p>
+        {loadingVersions ? (
+          <p className="text-[11px] text-gray-400">버전 조회 중…</p>
+        ) : versions.length <= 1 ? (
+          <p className="text-[11px] text-gray-400">복원 가능한 이전 버전이 없습니다. (버킷 버전관리를 켠 이후 덮어써진 사진만 기록이 남아요)</p>
+        ) : (
+          <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto">
+            {versions.map(v => (
+              <div key={v.versionId} className="flex items-center justify-between text-[11px] bg-gray-50 rounded-lg px-3 py-1.5">
+                <span className="text-gray-500">
+                  {new Date(v.lastModified).toLocaleString('ko-KR')} {v.isLatest && <span className="text-violet-500 font-bold">(현재)</span>}
+                </span>
+                {!v.isLatest && (
+                  <Button
+                    size="small"
+                    loading={restoringId === v.versionId}
+                    onClick={() => handleRestore(v.versionId)}
+                  >
+                    이 버전으로 복원
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </Modal>
   );
 }
