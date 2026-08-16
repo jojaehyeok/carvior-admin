@@ -83,7 +83,17 @@ function timeDiff(iso: string | null) {
 
 const KAKAO_REST_KEY = "5d73c6482159874735a29becf6849e11";
 
+// 지도 화면이 15초마다 폴링하면서 같은 주소를 반복 지오코딩하지 않도록 캐시
+const geocodeCache = new Map<string, { lat: number; lng: number } | null>();
+
 async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+  if (geocodeCache.has(address)) return geocodeCache.get(address)!;
+  const result = await geocodeAddressUncached(address);
+  geocodeCache.set(address, result);
+  return result;
+}
+
+async function geocodeAddressUncached(address: string): Promise<{ lat: number; lng: number } | null> {
   try {
     // 1차: 주소 검색
     const res = await fetch(
@@ -204,8 +214,8 @@ const MapPage: IDefaultLayoutPage = () => {
     });
   }, [mapReady, demoMode, demoTarget]);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const bookingListUrl = new URL(`${API}/external/request/list`);
       if (company) bookingListUrl.searchParams.set('source', company);
@@ -233,13 +243,19 @@ const MapPage: IDefaultLayoutPage = () => {
         setGeocoding(false);
       }
     } catch {
-      message.error("데이터를 불러오지 못했습니다.");
+      if (!silent) message.error("데이터를 불러오지 못했습니다.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => { fetchData(); }, [company]);
+
+  // 다른 화면(진단사 관리 등)에서 상태가 바뀌어도 지도가 "실시간"으로 반영되도록 주기 폴링
+  useEffect(() => {
+    const t = setInterval(() => fetchData(true), 15000);
+    return () => clearInterval(t);
+  }, [company]);
 
   // 진단사 마커
   useEffect(() => {
