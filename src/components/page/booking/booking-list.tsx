@@ -66,6 +66,9 @@ interface IBooking {
   id: number;
   carNumber: string;
   carModel?: string | null;
+  carSpecManufacturer?: string | null;
+  carSpecModel?: string | null;
+  carSpecBadge?: string | null;
   carOwner: string;
   dealerName: string;
   dealerContact?: string | null;
@@ -820,7 +823,17 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "차량명",
       dataIndex: "carModel",
       align: "center",
-      render: (value?: string | null) => value || <span className="text-gray-300">-</span>,
+      render: (value: string | null | undefined, record: IBooking) => {
+        const specParts = [record.carSpecManufacturer, record.carSpecModel, record.carSpecBadge].filter(Boolean);
+        return (
+          <div className="flex flex-col items-center">
+            <span>{value || <span className="text-gray-300">-</span>}</span>
+            {specParts.length > 0 && (
+              <span className="text-xs text-gray-400 mt-0.5">{specParts.join(" ")}</span>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: "딜러이름",
