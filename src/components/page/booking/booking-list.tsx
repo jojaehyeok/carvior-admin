@@ -2,13 +2,13 @@
 
 import DefaultTable from "@/components/shared/ui/default-table";
 import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
-import CarSpecPriceModal from "./CarSpecPriceModal";
 import { ISO8601DateTime } from "@/types/common";
 import { Alert, Button, Checkbox, Input, InputNumber, Modal, Popover, Select, Spin, Switch, Tag, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { Copy, Eye, FileText, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 import { useRouter } from "next/router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -145,7 +145,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [reportOnly, setReportOnly] = useState(false);
   const [purchasePriceOnly, setPurchasePriceOnly] = useState(false);
-  const [specPriceBooking, setSpecPriceBooking] = useState<IBooking | null>(null);
   // bookingId → storeItemId (스마트옥션 매물로 이미 등록됐는지 확인용)
   const [storeItemMap, setStoreItemMap] = useState<Record<number, string>>({});
 
@@ -863,9 +862,11 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       key: "specPrice",
       align: "center" as const,
       render: (_: unknown, record: IBooking) => (
-        <Button size="small" onClick={() => setSpecPriceBooking(record)}>
-          {record.carSpecManufacturer ? "상세보기" : "등급 등록"}
-        </Button>
+        <Link href={`/booking/${record.id}/price`} target="_blank">
+          <Button size="small">
+            {record.carSpecManufacturer ? "매입가 산출" : "등급 등록"}
+          </Button>
+        </Link>
       ),
     }] : []),
     {
@@ -1955,15 +1956,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           </div>
         </div>
       </Modal>
-
-      <CarSpecPriceModal
-        booking={specPriceBooking}
-        onClose={() => setSpecPriceBooking(null)}
-        onSaved={(bookingId, patch) => {
-          setData(prev => prev.map(b => b.id === bookingId ? ({ ...b, ...patch } as IBooking) : b));
-          setSpecPriceBooking(prev => (prev && prev.id === bookingId ? ({ ...prev, ...patch } as IBooking) : prev));
-        }}
-      />
     </div>
   );
 };
