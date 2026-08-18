@@ -161,6 +161,29 @@ export default function CarSpecPriceModal({ booking, onClose, onSaved }: Props) 
     }
   };
 
+  // 재선택하면 검색 화면으로 돌아가는 것과 동시에, 예약에 저장된 이전 등급/시세도 바로 비워야
+  // 한다 — 안 그러면 새로 고르기 전까지 예전 값이 그대로 남아서 관리자가 헷갈린다.
+  const handleReselect = async () => {
+    if (!booking) return;
+    setSelected(null);
+    setListings([]);
+    setStep('search');
+    setMatches([]);
+    onSaved(booking.id, {
+      carSpecManufacturer: null, carSpecModel: null, carSpecBadge: null,
+      estPriceLow: null, estPriceHigh: null, estPriceDepLow: null, estPriceDepHigh: null, estPriceDepPct: null,
+    });
+    try {
+      await fetch(`${API_BASE}/external/request/${booking.id}/car-spec`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+    } catch {
+      message.error('등급 초기화에 실패했어요.');
+    }
+  };
+
   const handleSavePurchasePrice = async () => {
     if (!booking) return;
     setSaving(true);
@@ -300,7 +323,7 @@ export default function CarSpecPriceModal({ booking, onClose, onSaved }: Props) 
                   <Button size="small">carvior.store에서 그래프로 보기</Button>
                 </a>
               )}
-              <Button size="small" onClick={() => { setStep('search'); setMatches([]); }}>재선택</Button>
+              <Button size="small" onClick={handleReselect}>재선택</Button>
             </div>
           </div>
           {loading ? (
