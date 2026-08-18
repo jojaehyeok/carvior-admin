@@ -14,6 +14,7 @@ type Listing = {
   mileage: number;
   fuel: string;
   priceManwon: number;
+  thumbnailUrl: string | null;
 };
 
 interface BookingLike {
@@ -66,9 +67,12 @@ export default function CarSpecPriceModal({ booking, onClose, onSaved }: Props) 
     } else {
       setSelected(null);
       setStep('search');
-      setQuery(booking.carModel || '');
       setMatches([]);
       setListings([]);
+      // 등급이 아직 없어도 차량명은 접수 시점에 이미 적혀있는 경우가 많아, 그걸로 바로 검색해서 보여준다.
+      const initialQuery = booking.carModel || '';
+      setQuery(initialQuery);
+      if (initialQuery.trim()) searchByQuery(initialQuery.trim());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [booking?.id]);
@@ -88,12 +92,11 @@ export default function CarSpecPriceModal({ booking, onClose, onSaved }: Props) 
     }
   };
 
-  const handleSearch = async () => {
-    if (!query.trim()) return;
+  const searchByQuery = async (q: string) => {
     setLoading(true);
     setMatches([]);
     try {
-      const res = await fetch(`${API_BASE}/external/car-spec/search?q=${encodeURIComponent(query.trim())}`);
+      const res = await fetch(`${API_BASE}/external/car-spec/search?q=${encodeURIComponent(q)}`);
       const data = await res.json();
       setMatches(Array.isArray(data) ? data : []);
     } catch {
@@ -101,6 +104,11 @@ export default function CarSpecPriceModal({ booking, onClose, onSaved }: Props) 
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSearch = () => {
+    if (!query.trim()) return;
+    searchByQuery(query.trim());
   };
 
   const handleSelect = async (m: SpecMatch) => {
@@ -155,7 +163,7 @@ export default function CarSpecPriceModal({ booking, onClose, onSaved }: Props) 
       onCancel={onClose}
       footer={null}
       title={booking ? `${booking.carModel || '차량'} · 시세 참고` : ''}
-      width={640}
+      width="min(640px, 94vw)"
     >
       {booking?.estPriceLow != null && (
         <div className="mb-4 p-3 rounded-lg bg-gray-50 border border-gray-200">
@@ -204,9 +212,24 @@ export default function CarSpecPriceModal({ booking, onClose, onSaved }: Props) 
 
       {step === 'listings' && (
         <div>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
             <p className="font-semibold text-sm">{selected?.manufacturer} {selected?.model} · {selected?.badge}</p>
-            <Button size="small" onClick={() => { setStep('search'); setMatches([]); }}>재선택</Button>
+            <div className="flex gap-2 shrink-0">
+              {selected && (
+                <a
+                  href={`https://carvior.store/price?${new URLSearchParams({
+                    manufacturer: selected.manufacturer,
+                    model: selected.model,
+                    badge: selected.badge,
+                  }).toString()}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Button size="small">carvior.store에서 그래프로 보기</Button>
+                </a>
+              )}
+              <Button size="small" onClick={() => { setStep('search'); setMatches([]); }}>재선택</Button>
+            </div>
           </div>
           {loading ? (
             <p className="text-gray-400 text-sm py-6 text-center">불러오는 중...</p>
@@ -215,9 +238,21 @@ export default function CarSpecPriceModal({ booking, onClose, onSaved }: Props) 
           ) : (
             <div className="max-h-72 overflow-y-auto divide-y border rounded-lg">
               {sortedListings.map((l) => (
-                <div key={l.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                  <span className="text-gray-600">{l.year}년식 · {l.mileage?.toLocaleString()}km · {l.fuel}</span>
-                  <span className="font-bold">{l.priceManwon?.toLocaleString()}만원</span>
+                <div key={l.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                  {l.thumbnailUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={l.thumbnailUrl}
+                      alt=""
+                      className="w-14 h-10 rounded object-cover shrink-0 bg-gray-100"
+                      loading="lazy"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  ) : (
+                    <div className="w-14 h-10 rounded bg-gray-100 shrink-0" />
+                  )}
+                  <span className="text-gray-600 flex-1 min-w-0">{l.year}년식 · {l.mileage?.toLocaleString()}km · {l.fuel}</span>
+                  <span className="font-bold shrink-0">{l.priceManwon?.toLocaleString()}만원</span>
                 </div>
               ))}
             </div>
