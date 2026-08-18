@@ -285,6 +285,14 @@ export default function CarSpecPriceModal({ booking, onClose, onSaved }: Props) 
                     manufacturer: selected.manufacturer,
                     model: selected.model,
                     badge: selected.badge,
+                    ...(reportMileage != null ? { mileage: String(reportMileage) } : {}),
+                    ...(booking?.estPriceDepLow != null && booking?.estPriceDepHigh != null ? {
+                      depLow: String(booking.estPriceDepLow),
+                      depHigh: String(booking.estPriceDepHigh),
+                      depLabel: booking.estPriceDepPct != null
+                        ? `사고감가+실비 반영 (-${booking.estPriceDepPct}%)`
+                        : '사고감가+실비 반영',
+                    } : {}),
                   }).toString()}`}
                   target="_blank"
                   rel="noreferrer"
