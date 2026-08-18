@@ -69,6 +69,11 @@ interface IBooking {
   carSpecManufacturer?: string | null;
   carSpecModel?: string | null;
   carSpecBadge?: string | null;
+  estPriceLow?: number | null;
+  estPriceHigh?: number | null;
+  estPriceDepLow?: number | null;
+  estPriceDepHigh?: number | null;
+  estPriceDepPct?: number | null;
   carOwner: string;
   dealerName: string;
   dealerContact?: string | null;
@@ -825,11 +830,27 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       align: "center",
       render: (value: string | null | undefined, record: IBooking) => {
         const specParts = [record.carSpecManufacturer, record.carSpecModel, record.carSpecBadge].filter(Boolean);
+        // 예상시세는 매입 판단 참고용이라 SUPER_ADMIN에게만 노출(데모 단계, 진단사 앱과 동일 계산값을
+        // 등급 선택 시점에 저장해둔 걸 그대로 보여줌 — 여기서 재계산하지 않음).
+        const hasEstimate = isSuperAdminView && record.estPriceLow != null && record.estPriceHigh != null;
         return (
           <div className="flex flex-col items-center">
             <span>{value || <span className="text-gray-300">-</span>}</span>
             {specParts.length > 0 && (
               <span className="text-xs text-gray-400 mt-0.5">{specParts.join(" ")}</span>
+            )}
+            {hasEstimate && (
+              <div className="mt-1 text-xs">
+                <span className="text-gray-500">
+                  시세 {record.estPriceLow!.toLocaleString()}~{record.estPriceHigh!.toLocaleString()}만
+                </span>
+                {record.estPriceDepLow != null && record.estPriceDepHigh != null && (
+                  <div className="text-purple-500 font-semibold">
+                    감가 {record.estPriceDepLow.toLocaleString()}~{record.estPriceDepHigh.toLocaleString()}만
+                    {record.estPriceDepPct != null && ` (-${record.estPriceDepPct}%)`}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         );
