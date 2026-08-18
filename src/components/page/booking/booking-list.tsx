@@ -677,6 +677,23 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     }
   };
 
+  // 자동배정 건이 진단사 앱 미확인(driverSeenAt 없음)으로 계속 남는 경우 — 관리자가 전화 등으로
+  // 직접 확인시켰으면 여기서 수동으로 "확인" 처리(오클릭 시 다시 클릭하면 되돌릴 수 있음).
+  const handleAdminConfirmSeen = async (record: IBooking) => {
+    const next = record.driverSeenAt ? null : new Date().toISOString();
+    setData(prev => prev.map(b => b.id === record.id ? { ...b, driverSeenAt: next } : b));
+    try {
+      await fetch(`${API_BASE}/external/request/${record.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driverSeenAt: next }),
+      });
+    } catch {
+      message.error('확인 처리 중 오류 발생');
+      fetchBookings();
+    }
+  };
+
   const statusConfig: any = {
     PENDING: { color: "orange", label: "대기중" },
     ASSIGNED: { color: "blue", label: "배정완료" },
@@ -921,13 +938,34 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 의미가 있음(완료되면 어차피 이미 확인하고 진단까지 마친 것이므로 표시하지 않음).
                 수동배정/셀프클레임은 진단사가 이미 그 순간에 인지한 배정이므로 배정 시각을
                 그대로 "확인" 시각으로 표시 — driverSeenAt(앱에서 연락하기/시간변경 등 반응)은
-                자동배정 건에만 의미가 있음. */}
+                자동배정 건에만 의미가 있음. 자동배정 건은 진단사가 앱을 안 열어도(예: 관리자가
+                전화로 직접 확인시킨 경우) 태그를 클릭하면 수동으로 확인 처리할 수 있다(다시
+                클릭하면 되돌림) — driverSeenAt은 "앱에서 열었다"뿐 아니라 "어떤 식으로든
+                확인됐다"는 의미로 확장해서 씀. */}
             {value && record.status === 'ASSIGNED' && (
               record.assignSource === 'manual' || record.assignSource === 'self'
                 ? <Tag color="green" className="text-xs">✅ 확인 {record.assignedAt ? dayjs(record.assignedAt).format('MM/DD HH:mm') : ''}</Tag>
                 : record.driverSeenAt
-                  ? <Tag color="green" className="text-xs">✅ 확인 {dayjs(record.driverSeenAt).format('MM/DD HH:mm')}</Tag>
-                  : <Tag color="red" className="text-xs">👀 미확인</Tag>
+                  ? (
+                    <Tag
+                      color="green"
+                      className="text-xs"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => handleAdminConfirmSeen(record)}
+                    >
+                      ✅ 확인 {dayjs(record.driverSeenAt).format('MM/DD HH:mm')}
+                    </Tag>
+                  )
+                  : (
+                    <Tag
+                      color="red"
+                      className="text-xs"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => handleAdminConfirmSeen(record)}
+                    >
+                      👀 미확인 (클릭해서 확인처리)
+                    </Tag>
+                  )
             )}
           </div>
         );
