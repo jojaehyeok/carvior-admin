@@ -2,6 +2,7 @@
 
 import { Button, Input, InputNumber, Modal, message } from "antd";
 import React, { useEffect, useState } from "react";
+import { summarizeDamages } from "./damagePartNames";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_ENDPOINT || 'http://localhost:4000/api/v1';
 
@@ -52,6 +53,27 @@ export default function CarSpecPriceModal({ booking, onClose, onSaved }: Props) 
   const [listings, setListings] = useState<Listing[]>([]);
   const [purchasePrice, setPurchasePrice] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [reportMileage, setReportMileage] = useState<number | null>(null);
+  const [reportDamages, setReportDamages] = useState<string[][] | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+
+  useEffect(() => {
+    if (!booking) return;
+    setReportMileage(null);
+    setReportDamages(null);
+    if (booking.status === 'COMPLETED') {
+      setReportLoading(true);
+      fetch(`${API_BASE}/external/inspection/report/${booking.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          setReportMileage(data?.car_info?.mileage ?? null);
+          setReportDamages(Array.isArray(data?.damages) ? data.damages : null);
+        })
+        .catch(() => {})
+        .finally(() => setReportLoading(false));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booking?.id, booking?.status]);
 
   useEffect(() => {
     if (!booking) return;
@@ -174,6 +196,37 @@ export default function CarSpecPriceModal({ booking, onClose, onSaved }: Props) 
         >
           진단 리포트 보기 (새 탭)
         </Button>
+      )}
+
+      {booking?.status === 'COMPLETED' && (reportLoading || reportMileage != null || reportDamages) && (
+        <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200">
+          <p className="text-xs font-bold text-amber-700 mb-1.5">진단 결과 요약</p>
+          {reportLoading ? (
+            <p className="text-sm text-gray-400">불러오는 중...</p>
+          ) : (
+            <>
+              <p className="text-sm">
+                <span className="text-gray-500">주행거리 </span>
+                <span className="font-bold">
+                  {reportMileage != null ? `${reportMileage.toLocaleString()}km` : '미입력'}
+                </span>
+              </p>
+              {(() => {
+                const { text, count } = summarizeDamages(reportDamages);
+                return (
+                  <p className="text-sm mt-1">
+                    <span className="text-gray-500">사고내역 </span>
+                    {count === 0 ? (
+                      <span className="font-bold text-green-600">무사고</span>
+                    ) : (
+                      <span className="font-bold text-red-600">{text} (총 {count}곳)</span>
+                    )}
+                  </p>
+                );
+              })()}
+            </>
+          )}
+        </div>
       )}
 
       {booking?.estPriceLow != null && (
