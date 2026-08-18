@@ -237,8 +237,8 @@ export default function CarSpecPriceModal({ booking, onClose, onSaved }: Props) 
           </p>
           {booking.estPriceDepLow != null && (
             <p className="text-purple-600 font-semibold text-sm mt-0.5">
-              사고감가 반영: {booking.estPriceDepLow?.toLocaleString()} ~ {booking.estPriceDepHigh?.toLocaleString()}만원
-              {booking.estPriceDepPct != null && ` (-${booking.estPriceDepPct}%)`}
+              사고감가+실비 반영: {booking.estPriceDepLow?.toLocaleString()} ~ {booking.estPriceDepHigh?.toLocaleString()}만원
+              {booking.estPriceDepPct != null && ` (사고감가 -${booking.estPriceDepPct}%, 외판/휠/키/타이어 등 실비 별도 차감)`}
             </p>
           )}
         </div>
