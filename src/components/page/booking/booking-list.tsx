@@ -1960,8 +1960,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         booking={specPriceBooking}
         onClose={() => setSpecPriceBooking(null)}
         onSaved={(bookingId, patch) => {
-          setData(prev => prev.map(b => b.id === bookingId ? { ...b, ...patch } : b));
-          setSpecPriceBooking(prev => (prev && prev.id === bookingId ? { ...prev, ...patch } : prev));
+          setData(prev => prev.map(b => b.id === bookingId ? ({ ...b, ...patch } as IBooking) : b));
+          setSpecPriceBooking(prev => (prev && prev.id === bookingId ? ({ ...prev, ...patch } as IBooking) : prev));
         }}
       />
     </div>

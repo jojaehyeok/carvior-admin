@@ -29,6 +29,8 @@ interface BookingLike {
   estPriceDepHigh?: number | null;
   estPriceDepPct?: number | null;
   purchasePrice?: number | null;
+  status?: string;
+  carHash?: string | null;
 }
 
 interface Props {
@@ -165,6 +167,15 @@ export default function CarSpecPriceModal({ booking, onClose, onSaved }: Props) 
       title={booking ? `${booking.carModel || '차량'} · 시세 참고` : ''}
       width="min(640px, 94vw)"
     >
+      {booking?.status === 'COMPLETED' && booking?.carHash && (
+        <Button
+          className="mb-4"
+          onClick={() => window.open(`/report/${booking.carHash}`, '_blank')}
+        >
+          진단 리포트 보기 (새 탭)
+        </Button>
+      )}
+
       {booking?.estPriceLow != null && (
         <div className="mb-4 p-3 rounded-lg bg-gray-50 border border-gray-200">
           <p className="text-xs text-gray-500 mb-1">진단사 앱에서 계산된 예상시세 (주행거리 반영)</p>
