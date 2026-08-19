@@ -1,7 +1,7 @@
 'use client';
 
 import { getDefaultLayout, IDefaultLayoutPage, IPageHeader } from "@/components/layout/default-layout";
-import RequireSuperAdmin from "@/components/shared/require-super-admin";
+import { useAuth } from "@/lib/auth/auth-provider";
 import DashboardPriceChart from "@/components/page/booking/DashboardPriceChart";
 import { computeDamageBreakdown, computeFlatRepairDeduction, summarizeDamages } from "@/components/page/booking/damagePartNames";
 import { computePriceEstimate } from "@/components/page/booking/priceEstimate";
@@ -28,13 +28,17 @@ interface Booking {
   carSpecModel?: string | null;
   carSpecBadge?: string | null;
   purchasePrice?: number | null;
+  source?: string | null;
 }
 
-const pageHeader: IPageHeader = { title: "매입가 산출" };
+const pageHeader: IPageHeader = { title: "시세(참고)" };
 
 const BookingPricePage: IDefaultLayoutPage = () => {
   const router = useRouter();
   const bookingId = router.query.id as string | undefined;
+  const { session } = useAuth();
+  const isSuperAdmin = session.user.role === "SUPER_ADMIN";
+  const userCompany = session.user.company ?? null;
 
   const [booking, setBooking] = useState<Booking | null>(null);
   const [bookingLoading, setBookingLoading] = useState(true);
@@ -168,18 +172,15 @@ const BookingPricePage: IDefaultLayoutPage = () => {
   };
 
   if (bookingLoading) {
-    return (
-      <RequireSuperAdmin>
-        <div className="flex justify-center py-20"><Spin /></div>
-      </RequireSuperAdmin>
-    );
+    return <div className="flex justify-center py-20"><Spin /></div>;
   }
   if (!booking) {
-    return (
-      <RequireSuperAdmin>
-        <div className="text-center text-gray-400 py-20">예약을 찾을 수 없어요.</div>
-      </RequireSuperAdmin>
-    );
+    return <div className="text-center text-gray-400 py-20">예약을 찾을 수 없어요.</div>;
+  }
+  // 발주사 계정은 자기 회사(source) 건만 볼 수 있게 — 이 API가 소유권 체크 없이 단건조회를
+  // 그대로 돌려주기 때문에 페이지 단에서 한 번 더 막는다.
+  if (!isSuperAdmin && booking.source !== userCompany) {
+    return <div className="text-center text-gray-400 py-20">이 예약을 볼 권한이 없어요.</div>;
   }
 
   const estimate = computePriceEstimate(listings, reportMileage ?? undefined);
@@ -200,7 +201,6 @@ const BookingPricePage: IDefaultLayoutPage = () => {
   const adjustedHigh = estimate ? estimate.rangeHigh - totalDeductionWon : null;
 
   return (
-    <RequireSuperAdmin>
     <div className="max-w-3xl mx-auto flex flex-col gap-6">
       {/* 상단: 차량 + 리포트 */}
       <div className="bg-white rounded-2xl border p-5">
@@ -243,31 +243,35 @@ const BookingPricePage: IDefaultLayoutPage = () => {
       {/* 등급 검색/선택 + 그래프 */}
       <div className="bg-white rounded-2xl border p-5">
         {step === 'search' && (
-          <div>
-            <div className="flex gap-2 mb-3">
-              <Input value={query} onChange={(e) => setQuery(e.target.value)} onPressEnter={() => searchByQuery(query.trim())} placeholder="예: 투싼, 그랜저 IG" />
-              <Button type="primary" onClick={() => searchByQuery(query.trim())} loading={searchLoading}>검색</Button>
-            </div>
-            {matches.length === 0 && !searchLoading && <p className="text-gray-400 text-sm">차종을 검색해서 등급을 선택하세요.</p>}
-            <div className="divide-y">
-              {matches.map((m, i) => (
-                <div key={i} className="flex items-center justify-between py-2 cursor-pointer hover:bg-gray-50 px-2" onClick={() => handleSelect(m)}>
-                  <div>
-                    <p className="font-semibold text-sm">{m.manufacturer} {m.model}</p>
-                    <p className="text-xs text-gray-400">{m.badge}</p>
+          isSuperAdmin ? (
+            <div>
+              <div className="flex gap-2 mb-3">
+                <Input value={query} onChange={(e) => setQuery(e.target.value)} onPressEnter={() => searchByQuery(query.trim())} placeholder="예: 투싼, 그랜저 IG" />
+                <Button type="primary" onClick={() => searchByQuery(query.trim())} loading={searchLoading}>검색</Button>
+              </div>
+              {matches.length === 0 && !searchLoading && <p className="text-gray-400 text-sm">차종을 검색해서 등급을 선택하세요.</p>}
+              <div className="divide-y">
+                {matches.map((m, i) => (
+                  <div key={i} className="flex items-center justify-between py-2 cursor-pointer hover:bg-gray-50 px-2" onClick={() => handleSelect(m)}>
+                    <div>
+                      <p className="font-semibold text-sm">{m.manufacturer} {m.model}</p>
+                      <p className="text-xs text-gray-400">{m.badge}</p>
+                    </div>
+                    <span className="text-xs text-gray-400">매물 {m.count}건 ›</span>
                   </div>
-                  <span className="text-xs text-gray-400">매물 {m.count}건 ›</span>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <p className="text-gray-400 text-sm py-6 text-center">아직 등급이 등록되지 않아 시세를 확인할 수 없어요.</p>
+          )
         )}
 
         {step === 'listings' && (
           <div>
             <div className="flex items-center justify-between mb-3">
               <p className="font-semibold text-sm">{selected?.manufacturer} {selected?.model} · {selected?.badge}</p>
-              <Button size="small" onClick={handleReselect}>재선택</Button>
+              {isSuperAdmin && <Button size="small" onClick={handleReselect}>재선택</Button>}
             </div>
 
             {listingsLoading ? (
@@ -330,16 +334,17 @@ const BookingPricePage: IDefaultLayoutPage = () => {
         )}
       </div>
 
-      {/* 매입가 입력 */}
-      <div className="bg-white rounded-2xl border p-5">
-        <p className="text-xs font-bold text-gray-500 mb-2">매입가 입력 (만원)</p>
-        <div className="flex gap-2">
-          <InputNumber className="flex-1" value={purchasePrice} onChange={(v) => setPurchasePrice(v)} placeholder="매입가" min={0} style={{ width: '100%' }} />
-          <Button type="primary" onClick={handleSavePurchasePrice} loading={saving}>저장</Button>
+      {/* 매입가 입력 (내부용) */}
+      {isSuperAdmin && (
+        <div className="bg-white rounded-2xl border p-5">
+          <p className="text-xs font-bold text-gray-500 mb-2">매입가 입력 (만원)</p>
+          <div className="flex gap-2">
+            <InputNumber className="flex-1" value={purchasePrice} onChange={(v) => setPurchasePrice(v)} placeholder="매입가" min={0} style={{ width: '100%' }} />
+            <Button type="primary" onClick={handleSavePurchasePrice} loading={saving}>저장</Button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
-    </RequireSuperAdmin>
   );
 };
 

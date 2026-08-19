@@ -857,18 +857,20 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         );
       },
     },
-    ...(isSuperAdminView ? [{
-      title: "시세",
+    // 시세(참고)는 슈퍼관리자뿐 아니라 발주사 계정도 볼 수 있음 — 페이지 안에서
+    // 매입가 입력/등급 재선택 등 내부 전용 조작은 isSuperAdmin으로 추가 가드됨.
+    {
+      title: "시세(참고)",
       key: "specPrice",
       align: "center" as const,
       render: (_: unknown, record: IBooking) => (
         <Link href={`/booking/${record.id}/price`} target="_blank">
           <Button size="small">
-            {record.carSpecManufacturer ? "매입가 산출" : "등급 등록"}
+            {record.carSpecManufacturer ? "시세 보기" : isSuperAdminView ? "등급 등록" : "미등록"}
           </Button>
         </Link>
       ),
-    }] : []),
+    },
     {
       title: "딜러이름",
       dataIndex: "dealerName",
