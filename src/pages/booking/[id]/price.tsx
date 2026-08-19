@@ -193,8 +193,6 @@ const BookingPricePage: IDefaultLayoutPage = () => {
         smartKeyCount: carStatus.keys?.smart || 0,
         frontTirePct: carStatus.tireTread?.front ?? 50,
         backTirePct: carStatus.tireTread?.back ?? 50,
-        interiorCleaning: carStatus.interiorCleaning || 0,
-        glassLightDamage: carStatus.glassLightDamage || 0,
       })
     : null;
   const totalDeductionWon = (damageBreakdown?.totalWon || 0) + (repairBreakdown?.totalWon || 0);

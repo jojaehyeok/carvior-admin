@@ -103,8 +103,6 @@ export interface RepairCostInputs {
   smartKeyCount: number;
   frontTirePct: number;
   backTirePct: number;
-  interiorCleaning: number;
-  glassLightDamage: number;
 }
 
 export function computeFlatRepairDeduction(input: RepairCostInputs): { totalWon: number; breakdown: string[] } {
@@ -135,13 +133,5 @@ export function computeFlatRepairDeduction(input: RepairCostInputs): { totalWon:
     total += cost;
     breakdown.push(`타이어 마모(${tireCount}개) -${cost}만원`);
   }
-  if (input.interiorCleaning > 0) {
-    total += 15;
-    breakdown.push(`실내크리닝/복원 -15만원`);
-  }
-  if (input.glassLightDamage > 0) {
-    breakdown.push(`유리/라이트 손상 ${input.glassLightDamage}건 (실비, 별도 확인 필요)`);
-  }
-
   return { totalWon: total, breakdown };
 }
