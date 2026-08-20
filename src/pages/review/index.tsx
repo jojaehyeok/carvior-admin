@@ -495,6 +495,29 @@ const ReviewListPage: IDefaultLayoutPage = () => {
             <p className="text-gray-600">
               <span className="font-bold">선정 사유:</span> {String(assignLogTarget.autoAssignLog.reason ?? '-')}
             </p>
+            {!!(assignLogTarget.autoAssignLog.excluded as Array<Record<string, any>> | undefined)?.length && (
+              <div>
+                <p className="text-xs font-bold text-gray-500 mb-1">
+                  지역은 맞지만 제외된 진단사
+                </p>
+                <table className="w-full text-xs border border-gray-100 rounded overflow-hidden">
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-500">
+                      <th className="p-2 text-left">진단사</th>
+                      <th className="p-2 text-left">제외 사유</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(assignLogTarget.autoAssignLog.excluded as Array<Record<string, any>>).map((e, idx) => (
+                      <tr key={idx} className="border-t border-gray-50">
+                        <td className="p-2">{e.driverName}</td>
+                        <td className="p-2 text-gray-500">{e.reason}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </Modal>
