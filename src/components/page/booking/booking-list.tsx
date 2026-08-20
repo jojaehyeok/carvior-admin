@@ -905,7 +905,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     {
       title: "진단 리포트",
       key: "report",
-      width: 200,
+      width: 280,
       align: "center",
       render: (_, record) => (
         <div className="flex items-center justify-center gap-1.5">
@@ -918,6 +918,15 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             onClick={() => window.open(`/report/${record.carHash}`, '_blank')}
           >
             리포트 보기
+          </Button>
+          <Button
+            size="small"
+            disabled={record.status !== 'COMPLETED'}
+            loading={loadingRegId === record.id}
+            icon={<FileText size={14} />}
+            onClick={() => handleViewRegistration(record)}
+          >
+            등록증 보기
           </Button>
           <Button
             size="small"
@@ -1201,23 +1210,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           </span>
         );
       },
-    },
-    {
-      title: "등록증",
-      key: "registration",
-      width: 110,
-      align: "center",
-      render: (_, record) => (
-        <Button
-          size="small"
-          disabled={record.status !== 'COMPLETED'}
-          loading={loadingRegId === record.id}
-          icon={<FileText size={14} />}
-          onClick={() => handleViewRegistration(record)}
-        >
-          등록증 보기
-        </Button>
-      ),
     },
     ...(isSuperAdminView ? [{
       title: "스마트옥션 매물",
