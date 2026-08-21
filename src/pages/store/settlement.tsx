@@ -341,6 +341,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
     // 합계 행 — 청구금액(VAT포함) 열에 이어서 적는다
     const summaryRows = [
       {},
+      { '상사명/딜러명': '총 건수', '청구금액(VAT포함)': `${rows.length}건` },
       { '상사명/딜러명': '(참고) 클레임 차감 합계 — 발주사 청구액엔 미반영, 진단사 지급액에서만 차감', '청구금액(VAT포함)': totalClaimDeduction ? -totalClaimDeduction : 0 },
       { '상사명/딜러명': '공급가액(검차비)', '청구금액(VAT포함)': supplyTotal },
       { '상사명/딜러명': '부가세', '청구금액(VAT포함)': vat },
@@ -574,6 +575,14 @@ const SettlementPage: IDefaultLayoutPage = () => {
           summary={() =>
             rows.length > 0 ? (
               <Table.Summary fixed>
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0} colSpan={9} align="right">
+                    총 건수{selectedDriver ? ` (${selectedDriver} 필터 적용 중, 전체 ${rows.length}건)` : ''}
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={1} align="right">
+                    {displayRows.length}건
+                  </Table.Summary.Cell>
+                </Table.Summary.Row>
                 {totalClaimDeduction > 0 && (
                   <Table.Summary.Row className="text-purple-600">
                     <Table.Summary.Cell index={0} colSpan={9} align="right">
