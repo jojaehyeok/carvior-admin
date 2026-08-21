@@ -82,6 +82,7 @@ interface IPayrollRow {
   driverName: string;
   tier: string;
   count: number;
+  claimTotal: number; // 이번 달 이 진단사한테 걸린 클레임 차감 합계(원) — 얼마나 깎였는지 바로 보이게
   grossTotal: number; // 기본진단비+추가금+기타-클레임 합계(세전, VAT포함 기준)
   withholding: number; // 3.3% 원천징수액
   netTotal: number; // 실지급액
@@ -130,6 +131,8 @@ const SettlementPage: IDefaultLayoutPage = () => {
   const [payrollRows, setPayrollRows] = useState<IPayrollRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [etcCost, setEtcCost] = useState<number | null>(null);
+  // 진단사별로 청구 내역을 걸러보는 용도 — 조회 결과 안에서만 필터링(재조회 없음)
+  const [selectedDriver, setSelectedDriver] = useState<string | undefined>(undefined);
 
   const API_BASE = process.env.NEXT_PUBLIC_API_ENDPOINT || 'http://localhost:4000/api/v1';
   const INTERNAL_HEADERS = { 'x-internal-key': process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? '' };
@@ -241,23 +244,25 @@ const SettlementPage: IDefaultLayoutPage = () => {
 
       // 진단사 지급금액 — 같은 발주사 필터(selectedSource) 범위 안에서 진단사별로 합산.
       // "전체" 조회면 자연히 전체 발주사 기준 지급액이 된다.
-      const byDriver = new Map<string, { count: number; grossTotal: number }>();
+      const byDriver = new Map<string, { count: number; grossTotal: number; claimTotal: number }>();
       for (const b of filtered) {
         if (!b.assignedDriverId) continue;
         const driverId = String(b.assignedDriverId);
         const tier = tierById.get(driverId) || 'general';
         const baseFee = BASE_FEE_BY_TIER[tier] ?? BASE_FEE_BY_TIER.general;
-        const gross = baseFee + (b.remoteBonus || 0) + (b.extraFee || 0) - (b.claimDeduction || 0);
-        const prev = byDriver.get(driverId) || { count: 0, grossTotal: 0 };
-        byDriver.set(driverId, { count: prev.count + 1, grossTotal: prev.grossTotal + gross });
+        const claim = b.claimDeduction || 0;
+        const gross = baseFee + (b.remoteBonus || 0) + (b.extraFee || 0) - claim;
+        const prev = byDriver.get(driverId) || { count: 0, grossTotal: 0, claimTotal: 0 };
+        byDriver.set(driverId, { count: prev.count + 1, grossTotal: prev.grossTotal + gross, claimTotal: prev.claimTotal + claim });
       }
-      const payroll: IPayrollRow[] = Array.from(byDriver.entries()).map(([driverId, { count, grossTotal }]) => {
+      const payroll: IPayrollRow[] = Array.from(byDriver.entries()).map(([driverId, { count, grossTotal, claimTotal }]) => {
         const withholding = Math.round(grossTotal * WITHHOLDING_RATE);
         return {
           driverId,
           driverName: nameById.get(driverId) || `#${driverId}`,
           tier: tierById.get(driverId) || 'general',
           count,
+          claimTotal,
           grossTotal,
           withholding,
           netTotal: grossTotal - withholding,
@@ -265,12 +270,18 @@ const SettlementPage: IDefaultLayoutPage = () => {
       });
       payroll.sort((a, b) => b.netTotal - a.netTotal);
       setPayrollRows(payroll);
+      setSelectedDriver(undefined); // 새로 조회하면 이전 필터가 이번 결과에 없을 수 있어 초기화
     } catch {
       message.error("데이터 로드 실패");
     } finally {
       setIsLoading(false);
     }
   };
+
+  // 진단사 필터용 — 이번 조회 결과에 실제로 등장한 이름만 뽑는다(전체 진단사 목록 아님)
+  const driverOptions = Array.from(new Set(rows.map(r => r.assignedDriverName).filter(n => n && n !== '-'))).sort();
+  const displayRows = selectedDriver ? rows.filter(r => r.assignedDriverName === selectedDriver) : rows;
+  const displayPayrollRows = selectedDriver ? payrollRows.filter(r => r.driverName === selectedDriver) : payrollRows;
 
   // --- 집계 --- 단가표 금액은 전부 VAT포함 기준이라, 합계(VAT포함, 클레임 차감 반영)를
   // 먼저 구하고 공급가액/부가세는 거꾸로 역산한다(1.1로 나눔) — 건별로 반올림하면 합계가
@@ -355,12 +366,13 @@ const SettlementPage: IDefaultLayoutPage = () => {
       '진단사명': r.driverName,
       '등급': TIER_LABEL[r.tier] || r.tier,
       '완료건수': r.count,
+      '클레임차감': r.claimTotal || '',
       '지급기준액': r.grossTotal,
       '3.3% 원천징수': r.withholding,
       '실지급액': r.netTotal,
     }));
     const ws = XLSX.utils.json_to_sheet(dataRows);
-    ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+    ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `${monthLabel} 진단사 지급`);
     XLSX.writeFile(wb, `카비어_진단사지급_${selectedMonth?.format('YYYYMM')}.xlsx`);
@@ -372,6 +384,13 @@ const SettlementPage: IDefaultLayoutPage = () => {
     { title: '진단사명', dataIndex: 'driverName', width: 120 },
     { title: '등급', dataIndex: 'tier', width: 90, render: (v: string) => TIER_LABEL[v] || v },
     { title: '완료건수', dataIndex: 'count', width: 90, align: 'right' },
+    {
+      title: '클레임차감',
+      dataIndex: 'claimTotal',
+      width: 120,
+      align: 'right',
+      render: (v: number) => v > 0 ? <span className="text-purple-600">-₩{v.toLocaleString()}</span> : <span className="text-gray-300">-</span>,
+    },
     { title: '지급기준액', dataIndex: 'grossTotal', width: 130, align: 'right', render: (v: number) => `₩${v.toLocaleString()}` },
     { title: '3.3% 원천징수', dataIndex: 'withholding', width: 130, align: 'right', render: (v: number) => `-₩${v.toLocaleString()}` },
     {
@@ -465,6 +484,23 @@ const SettlementPage: IDefaultLayoutPage = () => {
           </div>
         )}
 
+        {rows.length > 0 && (
+          <div>
+            <label className="block text-xs font-bold text-gray-400 mb-1">진단사</label>
+            <Select
+              style={{ width: 140 }}
+              placeholder="전체"
+              allowClear
+              value={selectedDriver}
+              onChange={setSelectedDriver}
+              options={[
+                { label: '전체', value: undefined },
+                ...driverOptions.map(name => ({ label: name, value: name })),
+              ]}
+            />
+          </div>
+        )}
+
         <div>
           <label className="block text-xs font-bold text-gray-400 mb-1">기타비용 (원, 수동 입력)</label>
           <InputNumber
@@ -500,7 +536,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
       <div className="bg-white rounded-lg shadow-sm p-5">
         <Table
           columns={columns}
-          dataSource={rows}
+          dataSource={displayRows}
           rowKey="id"
           loading={isLoading}
           pagination={false}
@@ -585,7 +621,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
           <p className="text-xs text-gray-400 mb-3">
             지급기준액 = 등급별 기본 진단비(일반 5만/인증 6만/에이전트 6.5만) + 오지·준오지·긴급 추가금 + 기타비용 − 클레임 차감(진단사 페널티). 위 청구 표와 같은 발주사/월 필터 기준입니다.
           </p>
-          <Table columns={payrollColumns} dataSource={payrollRows} rowKey="driverId" loading={isLoading} pagination={false} />
+          <Table columns={payrollColumns} dataSource={displayPayrollRows} rowKey="driverId" loading={isLoading} pagination={false} />
         </div>
       )}
     </div>
