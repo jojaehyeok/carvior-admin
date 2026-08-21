@@ -1,6 +1,6 @@
 import { getDefaultLayout, IDefaultLayoutPage, IPageHeader } from "@/components/layout/default-layout";
 import { ISO8601DateTime } from "@/types/common";
-import { Button, DatePicker, InputNumber, Select, Table, Tag, message } from "antd";
+import { Button, DatePicker, InputNumber, Popconfirm, Select, Table, Tag, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { FileDown, Search } from "lucide-react";
@@ -154,6 +154,24 @@ const SettlementPage: IDefaultLayoutPage = () => {
   const handleEtcCostChange = (value: number | null) => {
     setEtcCost(value);
     saveEtcCost(selectedSource, selectedMonth, value);
+  };
+
+  // 클레임 보상으로 발주사와 "이 건 무료" 협의한 경우 — companyBillingAmount를 0원으로
+  // 직접입력(기존 booking-list.tsx 수정모달에 있던 필드와 동일)해서 이 건 청구액만 0으로
+  // 만든다. 취소하면 다시 null로 돌려서 단가표 자동계산으로 복귀.
+  const handleSetFreeClaim = async (id: number, free: boolean) => {
+    try {
+      const res = await fetch(`${API_BASE}/external/request/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyBillingAmount: free ? 0 : null }),
+      });
+      if (!res.ok) throw new Error();
+      message.success(free ? '클레임으로 무료 처리했습니다.' : '무료 처리를 취소했습니다.');
+      handleSearch();
+    } catch {
+      message.error('처리에 실패했습니다.');
+    }
   };
 
   const handleSearch = async () => {
@@ -414,19 +432,31 @@ const SettlementPage: IDefaultLayoutPage = () => {
       key: 'applied',
       width: 150,
       align: 'center',
-      render: (_, r) => (
-        <div className="flex flex-wrap gap-1 justify-center">
-          {r.remoteTier === 'remote' && <Tag color="volcano">오지</Tag>}
-          {r.remoteTier === 'semi_remote' && <Tag color="orange">준오지</Tag>}
-          {r.isUrgent && <Tag color="red">긴급</Tag>}
-          {r.isExportBooking && <Tag color="blue">수출</Tag>}
-          {r.isManualPrice && <Tag>수동입력</Tag>}
-          {r.claimDeduction > 0 && <Tag color="purple" title="발주사 청구액엔 미반영, 진단사 지급액에서만 차감">클레임(지급액차감) -₩{r.claimDeduction.toLocaleString()}</Tag>}
-          {!r.remoteTier && !r.isUrgent && !r.isExportBooking && !r.isManualPrice && r.claimDeduction === 0 && (
-            <span className="text-gray-300 text-xs">기본</span>
-          )}
-        </div>
-      ),
+      render: (_, r) => {
+        const isFreeClaim = r.isManualPrice && r.grossPriceInclVat === 0;
+        return (
+          <div className="flex flex-wrap gap-1 justify-center">
+            {r.remoteTier === 'remote' && <Tag color="volcano">오지</Tag>}
+            {r.remoteTier === 'semi_remote' && <Tag color="orange">준오지</Tag>}
+            {r.isUrgent && <Tag color="red">긴급</Tag>}
+            {r.isExportBooking && <Tag color="blue">수출</Tag>}
+            {r.isManualPrice && !isFreeClaim && <Tag>수동입력</Tag>}
+            {r.claimDeduction > 0 && <Tag color="purple" title="발주사 청구액엔 미반영, 진단사 지급액에서만 차감">클레임(지급액차감) -₩{r.claimDeduction.toLocaleString()}</Tag>}
+            {!r.remoteTier && !r.isUrgent && !r.isExportBooking && !r.isManualPrice && r.claimDeduction === 0 && (
+              <span className="text-gray-300 text-xs">기본</span>
+            )}
+            {isFreeClaim ? (
+              <Popconfirm title="이 건 클레임 무료 처리를 취소할까요?" okText="취소하기" cancelText="닫기" onConfirm={() => handleSetFreeClaim(r.id, false)}>
+                <Tag color="magenta" style={{ cursor: 'pointer' }}>클레임 무료처리 ✕</Tag>
+              </Popconfirm>
+            ) : (
+              <Popconfirm title="이 건을 클레임으로 무료 처리(청구액 0원)할까요?" okText="무료처리" cancelText="취소" onConfirm={() => handleSetFreeClaim(r.id, true)}>
+                <Button size="small" type="dashed">+클레임 처리</Button>
+              </Popconfirm>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: '청구금액 (VAT제외)',
