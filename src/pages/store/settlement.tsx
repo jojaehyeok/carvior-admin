@@ -31,7 +31,8 @@ interface ISettlementRow {
   assignedDriverName: string;
   grossPriceInclVat: number; // 클레임 차감 전 단가(VAT포함)
   claimDeduction: number; // 안심케어 클레임 확정 시 청구액에서 차감한 금액(원)
-  priceInclVat: number; // 클레임 차감 후 실제 청구액(VAT포함) — 합계·엑셀에 쓰는 값
+  priceInclVatRaw: number; // 클레임 차감 후 금액(VAT포함, 이 건의 단가보다 클레임이 크면 음수) — 월 합계는 이 값으로 계산해야 초과분이 다른 건 청구액에서마저 온전히 빠진다
+  priceInclVat: number; // 화면 표시용(0 미만은 0으로 고정) — 한 줄에 마이너스 금액이 보이면 헷갈리므로
   priceExclVat: number; // 위 값의 공급가액(VAT제외) — 화면에 1차로 노출할 값
   rowVat: number;
   remoteTier?: 'semi_remote' | 'remote' | null;
@@ -174,7 +175,10 @@ const SettlementPage: IDefaultLayoutPage = () => {
         filtered.map((b, i) => {
           const { grossPrice, isManualPrice } = computeGrossPrice(b);
           const claimDeduction = b.claimDeduction || 0;
-          const priceInclVat = Math.max(0, grossPrice - claimDeduction);
+          // 클레임이 이 건 단가보다 커도(예: 검차비 취소 3건분을 한 건에 몰아 기록한 경우)
+          // 초과분이 사라지지 않도록 음수 그대로 갖고 있다가 월 합계에서 다른 건 청구액과 상계한다.
+          const priceInclVatRaw = grossPrice - claimDeduction;
+          const priceInclVat = Math.max(0, priceInclVatRaw);
           const priceExclVat = Math.round(priceInclVat / (1 + VAT_RATE));
           const rowVat = priceInclVat - priceExclVat;
           return {
@@ -189,6 +193,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
             assignedDriverName: b.assignedDriverName || '-',
             grossPriceInclVat: grossPrice,
             claimDeduction,
+            priceInclVatRaw,
             priceInclVat,
             priceExclVat,
             rowVat,
@@ -211,7 +216,9 @@ const SettlementPage: IDefaultLayoutPage = () => {
   // 먼저 구하고 공급가액/부가세는 거꾸로 역산한다(1.1로 나눔) — 건별로 반올림하면 합계가
   // 어긋날 수 있어 총액 기준으로 한 번만 반올림한다.
   const totalClaimDeduction = rows.reduce((sum, r) => sum + r.claimDeduction, 0);
-  const totalInclVat = rows.reduce((sum, r) => sum + r.priceInclVat, 0);
+  // 건별로 0원 밑을 잘라내지 않은 원값(priceInclVatRaw)으로 합산 — 클레임이 그 건 단가보다
+  // 커도 초과분이 다른 건 청구액에서 마저 빠지게(전체 협의 금액이 온전히 반영되게) 한다.
+  const totalInclVat = Math.max(0, rows.reduce((sum, r) => sum + r.priceInclVatRaw, 0));
   const supplyTotal = Math.round(totalInclVat / (1 + VAT_RATE));
   const vat = totalInclVat - supplyTotal;
   const grandTotal = totalInclVat + (etcCost || 0);
