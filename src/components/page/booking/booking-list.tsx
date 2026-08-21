@@ -344,29 +344,56 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setRegistrationFile(null);
     setRegistrationPreview(null);
     setRegistrationMessage("이전된 차량등록증을 보내드립니다.");
-    setSendToDealer(!record.registrationSentToDealerAt);
-    setSendToCustomer(!record.registrationSentToCustomerAt);
+    // 사무장님은 사진만 저장하고 전송은 담당자가 따로 하는 흐름이라, 열었을 때 체크박스를
+    // 자동으로 켜두면 실수로 SMS가 나갈 수 있음 — 기본은 항상 꺼둔 채로 시작한다.
+    setSendToDealer(false);
+    setSendToCustomer(false);
     setDealerPhone(record.contact || "");
     setCustomerPhone(record.customerContact || "");
   };
 
-  const handleSelectRegistrationFile = (file: File) => {
+  // 사진을 선택하는 즉시 SMS 전송 여부와 무관하게 바로 저장한다 — "올리기만 하고 창을
+  // 닫아도 사라진다"는 문제를 막기 위해, 전송 확인 절차(OK 버튼→Modal.confirm)를 기다리지
+  // 않고 선택 시점에 조용히 저장부터 해둔다. 이후 "보내기"는 이미 저장된 사진으로 SMS만 보냄.
+  const handleSelectRegistrationFile = async (file: File) => {
     setRegistrationFile(file);
     setRegistrationPreview(URL.createObjectURL(file));
+    if (!registrationTarget) return;
+    setUploadingRegistration(true);
+    try {
+      const form = new FormData();
+      form.append('photo', file);
+      form.append('sendToDealer', 'false');
+      form.append('sendToCustomer', 'false');
+      const res = await fetch(`${API_BASE}/external/request/${registrationTarget.id}/transferred-registration`, {
+        method: 'POST',
+        body: form,
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      // 둘 다 미전송(sendToDealer/Customer=false)일 때 백엔드는 저장된 Booking을 그대로 반환함
+      const savedUrl: string | undefined = data?.transferredRegistrationUrl;
+      setRegistrationTarget(prev => prev && savedUrl ? { ...prev, transferredRegistrationUrl: savedUrl } : prev);
+      message.success('사진을 저장했습니다.');
+      fetchBookings();
+    } catch {
+      message.error('사진 저장에 실패했습니다.');
+    } finally {
+      setUploadingRegistration(false);
+    }
   };
 
   // 실제 전송 전, 선택한 대상만큼 비용이 나간다는 걸 한 번 더 확인시키고
   // 여기서 취소하면(Cancel) 업로드 자체가 실행되지 않도록 함
   const confirmSendRegistration = () => {
-    if (!registrationTarget || (!registrationFile && !registrationTarget.transferredRegistrationUrl)) return;
+    if (!registrationTarget?.transferredRegistrationUrl && !registrationFile) return;
+    if (!sendToDealer && !sendToCustomer) return; // 사진 저장은 선택 즉시 이미 끝남 — 여기는 전송 전용
     const count = (sendToDealer ? 1 : 0) + (sendToCustomer ? 1 : 0);
-    const content = count === 0
-      ? 'SMS 발송 없이 사진만 교체합니다. 계속하시겠습니까?'
-      : `${[sendToDealer && '딜러', sendToCustomer && '고객'].filter(Boolean).join(', ')}에게 SMS가 발송되어 총 ${count * 50}원(건당 50원, VAT 포함)의 비용이 청구됩니다. 계속하시겠습니까?`;
+    const content = `${[sendToDealer && '딜러', sendToCustomer && '고객'].filter(Boolean).join(', ')}에게 SMS가 발송되어 총 ${count * 50}원(건당 50원, VAT 포함)의 비용이 청구됩니다. 계속하시겠습니까?`;
     Modal.confirm({
       title: '등록증 전송 안내',
       content,
-      okText: count === 0 ? '교체' : '보내기',
+      okText: '보내기',
       cancelText: '취소',
       onOk: handleSendRegistration,
     });
@@ -1280,6 +1307,16 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     },
   ];
 
+  // 애니원모터스 사무장 계정은 리포트를 안 보고 등록증 전송이 주 업무라, 진단리포트보다
+  // 이전 등록증 컬럼이 먼저 오게 위치를 바꿔준다(사무장 판별은 canConfirmBilling 재사용).
+  if (isAnyoneMotors && canConfirmBilling) {
+    const reportIdx = columns.findIndex(c => c.key === 'report');
+    const regIdx = columns.findIndex(c => c.key === 'transferredRegistration');
+    if (reportIdx !== -1 && regIdx !== -1) {
+      [columns[reportIdx], columns[regIdx]] = [columns[regIdx], columns[reportIdx]];
+    }
+  }
+
   return (
     <div className="p-4 bg-white rounded-lg shadow-sm">
       <DefaultTableBtn className="justify-between mb-4">
@@ -1855,15 +1892,15 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         onOk={confirmSendRegistration}
         onCancel={() => setRegistrationTarget(null)}
         confirmLoading={uploadingRegistration}
-        okText={sendToDealer || sendToCustomer ? "보내기" : "교체"}
-        okButtonProps={{ disabled: !registrationFile && !registrationTarget?.transferredRegistrationUrl }}
-        cancelText="취소"
+        okText="보내기"
+        okButtonProps={{ disabled: !sendToDealer && !sendToCustomer }}
+        cancelText="닫기"
       >
         <div className="py-2 space-y-3">
           <Alert
-            type="warning"
+            type="info"
             showIcon
-            message="체크한 대상에게만 SMS가 발송돼요(건당 50원, VAT 포함). 대상별로 1회만 전송할 수 있고, 둘 다 체크 해제하면 SMS 없이 사진만 교체돼요."
+            message="사진은 선택하는 즉시 자동으로 저장돼요. 딜러/고객에게 SMS로 전달하고 싶을 때만 아래 체크하고 보내기를 누르세요(건당 50원, VAT 포함, 대상별 1회만 전송 가능)."
           />
           <div className="space-y-2">
             <div className="flex items-center gap-2">
