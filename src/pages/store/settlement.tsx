@@ -168,13 +168,16 @@ const SettlementPage: IDefaultLayoutPage = () => {
       });
       if (!res.ok) throw new Error();
       message.success(free ? '클레임으로 무료 처리했습니다.' : '무료 처리를 취소했습니다.');
-      handleSearch();
+      handleSearch(false);
     } catch {
       message.error('처리에 실패했습니다.');
     }
   };
 
-  const handleSearch = async () => {
+  // resetFilter=false면 진단사 필터를 유지한 채로 목록만 새로고침 — "클레임 무료처리"
+  // 토글 뒤에 재조회할 때 필터가 매번 풀리던 문제 때문에 분리함(월/발주사 바꿔서 진짜
+  // 새로 조회할 때만 true).
+  const handleSearch = async (resetFilter = true) => {
     if (!selectedMonth) {
       message.warning("월을 선택해주세요.");
       return;
@@ -287,7 +290,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
       });
       payroll.sort((a, b) => b.netTotal - a.netTotal);
       setPayrollRows(payroll);
-      setSelectedDriver(undefined); // 새로 조회하면 이전 필터가 이번 결과에 없을 수 있어 초기화
+      if (resetFilter) setSelectedDriver(undefined); // 새로 조회할 때만 이전 필터 초기화
     } catch {
       message.error("데이터 로드 실패");
     } finally {
@@ -545,7 +548,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
         <Button
           type="primary"
           icon={<Search size={14} />}
-          onClick={handleSearch}
+          onClick={() => handleSearch()}
           loading={isLoading}
         >
           조회
