@@ -19,6 +19,12 @@ const REMOTE_PRICE = 117_000;
 const EXPORT_VIDEO_SURCHARGE = 15_000;
 const VAT_RATE = 0.1;
 
+// 등급별 기본 진단비(원, VAT포함) — booking-list.tsx 진단사 정산 미리보기와 동일 기준.
+// 여기서 어긋나면 대시보드에서 건별로 보던 금액이랑 이 월별 합계가 안 맞게 되니 두 곳 다 같이 고칠 것.
+const BASE_FEE_BY_TIER: Record<string, number> = { general: 50000, certified: 60000, agent: 65000 };
+const WITHHOLDING_RATE = 0.033; // 3.3% 사업소득 원천징수
+const TIER_LABEL: Record<string, string> = { general: '일반', certified: '인증', agent: '에이전트' };
+
 interface ISettlementRow {
   id: number;
   no: number;
@@ -51,15 +57,34 @@ interface IBooking {
   address: string;
   preferredDateTime: string;
   status: string;
+  assignedDriverId?: string | null;
   assignedDriverName?: string | null;
   remoteTier?: 'semi_remote' | 'remote' | null;
   isUrgent?: boolean;
   isExportBooking?: boolean;
   companyBillingAmount?: number | null;
   claimDeduction?: number | null;
+  remoteBonus?: number | null;
+  extraFee?: number | null;
   contractWriter?: string;
   source?: string;
   createdAt: ISO8601DateTime;
+}
+
+interface IDriver {
+  id: number;
+  name: string;
+  tier?: string | null;
+}
+
+interface IPayrollRow {
+  driverId: string;
+  driverName: string;
+  tier: string;
+  count: number;
+  grossTotal: number; // 기본진단비+추가금+기타-클레임 합계(세전, VAT포함 기준)
+  withholding: number; // 3.3% 원천징수액
+  netTotal: number; // 실지급액
 }
 
 // 주소에서 시/도 or 시/군/구 추출
@@ -102,6 +127,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
     session?.user?.company || undefined
   );
   const [rows, setRows] = useState<ISettlementRow[]>([]);
+  const [payrollRows, setPayrollRows] = useState<IPayrollRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [etcCost, setEtcCost] = useState<number | null>(null);
 
@@ -138,9 +164,16 @@ const SettlementPage: IDefaultLayoutPage = () => {
       const url = new URL(`${API_BASE}/external/request/list`);
       if (selectedSource) url.searchParams.set('source', selectedSource);
 
-      const res = await fetch(url.toString());
+      const [res, driversRes] = await Promise.all([
+        fetch(url.toString()),
+        fetch(`${API_BASE}/drivers`),
+      ]);
       if (!res.ok) throw new Error();
       const all: IBooking[] = await res.json();
+      const driversData = driversRes.ok ? await driversRes.json() : [];
+      const drivers: IDriver[] = Array.isArray(driversData) ? driversData : driversData.data || [];
+      const tierById = new Map(drivers.map(d => [String(d.id), d.tier || 'general']));
+      const nameById = new Map(drivers.map(d => [String(d.id), d.name]));
 
       // 저장해둔 기타비용 불러오기(발주사+정산월 기준) — "전체" 조회일 땐 특정 발주사 하나로
       // 안 좁혀져서 저장/조회 대상이 모호하므로 스킵(입력만 가능, 저장은 소스 선택 시에만)
@@ -205,6 +238,33 @@ const SettlementPage: IDefaultLayoutPage = () => {
           };
         })
       );
+
+      // 진단사 지급금액 — 같은 발주사 필터(selectedSource) 범위 안에서 진단사별로 합산.
+      // "전체" 조회면 자연히 전체 발주사 기준 지급액이 된다.
+      const byDriver = new Map<string, { count: number; grossTotal: number }>();
+      for (const b of filtered) {
+        if (!b.assignedDriverId) continue;
+        const driverId = String(b.assignedDriverId);
+        const tier = tierById.get(driverId) || 'general';
+        const baseFee = BASE_FEE_BY_TIER[tier] ?? BASE_FEE_BY_TIER.general;
+        const gross = baseFee + (b.remoteBonus || 0) + (b.extraFee || 0) - (b.claimDeduction || 0);
+        const prev = byDriver.get(driverId) || { count: 0, grossTotal: 0 };
+        byDriver.set(driverId, { count: prev.count + 1, grossTotal: prev.grossTotal + gross });
+      }
+      const payroll: IPayrollRow[] = Array.from(byDriver.entries()).map(([driverId, { count, grossTotal }]) => {
+        const withholding = Math.round(grossTotal * WITHHOLDING_RATE);
+        return {
+          driverId,
+          driverName: nameById.get(driverId) || `#${driverId}`,
+          tier: tierById.get(driverId) || 'general',
+          count,
+          grossTotal,
+          withholding,
+          netTotal: grossTotal - withholding,
+        };
+      });
+      payroll.sort((a, b) => b.netTotal - a.netTotal);
+      setPayrollRows(payroll);
     } catch {
       message.error("데이터 로드 실패");
     } finally {
@@ -284,7 +344,44 @@ const SettlementPage: IDefaultLayoutPage = () => {
     XLSX.writeFile(wb, `카비어_정산_${selectedMonth?.format('YYYYMM')}.xlsx`);
   };
 
+  // --- 진단사 지급금액 엑셀 내보내기(세무용, 3.3% 원천징수) ---
+  const handleExportPayroll = () => {
+    if (payrollRows.length === 0) {
+      message.warning("조회된 데이터가 없습니다.");
+      return;
+    }
+    const monthLabel = selectedMonth?.format('YYYY년 MM월') ?? '';
+    const dataRows = payrollRows.map((r) => ({
+      '진단사명': r.driverName,
+      '등급': TIER_LABEL[r.tier] || r.tier,
+      '완료건수': r.count,
+      '지급기준액': r.grossTotal,
+      '3.3% 원천징수': r.withholding,
+      '실지급액': r.netTotal,
+    }));
+    const ws = XLSX.utils.json_to_sheet(dataRows);
+    ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `${monthLabel} 진단사 지급`);
+    XLSX.writeFile(wb, `카비어_진단사지급_${selectedMonth?.format('YYYYMM')}.xlsx`);
+  };
+
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN';
+
+  const payrollColumns: ColumnsType<IPayrollRow> = [
+    { title: '진단사명', dataIndex: 'driverName', width: 120 },
+    { title: '등급', dataIndex: 'tier', width: 90, render: (v: string) => TIER_LABEL[v] || v },
+    { title: '완료건수', dataIndex: 'count', width: 90, align: 'right' },
+    { title: '지급기준액', dataIndex: 'grossTotal', width: 130, align: 'right', render: (v: number) => `₩${v.toLocaleString()}` },
+    { title: '3.3% 원천징수', dataIndex: 'withholding', width: 130, align: 'right', render: (v: number) => `-₩${v.toLocaleString()}` },
+    {
+      title: '실지급액',
+      dataIndex: 'netTotal',
+      width: 150,
+      align: 'right',
+      render: (v: number) => <b className={v < 0 ? 'text-red-600' : ''}>₩{v.toLocaleString()}</b>,
+    },
+  ];
 
   const columns: ColumnsType<ISettlementRow> = [
     { title: 'No.', dataIndex: 'no', width: 55, align: 'center' },
@@ -470,6 +567,27 @@ const SettlementPage: IDefaultLayoutPage = () => {
           }
         />
       </div>
+
+      {/* 진단사 지급금액 (세무용, 슈퍼관리자 전용) — 위 표와 같은 발주사/월 필터를 그대로 적용 */}
+      {isSuperAdmin && (
+        <div className="bg-white rounded-lg shadow-sm p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold text-gray-700">진단사 지급금액</h3>
+            <Button
+              size="small"
+              icon={<FileDown size={14} />}
+              onClick={handleExportPayroll}
+              disabled={payrollRows.length === 0}
+            >
+              엑셀 다운로드
+            </Button>
+          </div>
+          <p className="text-xs text-gray-400 mb-3">
+            지급기준액 = 등급별 기본 진단비(일반 5만/인증 6만/에이전트 6.5만) + 오지·준오지·긴급 추가금 + 기타비용 − 클레임 차감(진단사 페널티). 위 청구 표와 같은 발주사/월 필터 기준입니다.
+          </p>
+          <Table columns={payrollColumns} dataSource={payrollRows} rowKey="driverId" loading={isLoading} pagination={false} />
+        </div>
+      )}
     </div>
   );
 };
