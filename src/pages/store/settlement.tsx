@@ -35,10 +35,9 @@ interface ISettlementRow {
   carModel: string;
   carNumber: string;
   assignedDriverName: string;
-  grossPriceInclVat: number; // 클레임 차감 전 단가(VAT포함)
-  claimDeduction: number; // 안심케어 클레임 확정 시 청구액에서 차감한 금액(원)
-  priceInclVatRaw: number; // 클레임 차감 후 금액(VAT포함, 이 건의 단가보다 클레임이 크면 음수) — 월 합계는 이 값으로 계산해야 초과분이 다른 건 청구액에서마저 온전히 빠진다
-  priceInclVat: number; // 화면 표시용(0 미만은 0으로 고정) — 한 줄에 마이너스 금액이 보이면 헷갈리므로
+  grossPriceInclVat: number; // 단가(VAT포함) — 발주사 청구액과 동일(클레임은 이 금액에 영향 없음)
+  claimDeduction: number; // 안심케어 클레임 확정 시 진단사 지급액에서 차감할 금액(원) — 정보 표시용, 발주사 청구액엔 미반영
+  priceInclVat: number; // 발주사 청구액(VAT포함)
   priceExclVat: number; // 위 값의 공급가액(VAT제외) — 화면에 1차로 노출할 값
   rowVat: number;
   remoteTier?: 'semi_remote' | 'remote' | null;
@@ -210,11 +209,12 @@ const SettlementPage: IDefaultLayoutPage = () => {
       setRows(
         filtered.map((b, i) => {
           const { grossPrice, isManualPrice } = computeGrossPrice(b);
+          // 클레임 차감은 진단사 지급액(아래 "진단사 지급금액" 섹션)에서만 반영한다 — 발주사
+          // 청구액과는 별개 흐름. 발주사한테 무료로 해주기로 한 건은 이 건의
+          // companyBillingAmount를 관리자가 직접 0원으로 입력해서 처리(적용사항 태그는
+          // 클레임이 걸려있었다는 정보용으로만 남겨둠, 금액엔 영향 없음).
           const claimDeduction = b.claimDeduction || 0;
-          // 클레임이 이 건 단가보다 커도(예: 검차비 취소 3건분을 한 건에 몰아 기록한 경우)
-          // 초과분이 사라지지 않도록 음수 그대로 갖고 있다가 월 합계에서 다른 건 청구액과 상계한다.
-          const priceInclVatRaw = grossPrice - claimDeduction;
-          const priceInclVat = Math.max(0, priceInclVatRaw);
+          const priceInclVat = grossPrice;
           const priceExclVat = Math.round(priceInclVat / (1 + VAT_RATE));
           const rowVat = priceInclVat - priceExclVat;
           return {
@@ -229,7 +229,6 @@ const SettlementPage: IDefaultLayoutPage = () => {
             assignedDriverName: b.assignedDriverName || '-',
             grossPriceInclVat: grossPrice,
             claimDeduction,
-            priceInclVatRaw,
             priceInclVat,
             priceExclVat,
             rowVat,
@@ -283,13 +282,12 @@ const SettlementPage: IDefaultLayoutPage = () => {
   const displayRows = selectedDriver ? rows.filter(r => r.assignedDriverName === selectedDriver) : rows;
   const displayPayrollRows = selectedDriver ? payrollRows.filter(r => r.driverName === selectedDriver) : payrollRows;
 
-  // --- 집계 --- 단가표 금액은 전부 VAT포함 기준이라, 합계(VAT포함, 클레임 차감 반영)를
-  // 먼저 구하고 공급가액/부가세는 거꾸로 역산한다(1.1로 나눔) — 건별로 반올림하면 합계가
-  // 어긋날 수 있어 총액 기준으로 한 번만 반올림한다.
+  // --- 집계 --- 단가표 금액은 전부 VAT포함 기준이라, 합계(VAT포함)를 먼저 구하고 공급가액/
+  // 부가세는 거꾸로 역산한다(1.1로 나눔) — 건별로 반올림하면 합계가 어긋날 수 있어 총액
+  // 기준으로 한 번만 반올림한다. 클레임 차감은 진단사 지급액에서만 반영되므로 여기 합계에는
+  // 안 들어간다 — 무료로 해주기로 한 건은 그 건의 companyBillingAmount를 0원으로 입력해서 처리.
   const totalClaimDeduction = rows.reduce((sum, r) => sum + r.claimDeduction, 0);
-  // 건별로 0원 밑을 잘라내지 않은 원값(priceInclVatRaw)으로 합산 — 클레임이 그 건 단가보다
-  // 커도 초과분이 다른 건 청구액에서 마저 빠지게(전체 협의 금액이 온전히 반영되게) 한다.
-  const totalInclVat = Math.max(0, rows.reduce((sum, r) => sum + r.priceInclVatRaw, 0));
+  const totalInclVat = rows.reduce((sum, r) => sum + r.priceInclVat, 0);
   const supplyTotal = Math.round(totalInclVat / (1 + VAT_RATE));
   const vat = totalInclVat - supplyTotal;
   const grandTotal = totalInclVat + (etcCost || 0);
@@ -319,10 +317,10 @@ const SettlementPage: IDefaultLayoutPage = () => {
       '청구금액(VAT포함)': r.priceInclVat,
     }));
 
-    // 합계 행 — 청구금액(VAT포함) 열에 이어서 적는다(클레임 차감이 이미 반영된 실제 청구액 기준)
+    // 합계 행 — 청구금액(VAT포함) 열에 이어서 적는다
     const summaryRows = [
       {},
-      { '상사명/딜러명': '클레임 차감 합계', '청구금액(VAT포함)': totalClaimDeduction ? -totalClaimDeduction : 0 },
+      { '상사명/딜러명': '(참고) 클레임 차감 합계 — 발주사 청구액엔 미반영, 진단사 지급액에서만 차감', '청구금액(VAT포함)': totalClaimDeduction ? -totalClaimDeduction : 0 },
       { '상사명/딜러명': '공급가액(검차비)', '청구금액(VAT포함)': supplyTotal },
       { '상사명/딜러명': '부가세', '청구금액(VAT포함)': vat },
       { '상사명/딜러명': '기타비용', '청구금액(VAT포함)': etcCost || 0 },
@@ -423,7 +421,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
           {r.isUrgent && <Tag color="red">긴급</Tag>}
           {r.isExportBooking && <Tag color="blue">수출</Tag>}
           {r.isManualPrice && <Tag>수동입력</Tag>}
-          {r.claimDeduction > 0 && <Tag color="purple">클레임 -₩{r.claimDeduction.toLocaleString()}</Tag>}
+          {r.claimDeduction > 0 && <Tag color="purple" title="발주사 청구액엔 미반영, 진단사 지급액에서만 차감">클레임(지급액차감) -₩{r.claimDeduction.toLocaleString()}</Tag>}
           {!r.remoteTier && !r.isUrgent && !r.isExportBooking && !r.isManualPrice && r.claimDeduction === 0 && (
             <span className="text-gray-300 text-xs">기본</span>
           )}
@@ -546,7 +544,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
                 {totalClaimDeduction > 0 && (
                   <Table.Summary.Row className="text-purple-600">
                     <Table.Summary.Cell index={0} colSpan={9} align="right">
-                      클레임 차감 합계 (이미 청구금액에 반영됨)
+                      (참고) 클레임 차감 합계 — 발주사 청구액엔 미반영, 진단사 지급액에서만 차감
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={1} align="right">
                       -₩{totalClaimDeduction.toLocaleString()}
