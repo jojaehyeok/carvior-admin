@@ -161,11 +161,14 @@ const SettlementPage: IDefaultLayoutPage = () => {
       // 선택한 월 + COMPLETED 상태만 필터 — 접수일이 아니라 방문예정일(preferredDateTime)
       // 기준으로 잡아야 실제로 그 달에 수행한 진단 건과 청구 내역이 일치한다.
       const monthStr = selectedMonth.format('YYYY-MM');
-      const filtered = all.filter(
-        (b) =>
-          b.status === 'COMPLETED' &&
-          (b.preferredDateTime || '').startsWith(monthStr)
-      );
+      const filtered = all
+        .filter(
+          (b) =>
+            b.status === 'COMPLETED' &&
+            (b.preferredDateTime || '').startsWith(monthStr)
+        )
+        // 방문일자 최근순(내림차순) 정렬
+        .sort((a, b) => (b.preferredDateTime || '').localeCompare(a.preferredDateTime || ''));
 
       setRows(
         filtered.map((b, i) => {
