@@ -108,6 +108,12 @@ const superAdminMenuData: IMenu[] = [
     link: { path: "/store/settlement" },
   },
   {
+    id: "driver-payroll",
+    name: "진단사 지급 내역",
+    icon: <BarChart2 className="w-5 h-5" />,
+    link: { path: "/store/driver-payroll" },
+  },
+  {
     id: "cs",
     name: "CS / 리뷰",
     icon: <Star className="w-5 h-5" />,
