@@ -3,7 +3,7 @@
 import DefaultTable from "@/components/shared/ui/default-table";
 import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
 import { ISO8601DateTime } from "@/types/common";
-import { Alert, Button, Checkbox, Input, InputNumber, Modal, Popover, Select, Spin, Switch, Tag, message } from "antd";
+import { Alert, Button, Checkbox, Input, InputNumber, Modal, Popconfirm, Popover, Select, Spin, Switch, Tag, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { Copy, Eye, FileText, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
@@ -58,6 +58,7 @@ interface IDriver {
   status: string;
   phone?: string;
   tier?: 'general' | 'certified' | 'agent';
+  canHandleOutsourced?: boolean;
 }
 
 // 등급별 기본 진단비(원) — 진단사 정산(앱 정산내역)의 기준 금액
@@ -461,6 +462,24 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       message.error(e.message || '수정 요청 중 오류가 발생했습니다.');
     } finally {
       setRequesting(false);
+    }
+  };
+
+  // 자체접수(source가 "self-{company}") ↔ 정상접수 전환 — source만 부분 수정
+  const handleToggleSource = async (booking: IBooking) => {
+    const isSelf = !!booking.source?.startsWith('self-');
+    const nextSource = isSelf ? booking.source!.slice(5) : `self-${booking.source}`;
+    try {
+      await fetch(`${API_BASE}/external/request/${booking.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: nextSource })
+      });
+      message.success(isSelf ? "정상접수로 전환되었습니다." : "자체접수(외주)로 전환되었습니다.");
+      setEditingBooking(prev => prev ? { ...prev, source: nextSource } : prev);
+      fetchBookings();
+    } catch (e) {
+      message.error("전환 중 오류 발생");
     }
   };
 
@@ -1471,7 +1490,20 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
               })()}
             </p>
             {editingBooking?.source && (
-              <p className="text-gray-400">출처: <Tag>{editingBooking.source}</Tag></p>
+              <p className="text-gray-400 flex items-center gap-2">
+                출처: <Tag>{editingBooking.source}</Tag>
+                <Popconfirm
+                  title={editingBooking.source.startsWith('self-') ? "정상접수로 전환할까요?" : "자체접수(외주)로 전환할까요?"}
+                  description="담당 진단사 배정은 그대로 유지됩니다. 필요하면 아래에서 다시 배정하세요."
+                  onConfirm={() => handleToggleSource(editingBooking)}
+                  okText="전환"
+                  cancelText="취소"
+                >
+                  <Button size="small">
+                    {editingBooking.source.startsWith('self-') ? "정상접수로 전환" : "자체접수(외주)로 전환"}
+                  </Button>
+                </Popconfirm>
+              </p>
             )}
           </div>
 

@@ -1,7 +1,7 @@
 'use client';
 
 import DefaultTable from "@/components/shared/ui/default-table";
-import { Button, Divider, Image, Input, InputNumber, message, Modal, Popconfirm, Select, Slider, Statistic, Tag, Upload } from "antd";
+import { Button, Divider, Image, Input, InputNumber, message, Modal, Popconfirm, Select, Slider, Statistic, Switch, Tag, Upload } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { CheckCircle, RefreshCw, UserCog, XCircle } from "lucide-react";
@@ -54,6 +54,7 @@ interface IDriver {
   photoUrl?: string | null;
   createdAt: string;
   tier?: DriverTier;
+  canHandleOutsourced?: boolean;
 }
 
 const TIER_CONFIG: Record<DriverTier, { color: string; label: string }> = {
@@ -90,6 +91,7 @@ const DriverList = () => {
   const [statsLoading, setStatsLoading] = useState(false);
   const [tempTier, setTempTier] = useState<DriverTier>('general');
   const [savingTier, setSavingTier] = useState(false);
+  const [savingOutsourced, setSavingOutsourced] = useState(false);
   const [penalties, setPenalties] = useState<IDriverPenalty[]>([]);
   const [newPenaltyType, setNewPenaltyType] = useState<'penalty' | 'advantage'>('penalty');
   const [newPenaltyDays, setNewPenaltyDays] = useState(7);
@@ -260,6 +262,27 @@ const DriverList = () => {
     }
   };
 
+  // 발주사 자체접수(외주) 건을 이 진단사 앱에 노출/처리 가능하게 할지 여부
+  const handleToggleOutsourced = async (checked: boolean) => {
+    if (!selectedDriver) return;
+    setSavingOutsourced(true);
+    try {
+      const res = await fetch(`${API}/drivers/${selectedDriver.id}/outsourced-status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ canHandleOutsourced: checked }),
+      });
+      if (!res.ok) throw new Error();
+      message.success(checked ? '외주 처리 가능으로 설정했습니다.' : '외주 처리 불가로 설정했습니다.');
+      setSelectedDriver(prev => prev ? { ...prev, canHandleOutsourced: checked } : prev);
+      fetchDrivers();
+    } catch {
+      message.error('설정 변경 중 오류가 발생했습니다.');
+    } finally {
+      setSavingOutsourced(false);
+    }
+  };
+
   const columns: ColumnsType<IDriver> = [
     {
       title: "관리",
@@ -375,6 +398,19 @@ const DriverList = () => {
               >
                 저장
               </Button>
+            </div>
+
+            {/* 외주(자체접수) 처리 가능 — ChavatarApp에서 발주사 자체접수 건을 볼 수 있게 할지 */}
+            <Divider plain>외주(자체접수) 처리 가능</Divider>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={!!selectedDriver.canHandleOutsourced}
+                loading={savingOutsourced}
+                onChange={handleToggleOutsourced}
+              />
+              <span className="text-xs text-gray-500">
+                켜면 발주사 자체접수(외주) 건을 이 진단사 앱에서 볼 수 있고 처리할 수 있습니다.
+              </span>
             </div>
 
             <Divider plain>자격증 / 경력 사진</Divider>
