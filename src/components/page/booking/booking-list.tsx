@@ -3,7 +3,7 @@
 import DefaultTable from "@/components/shared/ui/default-table";
 import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
 import { ISO8601DateTime } from "@/types/common";
-import { Alert, Button, Checkbox, Input, InputNumber, Modal, Popconfirm, Popover, Select, Spin, Switch, Tag, message } from "antd";
+import { Alert, Button, Checkbox, Image, Input, InputNumber, Modal, Popconfirm, Popover, Select, Spin, Switch, Tag, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { Copy, Eye, FileText, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
@@ -1972,8 +1972,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           </div>
           <div>
             <label className="block text-xs font-bold text-gray-400 mb-1">이전된 자동차등록증 사진</label>
+            {/* 등록증은 글씨가 작아서 모달 안 썸네일로는 번호를 못 읽는다 — 사진을 클릭하면
+                antd Image 프리뷰(확대/축소·회전)로 크게 본다. 예전엔 사진을 클릭하면 파일
+                선택창이 떠서 확대가 아예 불가능했고, 실수로 클릭하면 잘 올려둔 사진을 다시
+                고르게 되는 문제도 있었다. 그래서 "교체"는 드래그앤드롭과 아래 [파일 올리기]
+                버튼 두 가지로만 하고, 사진 클릭은 확대 전용으로 분리했다. */}
             <div
-              onClick={() => registrationFileInputRef.current?.click()}
               onDragOver={e => { e.preventDefault(); setIsDraggingRegistration(true); }}
               onDragLeave={() => setIsDraggingRegistration(false)}
               onDrop={e => {
@@ -1982,22 +1986,34 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 const file = e.dataTransfer.files?.[0];
                 if (file) handleSelectRegistrationFile(file);
               }}
-              className={`cursor-pointer rounded border border-dashed transition-colors mb-2 ${
-                isDraggingRegistration ? 'border-violet-500 bg-violet-50' : 'border-gray-200 hover:bg-gray-50'
+              className={`rounded border border-dashed transition-colors mb-2 ${
+                isDraggingRegistration ? 'border-violet-500 bg-violet-50' : 'border-gray-200'
               }`}
             >
-              {registrationPreview ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={registrationPreview} alt="등록증 미리보기" className="w-full max-h-64 object-contain rounded" />
-              ) : registrationTarget?.transferredRegistrationUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={registrationTarget.transferredRegistrationUrl} alt="보낸 등록증" className="w-full max-h-64 object-contain rounded" />
+              {registrationPreview || registrationTarget?.transferredRegistrationUrl ? (
+                <Image
+                  src={registrationPreview || registrationTarget?.transferredRegistrationUrl || ''}
+                  alt={registrationPreview ? '등록증 미리보기' : '보낸 등록증'}
+                  wrapperClassName="w-full"
+                  className="w-full max-h-64 object-contain rounded"
+                  preview={{ mask: '클릭하면 확대' }}
+                />
               ) : (
-                <div className="w-full h-32 flex items-center justify-center text-gray-300 text-sm">
-                  사진을 드래그하거나 클릭해서 선택하세요
+                <div
+                  onClick={() => registrationFileInputRef.current?.click()}
+                  className="w-full h-32 flex items-center justify-center text-gray-300 text-sm cursor-pointer hover:bg-gray-50 rounded"
+                >
+                  사진을 여기로 끌어다 놓거나, 아래 [파일 올리기] 버튼을 눌러주세요
                 </div>
               )}
             </div>
+            <Button
+              size="small"
+              onClick={() => registrationFileInputRef.current?.click()}
+              className="mb-2"
+            >
+              {registrationPreview || registrationTarget?.transferredRegistrationUrl ? '사진 변경 (파일 올리기)' : '파일 올리기'}
+            </Button>
             <input
               ref={registrationFileInputRef}
               type="file"
