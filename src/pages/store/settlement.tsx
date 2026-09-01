@@ -394,7 +394,8 @@ const SettlementPage: IDefaultLayoutPage = () => {
     const summaryRows = [
       {},
       { '상사명/딜러명': '총 건수', '청구금액(VAT포함)': `${rows.length}건` },
-      { '상사명/딜러명': '(참고) 클레임 차감 합계 — 발주사 청구액엔 미반영, 진단사 지급액에서만 차감', '청구금액(VAT포함)': totalClaimDeduction ? -totalClaimDeduction : 0 },
+      // 클레임 손익(포기 매출/진단사 차감/회사 부담)은 원가가 드러나는 내부 숫자라 엑셀에는
+      // 넣지 않는다 — 이 파일은 발주사에 그대로 보내는 청구서다. 화면에서는 슈퍼관리자에게만 보인다.
       { '상사명/딜러명': '공급가액(검차비)', '청구금액(VAT포함)': supplyTotal },
       { '상사명/딜러명': '부가세', '청구금액(VAT포함)': vat },
       { '상사명/딜러명': '기타비용', '청구금액(VAT포함)': etcCost || 0 },
