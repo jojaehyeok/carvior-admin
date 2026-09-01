@@ -44,6 +44,8 @@ interface ISettlementRow {
   isUrgent: boolean;
   isExportBooking: boolean;
   isManualPrice: boolean; // companyBillingAmount로 수동 입력된 예외건인지
+  isFreeClaim: boolean; // 클레임 보상으로 발주사 청구를 0원 처리한 건(= "취소해준 건")
+  listPriceInclVat: number; // 무료처리와 무관한 단가표 정가 — 무료로 포기한 매출을 계산하는 데 씀
   source: string;
 }
 
@@ -82,6 +84,7 @@ interface IPayrollRow {
   tier: string;
   count: number;
   claimTotal: number; // 이번 달 이 진단사한테 걸린 클레임 차감 합계(원) — 얼마나 깎였는지 바로 보이게
+  freeCount: number; // 이 진단사 담당 건 중 클레임 보상으로 발주사에 무료처리된 건수
   grossTotal: number; // 기본진단비+추가금+기타-클레임 합계(세전, VAT포함 기준)
   withholding: number; // 3.3% 원천징수액
   netTotal: number; // 실지급액
@@ -111,13 +114,17 @@ function computeGrossPrice(b: IBooking): { grossPrice: number; isManualPrice: bo
   if (b.companyBillingAmount != null) {
     return { grossPrice: b.companyBillingAmount, isManualPrice: true };
   }
-  if (b.remoteTier === 'remote') {
-    return { grossPrice: REMOTE_PRICE, isManualPrice: false };
-  }
+  return { grossPrice: computeListPrice(b), isManualPrice: false };
+}
+
+// 무료처리(companyBillingAmount=0) 여부와 무관한 단가표 "정가". 무료로 해준 건이 원래
+// 얼마짜리였는지를 알아야 회사가 포기한 매출을 계산할 수 있어서 따로 분리했다.
+function computeListPrice(b: IBooking): number {
+  if (b.remoteTier === 'remote') return REMOTE_PRICE;
   let base = BASE_PRICE;
   if (b.remoteTier === 'semi_remote' || b.isUrgent) base = SEMI_REMOTE_OR_URGENT_PRICE;
   if (b.isExportBooking) base += EXPORT_VIDEO_SURCHARGE;
-  return { grossPrice: base, isManualPrice: false };
+  return base;
 }
 
 const SettlementPage: IDefaultLayoutPage = () => {
@@ -257,6 +264,8 @@ const SettlementPage: IDefaultLayoutPage = () => {
             isUrgent: !!b.isUrgent,
             isExportBooking: !!b.isExportBooking,
             isManualPrice,
+            isFreeClaim: b.companyBillingAmount === 0,
+            listPriceInclVat: computeListPrice(b),
             source: b.source || '-',
           };
         })
@@ -264,7 +273,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
 
       // 진단사 지급금액 — 같은 발주사 필터(selectedSource) 범위 안에서 진단사별로 합산.
       // "전체" 조회면 자연히 전체 발주사 기준 지급액이 된다.
-      const byDriver = new Map<string, { count: number; grossTotal: number; claimTotal: number }>();
+      const byDriver = new Map<string, { count: number; grossTotal: number; claimTotal: number; freeCount: number }>();
       for (const b of filtered) {
         if (!b.assignedDriverId) continue;
         const driverId = String(b.assignedDriverId);
@@ -272,16 +281,22 @@ const SettlementPage: IDefaultLayoutPage = () => {
         const baseFee = BASE_FEE_BY_TIER[tier] ?? BASE_FEE_BY_TIER.general;
         const claim = b.claimDeduction || 0;
         const gross = baseFee + (b.remoteBonus || 0) + (b.extraFee || 0) - claim;
-        const prev = byDriver.get(driverId) || { count: 0, grossTotal: 0, claimTotal: 0 };
-        byDriver.set(driverId, { count: prev.count + 1, grossTotal: prev.grossTotal + gross, claimTotal: prev.claimTotal + claim });
+        const prev = byDriver.get(driverId) || { count: 0, grossTotal: 0, claimTotal: 0, freeCount: 0 };
+        byDriver.set(driverId, {
+          count: prev.count + 1,
+          grossTotal: prev.grossTotal + gross,
+          claimTotal: prev.claimTotal + claim,
+          freeCount: prev.freeCount + (b.companyBillingAmount === 0 ? 1 : 0),
+        });
       }
-      const payroll: IPayrollRow[] = Array.from(byDriver.entries()).map(([driverId, { count, grossTotal, claimTotal }]) => {
+      const payroll: IPayrollRow[] = Array.from(byDriver.entries()).map(([driverId, { count, grossTotal, claimTotal, freeCount }]) => {
         const withholding = Math.round(grossTotal * WITHHOLDING_RATE);
         return {
           driverId,
           driverName: nameById.get(driverId) || `#${driverId}`,
           tier: tierById.get(driverId) || 'general',
           count,
+          freeCount,
           claimTotal,
           grossTotal,
           withholding,
@@ -312,6 +327,20 @@ const SettlementPage: IDefaultLayoutPage = () => {
   const supplyTotal = Math.round(totalInclVat / (1 + VAT_RATE));
   const vat = totalInclVat - supplyTotal;
   const grandTotal = totalInclVat + (etcCost || 0);
+
+  // --- 클레임 손익 ---
+  // 클레임이 나면 돈이 두 군데서 움직이는데 화면상 서로 떨어져 있어서 "그래서 회사는 얼마
+  // 손해냐"가 한눈에 안 보였다. 두 가지를 여기서 합쳐준다.
+  //   (1) 발주사 무료처리: 그 건 청구를 0원으로 → 회사가 매출을 포기. 단, 포기하는 건
+  //       "청구액(VAT포함)"이 아니라 "공급가액"이다. 부가세는 원래 국가에 낼 돈이라 회사 손해가 아님.
+  //   (2) 진단사 클레임 차감: 진단사에게 줄 돈이 줄어듦 → 회사 원가 회수.
+  // 무료로 해줘도 진단사에게 줄 진단비는 그대로 나가므로, 1건 무료의 실제 타격은 마진
+  // (1만원)이 아니라 공급가액 전액(7만원)이다 — 이걸 착각해서 "몇 건 갈음하면 되지?"를
+  // 잘못 계산하기 쉬워서, 포기 매출을 건수·금액으로 같이 보여준다.
+  const freeRows = rows.filter(r => r.isFreeClaim);
+  const freeSupplyTotal = freeRows.reduce((sum, r) => sum + Math.round(r.listPriceInclVat / (1 + VAT_RATE)), 0);
+  // 양수면 회사 부담, 음수면 회사에 남는 금액
+  const claimNetBurden = freeSupplyTotal - totalClaimDeduction;
 
   // --- 엑셀 내보내기 ---
   const handleExport = () => {
@@ -386,13 +415,14 @@ const SettlementPage: IDefaultLayoutPage = () => {
       '진단사명': r.driverName,
       '등급': TIER_LABEL[r.tier] || r.tier,
       '완료건수': r.count,
+      '무료처리건수': r.freeCount || '',
       '클레임차감': r.claimTotal || '',
       '지급기준액': r.grossTotal,
       '3.3% 원천징수': r.withholding,
       '실지급액': r.netTotal,
     }));
     const ws = XLSX.utils.json_to_sheet(dataRows);
-    ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+    ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `${monthLabel} 진단사 지급`);
     XLSX.writeFile(wb, `카비어_진단사지급_${selectedMonth?.format('YYYYMM')}.xlsx`);
@@ -404,6 +434,15 @@ const SettlementPage: IDefaultLayoutPage = () => {
     { title: '진단사명', dataIndex: 'driverName', width: 120 },
     { title: '등급', dataIndex: 'tier', width: 90, render: (v: string) => TIER_LABEL[v] || v },
     { title: '완료건수', dataIndex: 'count', width: 90, align: 'right' },
+    {
+      title: '무료처리',
+      dataIndex: 'freeCount',
+      width: 90,
+      align: 'right',
+      // 이 진단사가 진단한 건 중 발주사에 무료로 나간 건수 — 진단사에게는 진단비가 그대로
+      // 지급되므로 지급액에는 영향이 없다. "이 사람 때문에 몇 건이 무료로 나갔나"를 보는 열.
+      render: (v: number) => v > 0 ? <span className="text-purple-600">{v}건</span> : <span className="text-gray-300">-</span>,
+    },
     {
       title: '클레임차감',
       dataIndex: 'claimTotal',
@@ -583,15 +622,38 @@ const SettlementPage: IDefaultLayoutPage = () => {
                     {displayRows.length}건
                   </Table.Summary.Cell>
                 </Table.Summary.Row>
-                {totalClaimDeduction > 0 && (
-                  <Table.Summary.Row className="text-purple-600">
-                    <Table.Summary.Cell index={0} colSpan={9} align="right">
-                      (참고) 클레임 차감 합계 — 발주사 청구액엔 미반영, 진단사 지급액에서만 차감
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={1} align="right">
-                      -₩{totalClaimDeduction.toLocaleString()}
-                    </Table.Summary.Cell>
-                  </Table.Summary.Row>
+                {(totalClaimDeduction > 0 || freeRows.length > 0) && (
+                  <>
+                    <Table.Summary.Row className="text-purple-600">
+                      <Table.Summary.Cell index={0} colSpan={9} align="right">
+                        (클레임 ①) 발주사 무료처리 {freeRows.length}건 — 포기한 매출(공급가액)
+                      </Table.Summary.Cell>
+                      <Table.Summary.Cell index={1} align="right">
+                        -₩{freeSupplyTotal.toLocaleString()}
+                      </Table.Summary.Cell>
+                    </Table.Summary.Row>
+                    <Table.Summary.Row className="text-purple-600">
+                      <Table.Summary.Cell index={0} colSpan={9} align="right">
+                        (클레임 ②) 진단사 지급액에서 차감 — 발주사 청구액엔 미반영
+                      </Table.Summary.Cell>
+                      <Table.Summary.Cell index={1} align="right">
+                        +₩{totalClaimDeduction.toLocaleString()}
+                      </Table.Summary.Cell>
+                    </Table.Summary.Row>
+                    <Table.Summary.Row className={`font-bold ${claimNetBurden > 0 ? 'text-red-600 bg-red-50' : 'text-green-700 bg-green-50'}`}>
+                      <Table.Summary.Cell index={0} colSpan={9} align="right">
+                        = 클레임으로 인한 회사 {claimNetBurden > 0 ? '부담' : '이득'} (① − ②)
+                        {freeRows.length > 0 && (
+                          <span className="font-normal text-gray-500 ml-1">
+                            · 무료 1건당 마진(1만원)이 아니라 공급가액 전액이 빠집니다(진단사 진단비는 그대로 지급)
+                          </span>
+                        )}
+                      </Table.Summary.Cell>
+                      <Table.Summary.Cell index={1} align="right">
+                        ₩{Math.abs(claimNetBurden).toLocaleString()}
+                      </Table.Summary.Cell>
+                    </Table.Summary.Row>
+                  </>
                 )}
                 <Table.Summary.Row className="font-bold bg-gray-50">
                   <Table.Summary.Cell index={0} colSpan={9} align="right">
