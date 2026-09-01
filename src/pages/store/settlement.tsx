@@ -85,6 +85,7 @@ interface IPayrollRow {
   count: number;
   claimTotal: number; // 이번 달 이 진단사한테 걸린 클레임 차감 합계(원) — 얼마나 깎였는지 바로 보이게
   freeCount: number; // 이 진단사 담당 건 중 클레임 보상으로 발주사에 무료처리된 건수
+  bonusTotal: number; // 오지·준오지·긴급 추가금 합계 — 지급기준액이 어떻게 나온 건지 보이게
   grossTotal: number; // 기본진단비+추가금+기타-클레임 합계(세전, VAT포함 기준)
   withholding: number; // 3.3% 원천징수액
   netTotal: number; // 실지급액
@@ -115,6 +116,17 @@ function computeGrossPrice(b: IBooking): { grossPrice: number; isManualPrice: bo
     return { grossPrice: b.companyBillingAmount, isManualPrice: true };
   }
   return { grossPrice: computeListPrice(b), isManualPrice: false };
+}
+
+// 오지/준오지/긴급 추가금(진단사 지급분). 발주사 청구는 remoteTier만 보고 자동으로
+// 할증(준오지 97,000/오지 117,000)이 붙는데, 진단사 추가금은 관리자가 예약 수정 모달을
+// 열어서 저장해야만 DB에 들어가는 수동 값이라 계속 누락됐다(8월 기준 해당 28건 중 20건
+// 미입력 = 약 25만원). 회사는 할증을 자동으로 받으면서 진단사는 수동으로 챙겨줘야 받는
+// 비대칭 구조라, null(=관리자가 손대지 않음)이면 규정 기본값을 자동 적용한다.
+// 0은 "관리자가 일부러 0원으로 저장한 것"이므로 그대로 존중한다(null과 0을 구분하는 이유).
+export function effectiveRemoteBonus(b: { remoteTier?: 'semi_remote' | 'remote' | null; isUrgent?: boolean; remoteBonus?: number | null }): number {
+  if (b.remoteBonus != null) return b.remoteBonus;
+  return (b.remoteTier === 'remote' ? 20000 : b.remoteTier === 'semi_remote' ? 10000 : 0) + (b.isUrgent ? 10000 : 0);
 }
 
 // 무료처리(companyBillingAmount=0) 여부와 무관한 단가표 "정가". 무료로 해준 건이 원래
@@ -273,23 +285,25 @@ const SettlementPage: IDefaultLayoutPage = () => {
 
       // 진단사 지급금액 — 같은 발주사 필터(selectedSource) 범위 안에서 진단사별로 합산.
       // "전체" 조회면 자연히 전체 발주사 기준 지급액이 된다.
-      const byDriver = new Map<string, { count: number; grossTotal: number; claimTotal: number; freeCount: number }>();
+      const byDriver = new Map<string, { count: number; grossTotal: number; claimTotal: number; freeCount: number; bonusTotal: number }>();
       for (const b of filtered) {
         if (!b.assignedDriverId) continue;
         const driverId = String(b.assignedDriverId);
         const tier = tierById.get(driverId) || 'general';
         const baseFee = BASE_FEE_BY_TIER[tier] ?? BASE_FEE_BY_TIER.general;
         const claim = b.claimDeduction || 0;
-        const gross = baseFee + (b.remoteBonus || 0) + (b.extraFee || 0) - claim;
-        const prev = byDriver.get(driverId) || { count: 0, grossTotal: 0, claimTotal: 0, freeCount: 0 };
+        const bonus = effectiveRemoteBonus(b);
+        const gross = baseFee + bonus + (b.extraFee || 0) - claim;
+        const prev = byDriver.get(driverId) || { count: 0, grossTotal: 0, claimTotal: 0, freeCount: 0, bonusTotal: 0 };
         byDriver.set(driverId, {
           count: prev.count + 1,
           grossTotal: prev.grossTotal + gross,
           claimTotal: prev.claimTotal + claim,
           freeCount: prev.freeCount + (b.companyBillingAmount === 0 ? 1 : 0),
+          bonusTotal: prev.bonusTotal + bonus,
         });
       }
-      const payroll: IPayrollRow[] = Array.from(byDriver.entries()).map(([driverId, { count, grossTotal, claimTotal, freeCount }]) => {
+      const payroll: IPayrollRow[] = Array.from(byDriver.entries()).map(([driverId, { count, grossTotal, claimTotal, freeCount, bonusTotal }]) => {
         const withholding = Math.round(grossTotal * WITHHOLDING_RATE);
         return {
           driverId,
@@ -297,6 +311,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
           tier: tierById.get(driverId) || 'general',
           count,
           freeCount,
+          bonusTotal,
           claimTotal,
           grossTotal,
           withholding,
@@ -415,6 +430,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
       '진단사명': r.driverName,
       '등급': TIER_LABEL[r.tier] || r.tier,
       '완료건수': r.count,
+      '오지긴급추가금': r.bonusTotal || '',
       '무료처리건수': r.freeCount || '',
       '클레임차감': r.claimTotal || '',
       '지급기준액': r.grossTotal,
@@ -422,7 +438,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
       '실지급액': r.netTotal,
     }));
     const ws = XLSX.utils.json_to_sheet(dataRows);
-    ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+    ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `${monthLabel} 진단사 지급`);
     XLSX.writeFile(wb, `카비어_진단사지급_${selectedMonth?.format('YYYYMM')}.xlsx`);
@@ -434,6 +450,13 @@ const SettlementPage: IDefaultLayoutPage = () => {
     { title: '진단사명', dataIndex: 'driverName', width: 120 },
     { title: '등급', dataIndex: 'tier', width: 90, render: (v: string) => TIER_LABEL[v] || v },
     { title: '완료건수', dataIndex: 'count', width: 90, align: 'right' },
+    {
+      title: '오지·긴급 추가금',
+      dataIndex: 'bonusTotal',
+      width: 130,
+      align: 'right',
+      render: (v: number) => v > 0 ? <span className="text-blue-600">+₩{v.toLocaleString()}</span> : <span className="text-gray-300">-</span>,
+    },
     {
       title: '무료처리',
       dataIndex: 'freeCount',
