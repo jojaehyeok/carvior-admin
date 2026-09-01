@@ -622,7 +622,9 @@ const SettlementPage: IDefaultLayoutPage = () => {
                     {displayRows.length}건
                   </Table.Summary.Cell>
                 </Table.Summary.Row>
-                {(totalClaimDeduction > 0 || freeRows.length > 0) && (
+                {/* 클레임 손익은 원가(진단사 지급액)가 드러나는 내부 숫자라 슈퍼관리자에게만 —
+                    발주사 계정으로 이 화면을 보면 청구 관련 줄만 보인다. */}
+                {isSuperAdmin && (totalClaimDeduction > 0 || freeRows.length > 0) && (
                   <>
                     <Table.Summary.Row className="text-purple-600">
                       <Table.Summary.Cell index={0} colSpan={9} align="right">
