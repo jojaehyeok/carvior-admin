@@ -809,8 +809,11 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 고객 직접신청(구매동행) 건은 딜러 계약 진행 여부를 관리할 대상이 아니라서
   // 계약상태/매입가/구전 컬럼이 의미가 없음 — 이 화면에서만 숨긴다.
   const isDirectConsumerView = effectiveCompany === 'CARVIOR_INSPECTION';
-  // 명의이전 등록증 직접 업로드는 애니원모터스 전용 요청 기능
-  const isAnyoneMotors = effectiveCompany === 'anyone-motors';
+  // 명의이전 등록증 직접 업로드는 애니원모터스 전용 요청 기능.
+  // "자체 진단 목록"은 source가 "self-anyone-motors"로 들어와서 그대로 비교하면 애니원모터스로
+  // 인식되지 않아 등록증 열이 안 나왔다 — 자체 접수 건도 명의이전 등록증은 똑같이 보내야 하므로
+  // self- 접두사를 떼고 판단한다.
+  const isAnyoneMotors = (effectiveCompany || '').replace(/^self-/, '') === 'anyone-motors';
   // 매입가/구전 확인·미확인 토글 — 같은 회사에 관리자 계정이 여러 개일 때, 이 권한이
   // 있는 계정(예: 사무장)만 토글 가능하고 나머지는 조회만 가능하게 제한할 수 있다.
   // 슈퍼관리자는 항상 가능.
