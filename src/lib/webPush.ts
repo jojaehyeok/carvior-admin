@@ -132,6 +132,8 @@ export async function listenForegroundPush(onPush: (title: string, body: string)
         badge: '/admin/favicon-32x32.png',
         requireInteraction: true,
         tag: (payload.data?.bookingId as string) || 'cavior-purchase',
+        // tag가 같은 알림은 배너·소리 없이 조용히 교체된다 — renotify를 켜야 매번 다시 알린다.
+        renotify: true,
         data: {
           bookingId: payload.data?.bookingId,
           link: payload.data?.link ?? 'https://carvior.store/admin',
