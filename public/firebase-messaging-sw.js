@@ -24,27 +24,56 @@ firebase.initializeApp({
   appId: '1:909758654495:web:537555e37e234fffeb8d2a',
 });
 
-const messaging = firebase.messaging();
+const API_BASE = 'https://carvior.store/api/v1';
 
-// 서버가 notification 필드를 담아 보내면 브라우저가 알림을 자동으로 띄우기 때문에
-// 여기서 또 showNotification을 하면 알림이 두 번 뜬다 — 클릭 시 열 주소만 챙겨두고
-// 표시는 브라우저에 맡긴다.
-messaging.onBackgroundMessage((payload) => {
+firebase.messaging().onBackgroundMessage((payload) => {
+  // 서버가 notification 필드를 담아 보내면 SDK가 알림을 자동으로 띄운다 —
+  // 여기서 또 showNotification을 하면 두 번 뜨므로 로그만 남긴다.
   console.log('[FCM-SW] 백그라운드 메시지 수신', payload);
 });
 
-// 알림 클릭 → 이미 열려 있는 대시보드 탭이 있으면 그 탭을 살리고, 없으면 새로 연다.
-// (서버가 fcmOptions.link로 넘긴 주소를 우선 사용)
+// 알림에 담긴 값 꺼내기. SDK가 띄운 알림은 payload 전체가 data.FCM_MSG 아래로 들어가고,
+// 대시보드 탭이 직접 띄운 알림(webPush.ts)은 data에 그대로 들어 있어서 양쪽을 다 본다.
+function readNotificationData(notification) {
+  const data = notification?.data ?? {};
+  const fcm = data.FCM_MSG ?? {};
+  return {
+    bookingId: data.bookingId ?? fcm.data?.bookingId,
+    link:
+      data.link ??
+      fcm.data?.link ??
+      fcm.notification?.click_action ??
+      'https://carvior.store/admin',
+  };
+}
+
 self.addEventListener('notificationclick', (event) => {
-  const link =
-    event.notification?.data?.FCM_MSG?.notification?.click_action ||
-    event.notification?.data?.link ||
-    'https://carvior.store/admin';
+  const { bookingId, link } = readNotificationData(event.notification);
   event.notification.close();
+
+  // [확인] 버튼 — 대시보드를 열지 않고 그 자리에서 "확인함" 처리한다.
+  // 목록에서 매입가/구전 숫자를 눌러 빨간색을 파란색으로 바꾸는 것과 같은 동작이다.
+  if (event.action === 'confirm') {
+    if (!bookingId) return;
+    event.waitUntil(
+      fetch(`${API_BASE}/external/request/${bookingId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purchasePriceSeen: true, oldDealerFeeSeen: true }),
+      }).catch((e) => console.error('[FCM-SW] 확인 처리 실패', e)),
+    );
+    return;
+  }
+
+  // 알림 본문 클릭 — 이미 열려 있는 대시보드 탭이 있으면 그 탭을 그 차량 검색 화면으로 보내고,
+  // 없으면 새로 연다. (탭을 계속 새로 띄우면 관리자 화면이 금방 지저분해진다)
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if (client.url.includes('/admin') && 'focus' in client) return client.focus();
+        if (client.url.includes('/admin') && 'focus' in client) {
+          if ('navigate' in client) client.navigate(link).catch(() => {});
+          return client.focus();
+        }
       }
       return self.clients.openWindow(link);
     }),

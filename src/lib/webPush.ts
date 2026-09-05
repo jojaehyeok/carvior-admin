@@ -101,14 +101,20 @@ export async function listenForegroundPush(onPush: (title: string, body: string)
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
       try {
         const reg = await navigator.serviceWorker.getRegistration(SW_SCOPE);
+        // 서비스워커가 띄우는 알림과 동일한 모양으로 맞춘다 — [확인] 버튼과 차량 검색 링크까지
+        // 같아야 어느 경로로 뜨든 관리자가 같은 방식으로 처리할 수 있다.
         await reg?.showNotification(title, {
           body,
           icon: '/admin/android-chrome-192x192.png',
           badge: '/admin/favicon-32x32.png',
           requireInteraction: true,
           tag: (payload.data?.bookingId as string) || undefined, // 같은 건이 여러 번 오면 겹쳐 쌓지 않는다
-          data: { link: 'https://carvior.store/admin' },
-        });
+          data: {
+            bookingId: payload.data?.bookingId,
+            link: payload.data?.link ?? 'https://carvior.store/admin',
+          },
+          actions: [{ action: 'confirm', title: '확인' }],
+        } as NotificationOptions);
         return;
       } catch {
         // 알림 표시에 실패하면 아래 화면 안 표시로 폴백
