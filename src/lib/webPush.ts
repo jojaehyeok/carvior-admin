@@ -66,7 +66,14 @@ export async function enableWebPush(userId: string | number): Promise<
     if (!token) return { ok: false, reason: 'error', message: '토큰을 발급받지 못했습니다.' };
 
     const API = process.env.NEXT_PUBLIC_API_ENDPOINT || 'http://localhost:4000/api/v1';
-    const res = await fetch(`${API}/users/${userId}/web-push-token`, {
+    // 슈퍼관리자는 대시보드 코드에 하드코딩된 계정이라 세션 id가 숫자가 아니다('admin').
+    // 그 계정은 users 테이블에 행이 없어서 :id 경로로는 저장할 수 없고, 전용 경로가
+    // 알림 수신용 행을 만들어 거기에 저장한다.
+    const isSuperAdmin = !/^d+$/.test(String(userId));
+    const url = isSuperAdmin
+      ? `${API}/users/super-admin/web-push-token`
+      : `${API}/users/${userId}/web-push-token`;
+    const res = await fetch(url, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ webPushToken: token }),
