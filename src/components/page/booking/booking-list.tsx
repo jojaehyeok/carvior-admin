@@ -720,6 +720,31 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     }
   };
 
+  // 매입팀 화면 전용 인라인 저장 — 상세 모달을 열지 않고 목록의 입력칸에서 바로 고친다.
+  // 계약금을 고칠 때는 이미 입력해둔 매입가를 같이 보내서, 백엔드의 "매입가=계약금+잔금"
+  // 자동계산이 직접 적어둔 매입가를 덮어쓰지 않게 한다.
+  const handleInlineSave = async (
+    record: IBooking,
+    field: 'contractDeposit' | 'purchasePrice' | 'oldDealerFee',
+    value: number | null,
+  ) => {
+    if ((record[field] ?? null) === (value ?? null)) return; // 값이 그대로면 저장하지 않는다
+    setData(prev => prev.map(b => (b.id === record.id ? { ...b, [field]: value } : b)));
+    const body: Record<string, unknown> = { [field]: value };
+    if (field === 'contractDeposit') body.purchasePrice = record.purchasePrice ?? null;
+    try {
+      const res = await fetch(`${API_BASE}/external/request/${record.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      message.error('저장에 실패했습니다.');
+      fetchBookings();
+    }
+  };
+
   // 매입팀이 매입가·구전을 다 채운 뒤 [매입완료]를 누르면 대표·사무장에게 브라우저 알림이 간다.
   // 알림 시점을 값 저장이 아니라 이 버튼으로 둔 이유: 매입가는 협의 중에 여러 번 고쳐지는데
   // 그때마다 알림이 가면 소음이 된다. 실수로 눌러서 알림이 나가는 것도 막으려고 확인을 받는다.
@@ -1368,13 +1393,47 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     const ORDER = [
       '관리', '차량번호', '차량명', '시세(참고)',
       '딜러이름', '딜러번호', '차주이름', '고객번호',
-      '이전 등록증', '진단 리포트', '배정 진단사',
+      '진단 리포트', '배정 진단사',
       '계약금', '매입가', '구전',
     ];
     const titleOf = (c: unknown) => String((c as { title?: unknown }).title ?? '');
     columns = ORDER
       .map(t => columns.find(c => titleOf(c) === t))
       .filter((c): c is (typeof columns)[number] => !!c);
+
+    // 금액 3종은 상세 모달을 열지 않고 목록에서 바로 고친다. 확인/미확인 배지는 대표·사무장이
+    // "새로 적힌 값을 봤는지" 표시하는 장치라 적는 쪽인 매입팀 화면에선 뺀다.
+    const MONEY: { title: string; field: 'contractDeposit' | 'purchasePrice' | 'oldDealerFee' }[] = [
+      { title: '계약금', field: 'contractDeposit' },
+      { title: '매입가', field: 'purchasePrice' },
+      { title: '구전', field: 'oldDealerFee' },
+    ];
+    for (const { title, field } of MONEY) {
+      const idx = columns.findIndex(c => titleOf(c) === title);
+      if (idx === -1) continue;
+      columns[idx] = {
+        title: `${title} (만원)`,
+        key: field,
+        width: 120,
+        align: 'center',
+        render: (_: unknown, record: IBooking) => (
+          <InputNumber
+            size="small"
+            style={{ width: '100%' }}
+            defaultValue={record[field] ?? undefined}
+            min={0}
+            controls={false}
+            formatter={v => (v ? `${v}`.replace(/B(?=(d{3})+(?!d))/g, ',') : '')}
+            parser={v => Number((v ?? '').replace(/,/g, ''))}
+            onBlur={e => {
+              const raw = e.target.value.replace(/,/g, '').trim();
+              handleInlineSave(record, field, raw === '' ? null : Number(raw));
+            }}
+            onPressEnter={e => (e.target as HTMLInputElement).blur()}
+          />
+        ),
+      };
+    }
 
     // 매입가·구전을 다 채우고 누르는 마무리 버튼 — 이 순간에만 알림이 나간다.
     columns.push({
