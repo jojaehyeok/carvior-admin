@@ -95,8 +95,9 @@ export async function listenForegroundPush(onPush: (title: string, body: string)
   if (!(await isSupported())) return () => {};
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   return onMessage(getMessaging(app), async (payload) => {
-    const title = payload.notification?.title ?? '알림';
-    const body = payload.notification?.body ?? '';
+    // 서버가 data-only로 보내므로 제목·본문도 data에서 읽는다(notification 필드는 없다).
+    const title = (payload.data?.title as string) ?? payload.notification?.title ?? '알림';
+    const body = (payload.data?.body as string) ?? payload.notification?.body ?? '';
 
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
       // 이 탭은 화면에 안 보이므로 브라우저 알림으로 띄운다.

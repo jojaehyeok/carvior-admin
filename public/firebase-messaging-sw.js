@@ -26,10 +26,18 @@ firebase.initializeApp({
 
 const API_BASE = 'https://carvior.store/api/v1';
 
+// 서버는 data-only로 보낸다(notification 필드 없음). 그래야 SDK의 자동 표시가 끼어들지
+// 않고 이 핸들러가 항상 호출돼서, 알림을 우리가 직접·확실하게 그릴 수 있다.
+// 예전엔 자동 표시에 맡겼는데 같은 도메인 탭이 떠 있거나 옵션 조합에 따라 조용히 안 떠서
+// "메시지는 오는데 화면엔 안 뜬다"를 오래 헤맸다.
 firebase.messaging().onBackgroundMessage((payload) => {
-  // 서버가 notification 필드를 담아 보내면 SDK가 알림을 자동으로 띄운다 —
-  // 여기서 또 showNotification을 하면 두 번 뜨므로 로그만 남긴다.
   console.log('[FCM-SW] 백그라운드 메시지 수신', payload);
+  const d = payload.data || {};
+  return self.registration.showNotification(d.title || '카비어 알림', {
+    body: d.body || '',
+    icon: '/admin/android-chrome-192x192.png',
+    data: { link: d.link || 'https://carvior.store/admin', bookingId: d.bookingId },
+  });
 });
 
 // 알림에 담긴 값 꺼내기. SDK가 띄운 알림은 payload 전체가 data.FCM_MSG 아래로 들어가고,
