@@ -132,7 +132,7 @@ export async function listenForegroundPush(onPush: (title: string, body: string)
       // 여러 탭 중복은 아래 localStorage 잠금이 막으므로 tag가 없어도 된다.
       const options = {
         body,
-        icon: '/admin/android-chrome-192x192.png',
+        icon: (payload.data?.icon as string) || '/admin/android-chrome-192x192.png',
         data: {
           bookingId: payload.data?.bookingId,
           link: payload.data?.link ?? 'https://carvior.store/admin',

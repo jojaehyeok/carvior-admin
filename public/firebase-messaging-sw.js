@@ -35,7 +35,8 @@ firebase.messaging().onBackgroundMessage((payload) => {
   const d = payload.data || {};
   return self.registration.showNotification(d.title || '카비어 알림', {
     body: d.body || '',
-    icon: '/admin/android-chrome-192x192.png',
+    // 발주사 관리자 계정에 등록된 회사 로고가 있으면 그걸 쓰고, 없으면 카비어 기본 로고
+    icon: d.icon || '/admin/android-chrome-192x192.png',
     data: { link: d.link || 'https://carvior.store/admin', bookingId: d.bookingId },
   });
 });
