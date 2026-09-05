@@ -80,13 +80,40 @@ export async function enableWebPush(userId: string | number): Promise<
 }
 
 /**
- * 대시보드를 보고 있는 동안(포그라운드) 도착한 메시지는 브라우저가 알림을 자동으로 띄우지
- * 않는다 — 화면 안에서 직접 처리해야 해서 콜백으로 넘겨준다.
+ * 포그라운드 수신 처리 + "가짜 백그라운드" 보정.
+ *
+ * FCM 서비스워커는 clients.matchAll({ includeUncontrolled: true })로 **같은 도메인의 모든 탭**을
+ * 훑어서, 그중 하나라도 화면에 떠 있으면 브라우저 알림을 그리지 않고 각 탭으로 메시지만 넘긴다.
+ * 그래서 관리자가 대시보드를 뒤에 두고 같은 carvior.store의 다른 탭(카비오 홈페이지 등)을 보고
+ * 있으면, SDK는 포그라운드로 판단하는데 정작 대시보드 화면은 안 보여서 아무것도 안 뜬다
+ * (현장 신고: "알림은 오는데 백그라운드가 안 온다").
+ *
+ * 그래서 이 탭이 실제로 숨겨져 있으면 여기서 직접 알림을 띄운다. 브라우저가 그리는 진짜 알림이라
+ * 다른 탭을 보고 있어도 뜨고, 클릭하면 서비스워커의 notificationclick이 대시보드를 살린다.
  */
 export async function listenForegroundPush(onPush: (title: string, body: string) => void) {
   if (!(await isSupported())) return () => {};
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-  return onMessage(getMessaging(app), (payload) => {
-    onPush(payload.notification?.title ?? '알림', payload.notification?.body ?? '');
+  return onMessage(getMessaging(app), async (payload) => {
+    const title = payload.notification?.title ?? '알림';
+    const body = payload.notification?.body ?? '';
+
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      try {
+        const reg = await navigator.serviceWorker.getRegistration(SW_SCOPE);
+        await reg?.showNotification(title, {
+          body,
+          icon: '/admin/android-chrome-192x192.png',
+          badge: '/admin/favicon-32x32.png',
+          requireInteraction: true,
+          tag: (payload.data?.bookingId as string) || undefined, // 같은 건이 여러 번 오면 겹쳐 쌓지 않는다
+          data: { link: 'https://carvior.store/admin' },
+        });
+        return;
+      } catch {
+        // 알림 표시에 실패하면 아래 화면 안 표시로 폴백
+      }
+    }
+    onPush(title, body);
   });
 }
