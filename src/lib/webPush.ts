@@ -108,7 +108,10 @@ export async function listenForegroundPush(onPush: (title: string, body: string)
           icon: '/admin/android-chrome-192x192.png',
           badge: '/admin/favicon-32x32.png',
           requireInteraction: true,
-          tag: (payload.data?.bookingId as string) || undefined, // 같은 건이 여러 번 오면 겹쳐 쌓지 않는다
+          // 대시보드 탭이 여러 개 열려 있으면 숨겨진 탭마다 이 코드가 돌아 알림이 그 수만큼
+          // 뜬다 — 같은 tag를 주면 브라우저가 하나로 합쳐준다. bookingId가 없을 때도 반드시
+          // 값이 있어야 합쳐지므로 고정 문자열로 폴백한다(undefined면 합치기가 안 걸린다).
+          tag: (payload.data?.bookingId as string) || 'cavior-purchase',
           data: {
             bookingId: payload.data?.bookingId,
             link: payload.data?.link ?? 'https://carvior.store/admin',
