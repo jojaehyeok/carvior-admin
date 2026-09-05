@@ -99,6 +99,20 @@ export async function listenForegroundPush(onPush: (title: string, body: string)
     const body = payload.notification?.body ?? '';
 
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      // 대시보드를 여러 탭에 띄워두면 숨겨진 탭 각각에서 이 코드가 돌아 알림이 탭 수만큼 뜬다.
+      // tag만으로는 부족했다(브라우저/OS에 따라 합쳐지지 않고 그대로 쌓이는 경우가 있음).
+      // localStorage는 같은 도메인의 모든 탭이 공유하고 읽기·쓰기가 동기라, 먼저 기록을 남긴
+      // 탭 하나만 알림을 그리게 하는 잠금으로 쓸 수 있다. 5초 안의 같은 알림은 이미 다른 탭이
+      // 처리한 것으로 보고 건너뛴다.
+      const dedupeKey = `cavior-push-${payload.data?.bookingId ?? title}`;
+      try {
+        const last = Number(window.localStorage.getItem(dedupeKey) ?? 0);
+        if (Date.now() - last < 5000) return; // 다른 탭이 방금 띄웠다
+        window.localStorage.setItem(dedupeKey, String(Date.now()));
+      } catch {
+        // 시크릿 모드 등 localStorage를 못 쓰면 잠금 없이 그냥 진행한다(안 뜨는 것보단 낫다)
+      }
+
       try {
         const reg = await navigator.serviceWorker.getRegistration(SW_SCOPE);
         // 서비스워커가 띄우는 알림과 동일한 모양으로 맞춘다 — [확인] 버튼과 차량 검색 링크까지
