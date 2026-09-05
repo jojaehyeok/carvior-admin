@@ -180,6 +180,12 @@ const buildCompanyMenu = (company: string, bookingPath?: string): IMenu[] => [
         id: "companyBookingList",
         name: "진단 신청목록",
         link: { path: bookingPath ?? `/diagnosis/${company}` },
+        // 바로 아래 "계약서 미작성 목록"과 경로가 같고 쿼리만 다르다. 기본 판정(isEqualPath)은
+        // 링크에 걸린 쿼리 키만 검사해서, 쿼리가 없는 이 항목은 빈 배열 every()가 항상 true라
+        // 미작성 목록을 보고 있을 때도 같이 활성으로 칠해졌다 — 그래서 두 개가 동시에 켜져 보였다.
+        // 이 항목은 "필터 없는 전체 목록"이므로 그 쿼리가 없을 때만 활성으로 본다.
+        isActive: (router, link) =>
+          router.pathname === link?.path && !router.query.contractWriterMissing,
       },
       {
         id: "companyContractWriterMissing",
