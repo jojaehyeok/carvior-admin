@@ -46,6 +46,12 @@ const superAdminMenuData: IMenu[] = [
         link: { path: "/diagnosis/drivers" },
       },
       {
+        // 헛걸음 보상 판단(노쇼 증빙 사진·판정)과 취소 사유 누적을 한 화면에서 본다
+        id: "cancelLogs",
+        name: "취소 로그",
+        link: { path: "/diagnosis/cancel-logs" },
+      },
+      {
         id: "driverSchedule",
         name: "진단사 스케줄 관리",
         link: { path: "/diagnosis/schedule" },
