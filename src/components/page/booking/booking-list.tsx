@@ -1395,6 +1395,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       '딜러이름', '딜러번호', '차주이름', '고객번호',
       '진단 리포트', '배정 진단사',
       '계약금', '매입가', '구전',
+      '상태', '접수일', '진단일시', '출처',
     ];
     const titleOf = (c: unknown) => String((c as { title?: unknown }).title ?? '');
     columns = ORDER
