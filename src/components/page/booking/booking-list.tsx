@@ -509,12 +509,16 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setTempPreferredDateTime((record.preferredDateTime || "").replace('T', ' '));
     // 오지/준오지/긴급 추가금은 아직 값이 없으면(처음 여는 경우) 기본 제안값을 미리 채워준다 —
     // 관리자가 그대로 저장하거나 수정할 수 있음. 이미 값이 저장돼 있으면 그 값 그대로 사용.
-    // 카비어 단가 규정의 "평가사 지급 기준" 최소값 − 인증 기본 60,000 기준 차액
-    // (준오지 73,000→+13,000 / 오지 85,000→+25,000 / 긴급 73,000→+13,000).
-    // settlement.tsx·앱 정산내역의 자동 적용값과 반드시 같아야 한다.
+    // 오지·준오지·긴급 추가금 제안값 — 등급별로 다르다(일반은 +1만/+2만, 인증·에이전트는
+    // 규정표 기준 +13,000/+25,000). settlement.tsx의 BONUS_BY_TIER, 앱 정산내역의
+    // effectiveRemoteBonus와 반드시 같은 값이어야 세 화면 금액이 어긋나지 않는다.
+    const bonusTier = drivers.find(d => String(d.id) === String(record.assignedDriverId))?.tier ?? 'general';
+    const bonusRate = bonusTier === 'general'
+      ? { semiRemote: 10000, remote: 20000, urgent: 10000 }
+      : { semiRemote: 13000, remote: 25000, urgent: 13000 };
     const defaultRemoteBonus =
-      (record.remoteTier === 'remote' ? 25000 : record.remoteTier === 'semi_remote' ? 13000 : 0) +
-      (record.isUrgent ? 13000 : 0);
+      (record.remoteTier === 'remote' ? bonusRate.remote : record.remoteTier === 'semi_remote' ? bonusRate.semiRemote : 0) +
+      (record.isUrgent ? bonusRate.urgent : 0);
     setTempRemoteBonus(record.remoteBonus ?? (defaultRemoteBonus > 0 ? defaultRemoteBonus : null));
     setTempExtraFee(record.extraFee ?? null);
     setTempExtraFeeMemo(record.extraFeeMemo || "");

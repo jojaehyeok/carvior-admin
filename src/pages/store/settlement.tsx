@@ -24,11 +24,16 @@ const VAT_RATE = 0.1;
 const BASE_FEE_BY_TIER: Record<string, number> = { general: 50000, certified: 60000, agent: 65000 };
 const WITHHOLDING_RATE = 0.033; // 3.3% 사업소득 원천징수
 
-// 진단사 추가금(원) — 규정상 범위의 최소값 기준. 규정을 바꾸면 booking-list.tsx의 제안값과
-// ChavatarApp settlement-history.tsx도 같이 고쳐야 세 화면 금액이 어긋나지 않는다.
-const SEMI_REMOTE_BONUS = 13000; // 준오지: 지급 73,000 − 기본 60,000
-const REMOTE_BONUS = 25000;      // 오지:   지급 85,000 − 기본 60,000
-const URGENT_BONUS = 13000;      // 긴급:   지급 73,000 − 기본 60,000
+// 진단사 추가금(원) — 등급별로 다르다. 규정표의 "평가사 지급 기준"(준오지 73,000 /
+// 오지 85,000)은 인증 등급 기준이라 인증·에이전트에는 그 차액(+13,000 / +25,000)을 쓰고,
+// 일반 등급은 그보다 낮은 +10,000 / +20,000을 적용한다.
+// 규정을 바꾸면 booking-list.tsx의 제안값과 ChavatarApp settlement-history.tsx도 같이
+// 고쳐야 세 화면 금액이 어긋나지 않는다.
+const BONUS_BY_TIER: Record<string, { semiRemote: number; remote: number; urgent: number }> = {
+  general:   { semiRemote: 10000, remote: 20000, urgent: 10000 }, // 준오지 60,000 / 오지 70,000
+  certified: { semiRemote: 13000, remote: 25000, urgent: 13000 }, // 준오지 73,000 / 오지 85,000
+  agent:     { semiRemote: 13000, remote: 25000, urgent: 13000 }, // 준오지 78,000 / 오지 90,000
+};
 const TIER_LABEL: Record<string, string> = { general: '일반', certified: '인증', agent: '에이전트' };
 
 interface ISettlementRow {
@@ -124,17 +129,17 @@ function computeGrossPrice(b: IBooking): { grossPrice: number; isManualPrice: bo
   return { grossPrice: computeListPrice(b), isManualPrice: false };
 }
 
-// 오지/준오지/긴급 추가금(진단사 지급분) — 카비어 단가 규정의 "평가사 지급 기준" 최소값에서
-// 인증 등급 기본 진단비(60,000)를 뺀 차액이다.
-//   준오지  지급 73,000~75,000 → 최소 73,000 − 60,000 = +13,000
-//   오지    지급 85,000~95,000 → 최소 85,000 − 60,000 = +25,000
-//   긴급    지급 73,000~75,000 → 최소 73,000 − 60,000 = +13,000
+// 오지/준오지/긴급 추가금(진단사 지급분) — 금액은 위 BONUS_BY_TIER 참고(등급별로 다름).
 // 발주사 청구는 remoteTier만 보고 자동 할증되는데 진단사 추가금은 관리자가 예약 수정 모달을
 // 열어 저장해야만 들어가는 수동 값이라 계속 누락됐다(8월 해당 28건 중 20건 미입력).
 // null(=관리자가 손대지 않음)이면 이 기본값을 자동 적용하고, 0은 "일부러 0원"이라 존중한다.
-export function effectiveRemoteBonus(b: { remoteTier?: 'semi_remote' | 'remote' | null; isUrgent?: boolean; remoteBonus?: number | null }): number {
+export function effectiveRemoteBonus(
+  b: { remoteTier?: 'semi_remote' | 'remote' | null; isUrgent?: boolean; remoteBonus?: number | null },
+  tier?: string | null,
+): number {
   if (b.remoteBonus != null) return b.remoteBonus;
-  return (b.remoteTier === 'remote' ? REMOTE_BONUS : b.remoteTier === 'semi_remote' ? SEMI_REMOTE_BONUS : 0) + (b.isUrgent ? URGENT_BONUS : 0);
+  const rate = BONUS_BY_TIER[tier || 'general'] ?? BONUS_BY_TIER.general;
+  return (b.remoteTier === 'remote' ? rate.remote : b.remoteTier === 'semi_remote' ? rate.semiRemote : 0) + (b.isUrgent ? rate.urgent : 0);
 }
 
 // 무료처리(companyBillingAmount=0) 여부와 무관한 단가표 "정가". 무료로 해준 건이 원래
@@ -300,7 +305,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
         const tier = tierById.get(driverId) || 'general';
         const baseFee = BASE_FEE_BY_TIER[tier] ?? BASE_FEE_BY_TIER.general;
         const claim = b.claimDeduction || 0;
-        const bonus = effectiveRemoteBonus(b);
+        const bonus = effectiveRemoteBonus(b, tier);
         const gross = baseFee + bonus + (b.extraFee || 0) - claim;
         const prev = byDriver.get(driverId) || { count: 0, grossTotal: 0, claimTotal: 0, freeCount: 0, bonusTotal: 0 };
         byDriver.set(driverId, {
