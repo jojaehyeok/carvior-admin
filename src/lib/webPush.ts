@@ -126,14 +126,12 @@ export async function listenForegroundPush(onPush: (title: string, body: string)
         return true;
       };
 
+      // 옵션을 얹을수록 배너가 안 뜨는 사고가 났다(tag는 조용히 교체, requireInteraction은
+      // 그 자리를 계속 점유). 알림이 뜨는 게 먼저라 제목·본문·아이콘만 남긴다.
+      // 여러 탭 중복은 아래 localStorage 잠금이 막으므로 tag가 없어도 된다.
       const options = {
         body,
         icon: '/admin/android-chrome-192x192.png',
-        badge: '/admin/favicon-32x32.png',
-        requireInteraction: true,
-        tag: (payload.data?.bookingId as string) || 'cavior-purchase',
-        // tag가 같은 알림은 배너·소리 없이 조용히 교체된다 — renotify를 켜야 매번 다시 알린다.
-        renotify: true,
         data: {
           bookingId: payload.data?.bookingId,
           link: payload.data?.link ?? 'https://carvior.store/admin',
@@ -144,7 +142,7 @@ export async function listenForegroundPush(onPush: (title: string, body: string)
         if (!takeLock()) return;
         try {
           // 서비스워커로 띄우는 알림만 [확인] 같은 버튼을 달 수 있다.
-          await reg.showNotification(title, { ...options, actions: [{ action: 'confirm', title: '확인' }] } as NotificationOptions);
+          await reg.showNotification(title, options as NotificationOptions);
           return;
         } catch (e) {
           console.warn('[webPush] 서비스워커 알림 실패, 기본 알림으로 대체', e);
