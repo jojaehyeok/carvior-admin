@@ -99,44 +99,65 @@ export async function listenForegroundPush(onPush: (title: string, body: string)
     const body = payload.notification?.body ?? '';
 
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-      // 대시보드를 여러 탭에 띄워두면 숨겨진 탭 각각에서 이 코드가 돌아 알림이 탭 수만큼 뜬다.
-      // tag만으로는 부족했다(브라우저/OS에 따라 합쳐지지 않고 그대로 쌓이는 경우가 있음).
-      // localStorage는 같은 도메인의 모든 탭이 공유하고 읽기·쓰기가 동기라, 먼저 기록을 남긴
-      // 탭 하나만 알림을 그리게 하는 잠금으로 쓸 수 있다. 5초 안의 같은 알림은 이미 다른 탭이
-      // 처리한 것으로 보고 건너뛴다.
+      // 이 탭은 화면에 안 보이므로 브라우저 알림으로 띄운다.
+      //
+      // 예전엔 reg?.showNotification(...) 한 줄이었는데, getRegistration이 undefined를
+      // 돌려주면 옵셔널 체이닝이라 아무 일도 안 일어나고 조용히 return 돼서 알림이 통째로
+      // 사라졌다(에러도 안 남아 원인 찾기가 어려웠다). 등록을 여러 경로로 찾고, 그래도
+      // 없으면 Notification 생성자로, 그것도 안 되면 화면 안 안내로 반드시 폴백한다.
+      const reg =
+        (await navigator.serviceWorker.getRegistration(SW_SCOPE).catch(() => undefined)) ??
+        (await navigator.serviceWorker.getRegistration().catch(() => undefined)) ??
+        (await navigator.serviceWorker.ready.catch(() => undefined));
+
+      // 여러 탭이 동시에 이 코드를 타면 알림이 탭 수만큼 뜬다. localStorage는 같은 도메인의
+      // 모든 탭이 공유하고 동기라 "먼저 기록한 탭만 그린다"는 잠금으로 쓸 수 있다.
+      // 잠금은 실제로 띄울 수 있다고 확인한 뒤에 건다 — 못 띄우는 탭이 잠금만 가져가면
+      // 띄울 수 있는 다른 탭까지 막혀서 아무것도 안 뜬다.
       const dedupeKey = `cavior-push-${payload.data?.bookingId ?? title}`;
-      try {
-        const last = Number(window.localStorage.getItem(dedupeKey) ?? 0);
-        if (Date.now() - last < 5000) return; // 다른 탭이 방금 띄웠다
-        window.localStorage.setItem(dedupeKey, String(Date.now()));
-      } catch {
-        // 시크릿 모드 등 localStorage를 못 쓰면 잠금 없이 그냥 진행한다(안 뜨는 것보단 낫다)
+      const takeLock = () => {
+        try {
+          const last = Number(window.localStorage.getItem(dedupeKey) ?? 0);
+          if (Date.now() - last < 5000) return false; // 다른 탭이 방금 띄웠다
+          window.localStorage.setItem(dedupeKey, String(Date.now()));
+        } catch {
+          // 시크릿 모드 등으로 못 쓰면 잠금 없이 진행한다(안 뜨는 것보단 낫다)
+        }
+        return true;
+      };
+
+      const options = {
+        body,
+        icon: '/admin/android-chrome-192x192.png',
+        badge: '/admin/favicon-32x32.png',
+        requireInteraction: true,
+        tag: (payload.data?.bookingId as string) || 'cavior-purchase',
+        data: {
+          bookingId: payload.data?.bookingId,
+          link: payload.data?.link ?? 'https://carvior.store/admin',
+        },
+      };
+
+      if (reg) {
+        if (!takeLock()) return;
+        try {
+          // 서비스워커로 띄우는 알림만 [확인] 같은 버튼을 달 수 있다.
+          await reg.showNotification(title, { ...options, actions: [{ action: 'confirm', title: '확인' }] } as NotificationOptions);
+          return;
+        } catch (e) {
+          console.warn('[webPush] 서비스워커 알림 실패, 기본 알림으로 대체', e);
+        }
       }
 
       try {
-        const reg = await navigator.serviceWorker.getRegistration(SW_SCOPE);
-        // 서비스워커가 띄우는 알림과 동일한 모양으로 맞춘다 — [확인] 버튼과 차량 검색 링크까지
-        // 같아야 어느 경로로 뜨든 관리자가 같은 방식으로 처리할 수 있다.
-        await reg?.showNotification(title, {
-          body,
-          icon: '/admin/android-chrome-192x192.png',
-          badge: '/admin/favicon-32x32.png',
-          requireInteraction: true,
-          // 대시보드 탭이 여러 개 열려 있으면 숨겨진 탭마다 이 코드가 돌아 알림이 그 수만큼
-          // 뜬다 — 같은 tag를 주면 브라우저가 하나로 합쳐준다. bookingId가 없을 때도 반드시
-          // 값이 있어야 합쳐지므로 고정 문자열로 폴백한다(undefined면 합치기가 안 걸린다).
-          tag: (payload.data?.bookingId as string) || 'cavior-purchase',
-          data: {
-            bookingId: payload.data?.bookingId,
-            link: payload.data?.link ?? 'https://carvior.store/admin',
-          },
-          actions: [{ action: 'confirm', title: '확인' }],
-        } as NotificationOptions);
+        if (!takeLock()) return;
+        new Notification(title, options);
         return;
-      } catch {
-        // 알림 표시에 실패하면 아래 화면 안 표시로 폴백
+      } catch (e) {
+        console.warn('[webPush] 브라우저 알림 실패, 화면 안 안내로 대체', e);
       }
     }
+
     onPush(title, body);
   });
 }
