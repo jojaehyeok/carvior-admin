@@ -1,6 +1,7 @@
 import { Button, Tooltip, message } from "antd";
 import { Bell, BellOff, BellRing } from "lucide-react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/router";
 import { useCallback, useEffect, useState } from "react";
 import { enableWebPush, getWebPushState, listenForegroundPush, WebPushState } from "@/lib/webPush";
 
@@ -15,7 +16,23 @@ import { enableWebPush, getWebPushState, listenForegroundPush, WebPushState } fr
  */
 export default function WebPushToggle() {
   const { data: session } = useSession();
+  const router = useRouter();
   const userId = (session?.user as { id?: string | number } | undefined)?.id;
+
+  // 서비스워커가 알림 클릭을 알려주면 그 차량이 검색된 화면으로 이동한다.
+  // (basePath가 /admin이라 라우터에는 그 앞부분을 뺀 경로를 넘겨야 한다)
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.serviceWorker) return;
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type !== "CAVIOR_NAVIGATE" || !e.data.link) return;
+      try {
+        const url = new URL(e.data.link);
+        router.push(url.pathname.replace(/^\/admin/, "") + url.search);
+      } catch { /* 링크가 깨져 있으면 무시 */ }
+    };
+    navigator.serviceWorker.addEventListener("message", onMsg);
+    return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+  }, [router]);
   const [state, setState] = useState<WebPushState>("unsupported");
   const [busy, setBusy] = useState(false);
 

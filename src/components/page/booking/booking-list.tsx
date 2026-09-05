@@ -755,6 +755,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       const res = await fetch(`${API_BASE}/external/request/${record.id}/purchase-complete`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        // 누른 본인에게는 알림이 가지 않게 계정 id를 함께 보낸다
+        body: JSON.stringify({ userId: (session?.user as { id?: string } | undefined)?.id }),
       });
       if (!res.ok) throw new Error();
       message.success(`${record.carNumber} 매입완료 알림을 보냈습니다.`);

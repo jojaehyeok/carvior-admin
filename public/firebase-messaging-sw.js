@@ -67,11 +67,15 @@ self.addEventListener('notificationclick', (event) => {
 
   // 알림 본문 클릭 — 이미 열려 있는 대시보드 탭이 있으면 그 탭을 그 차량 검색 화면으로 보내고,
   // 없으면 새로 연다. (탭을 계속 새로 띄우면 관리자 화면이 금방 지저분해진다)
+  //
+  // client.navigate()는 서비스워커가 "제어 중인" 탭에서만 동작한다 — 워커를 등록하기 전에 이미
+  // 열려 있던 탭은 제어 대상이 아니라서 조용히 실패하고, 결과적으로 탭이 앞으로 나오기만 하고
+  // 검색 화면으로는 안 넘어갔다. 그래서 탭에 메시지를 보내 Next 라우터로 직접 이동시킨다.
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
         if (client.url.includes('/admin') && 'focus' in client) {
-          if ('navigate' in client) client.navigate(link).catch(() => {});
+          client.postMessage({ type: 'CAVIOR_NAVIGATE', link });
           return client.focus();
         }
       }
