@@ -720,6 +720,26 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     }
   };
 
+  // 매입팀이 매입가·구전을 다 채운 뒤 [매입완료]를 누르면 대표·사무장에게 브라우저 알림이 간다.
+  // 알림 시점을 값 저장이 아니라 이 버튼으로 둔 이유: 매입가는 협의 중에 여러 번 고쳐지는데
+  // 그때마다 알림이 가면 소음이 된다. 실수로 눌러서 알림이 나가는 것도 막으려고 확인을 받는다.
+  const [purchaseCompleting, setPurchaseCompleting] = useState<number | null>(null);
+  const handlePurchaseComplete = async (record: IBooking) => {
+    setPurchaseCompleting(record.id);
+    try {
+      const res = await fetch(`${API_BASE}/external/request/${record.id}/purchase-complete`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) throw new Error();
+      message.success(`${record.carNumber} 매입완료 알림을 보냈습니다.`);
+    } catch {
+      message.error('알림 발송에 실패했습니다.');
+    } finally {
+      setPurchaseCompleting(null);
+    }
+  };
+
   const handleToggleBoolField = async (
     record: IBooking,
     field: 'contractConfirmed' | 'vehicleTransferred' | 'purchasePriceSeen' | 'contractDepositSeen' | 'oldDealerFeeSeen',
@@ -1343,13 +1363,40 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 배정/계약서 작성자/차량이전/계약상태/등록증/수정요청 같은 운영 컬럼은 가로로만 길어져서
   // 정작 봐야 할 매입가·구전이 화면 밖으로 밀린다. 남길 컬럼은 유저가 직접 지정한 목록이다.
   if (isPurchaseTeam) {
-    const KEEP_TITLES = new Set([
+    // 남길 컬럼과 순서를 여기서 한 번에 정한다(배열 순서가 곧 화면 순서).
+    // 이전 등록증을 진단 리포트보다 앞에 두는 건 매입팀이 등록증부터 확인하기 때문이다.
+    const ORDER = [
       '관리', '차량번호', '차량명', '시세(참고)',
       '딜러이름', '딜러번호', '차주이름', '고객번호',
-      '진단 리포트', '배정 진단사',
+      '이전 등록증', '진단 리포트', '배정 진단사',
       '계약금', '매입가', '구전',
-    ]);
-    columns = columns.filter(c => KEEP_TITLES.has(String((c as { title?: unknown }).title ?? '')));
+    ];
+    const titleOf = (c: unknown) => String((c as { title?: unknown }).title ?? '');
+    columns = ORDER
+      .map(t => columns.find(c => titleOf(c) === t))
+      .filter((c): c is (typeof columns)[number] => !!c);
+
+    // 매입가·구전을 다 채우고 누르는 마무리 버튼 — 이 순간에만 알림이 나간다.
+    columns.push({
+      title: '관리',
+      key: 'purchaseComplete',
+      width: 120,
+      align: 'center',
+      fixed: 'right',
+      render: (_: unknown, record: IBooking) => (
+        <Popconfirm
+          title="매입완료 알림을 보낼까요?"
+          description="대표·사무장에게 브라우저 알림이 갑니다."
+          okText="보내기"
+          cancelText="취소"
+          onConfirm={() => handlePurchaseComplete(record)}
+        >
+          <Button type="primary" size="small" loading={purchaseCompleting === record.id}>
+            매입완료
+          </Button>
+        </Popconfirm>
+      ),
+    });
   }
 
   // 애니원모터스 사무장 계정은 리포트를 안 보고 등록증 전송이 주 업무라, 진단리포트보다
