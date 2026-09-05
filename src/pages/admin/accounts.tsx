@@ -17,6 +17,7 @@ interface AdminUser {
   logoUrl?: string | null;
   isExportOnly?: boolean;
   canConfirmBilling?: boolean;
+  isPurchaseTeam?: boolean;
   createdAt: string;
 }
 
@@ -116,7 +117,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
     }
   };
 
-  const handleCreate = async (values: { username: string; password: string; name: string; phone?: string; company?: string; isExportOnly?: boolean; canConfirmBilling?: boolean }) => {
+  const handleCreate = async (values: { username: string; password: string; name: string; phone?: string; company?: string; isExportOnly?: boolean; canConfirmBilling?: boolean; isPurchaseTeam?: boolean }) => {
     setCreating(true);
     try {
       const { username, ...rest } = values;
@@ -166,7 +167,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
     }
   };
 
-  const handleEditInfo = async (values: { name: string; phone?: string; company?: string; isExportOnly?: boolean; canConfirmBilling?: boolean }) => {
+  const handleEditInfo = async (values: { name: string; phone?: string; company?: string; isExportOnly?: boolean; canConfirmBilling?: boolean; isPurchaseTeam?: boolean }) => {
     if (!editOpen) return;
     setEditing(true);
     try {
@@ -256,6 +257,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
           )}
           {record.isExportOnly && <Tag color="gold">수출전용</Tag>}
           {record.canConfirmBilling && <Tag color="green">매입가/구전 확인권한</Tag>}
+          {record.isPurchaseTeam && <Tag color="purple">매입팀 화면</Tag>}
         </div>
       ),
     },
@@ -275,7 +277,7 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
             onClick={() => {
               setEditOpen(record);
               setEditLogoUrl(record.logoUrl ?? null);
-              editForm.setFieldsValue({ name: record.name, phone: record.phone, company: record.company ?? "", isExportOnly: !!record.isExportOnly, canConfirmBilling: !!record.canConfirmBilling });
+              editForm.setFieldsValue({ name: record.name, phone: record.phone, company: record.company ?? "", isExportOnly: !!record.isExportOnly, canConfirmBilling: !!record.canConfirmBilling, isPurchaseTeam: !!record.isPurchaseTeam });
             }}
           >
             정보 수정
@@ -444,6 +446,14 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
             <Switch />
           </Form.Item>
           <Form.Item
+            name="isPurchaseTeam"
+            label="매입팀 화면 (진단 목록에서 매입 판단에 필요한 컬럼만 보임 — 배정/계약서/등록증 등은 숨김)"
+            valuePropName="checked"
+            initialValue={false}
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
             name="password"
             label="비밀번호"
             rules={[
@@ -534,6 +544,13 @@ const AdminAccountPage: IDefaultLayoutPage = () => {
           <Form.Item
             name="canConfirmBilling"
             label="매입가/구전 확인 권한 (같은 회사 다른 관리자는 조회만 가능, 이 계정만 확인·미확인 토글 가능)"
+            valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            name="isPurchaseTeam"
+            label="매입팀 화면 (진단 목록에서 매입 판단에 필요한 컬럼만 보임 — 배정/계약서/등록증 등은 숨김)"
             valuePropName="checked"
           >
             <Switch />

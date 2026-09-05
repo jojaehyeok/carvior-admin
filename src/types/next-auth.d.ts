@@ -17,6 +17,8 @@ declare module "next-auth" {
       logoUrl: string | null;
       /** 같은 회사 다른 관리자와 달리 매입가/구전 확인·미확인 토글 권한이 있는 계정인지 */
       canConfirmBilling: boolean;
+      // 매입팀 전용 화면(진단 목록 컬럼 축소) 여부 — users.isPurchaseTeam
+      isPurchaseTeam: boolean;
     } & DefaultSession["user"];
   }
 }

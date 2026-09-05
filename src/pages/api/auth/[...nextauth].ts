@@ -70,6 +70,7 @@ const credentialsProviderOption: CredentialsConfig<{}> = {
         company: user.company ?? null,
         logoUrl: user.logoUrl ?? null,
         canConfirmBilling: !!user.canConfirmBilling,
+        isPurchaseTeam: !!user.isPurchaseTeam,
       };
     } catch {
       return null;
@@ -118,6 +119,7 @@ export default NextAuth({
         token.company = (user as any).company ?? null;
         token.logoUrl = (user as any).logoUrl ?? null;
         token.canConfirmBilling = !!(user as any).canConfirmBilling;
+        token.isPurchaseTeam = !!(user as any).isPurchaseTeam;
       }
       return token;
     },
@@ -130,6 +132,7 @@ export default NextAuth({
         company: (token.company as string | null) ?? null,
         logoUrl: (token.logoUrl as string | null) ?? null,
         canConfirmBilling: !!token.canConfirmBilling,
+        isPurchaseTeam: !!token.isPurchaseTeam,
       };
       return session;
     },

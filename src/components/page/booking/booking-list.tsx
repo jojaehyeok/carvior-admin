@@ -818,6 +818,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 인식되지 않아 등록증 열이 안 나왔다 — 자체 접수 건도 명의이전 등록증은 똑같이 보내야 하므로
   // self- 접두사를 떼고 판단한다.
   const isAnyoneMotors = (effectiveCompany || '').replace(/^self-/, '') === 'anyone-motors';
+  // 매입팀 전용 화면 여부 — 계정에 붙은 플래그(users.isPurchaseTeam)를 그대로 쓴다.
+  // 회사 코드로 판별하면 같은 회사의 대표·사무장까지 같이 걸려서 안 된다.
+  const isPurchaseTeam = !!(session?.user as { isPurchaseTeam?: boolean } | undefined)?.isPurchaseTeam;
   // 매입가/구전 확인·미확인 토글 — 같은 회사에 관리자 계정이 여러 개일 때, 이 권한이
   // 있는 계정(예: 사무장)만 토글 가능하고 나머지는 조회만 가능하게 제한할 수 있다.
   // 슈퍼관리자는 항상 가능.
@@ -825,7 +828,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 구전은 계약금/매입가와 달리 애니원모터스 계정이면(사무장 권한 여부와 무관하게) 누구나 토글 가능
   const canConfirmOldDealerFee = canConfirmBilling || isAnyoneMotors;
 
-  const columns: ColumnsType<IBooking> = [
+  let columns: ColumnsType<IBooking> = [
     {
       title: "관리",
       key: "action",
@@ -1335,6 +1338,19 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       render: (value: string) => value ? <Tag>{value}</Tag> : <span className="text-gray-300">-</span>,
     },
   ];
+
+  // 매입팀 계정(isPurchaseTeam)은 매입가 판단만 하므로 그 업무에 필요한 컬럼만 남긴다 —
+  // 배정/계약서 작성자/차량이전/계약상태/등록증/수정요청 같은 운영 컬럼은 가로로만 길어져서
+  // 정작 봐야 할 매입가·구전이 화면 밖으로 밀린다. 남길 컬럼은 유저가 직접 지정한 목록이다.
+  if (isPurchaseTeam) {
+    const KEEP_TITLES = new Set([
+      '관리', '차량번호', '차량명', '시세(참고)',
+      '딜러이름', '딜러번호', '차주이름', '고객번호',
+      '진단 리포트', '배정 진단사',
+      '계약금', '매입가', '구전',
+    ]);
+    columns = columns.filter(c => KEEP_TITLES.has(String((c as { title?: unknown }).title ?? '')));
+  }
 
   // 애니원모터스 사무장 계정은 리포트를 안 보고 등록증 전송이 주 업무라, 진단리포트보다
   // 이전 등록증 컬럼이 먼저 오게 위치를 바꿔준다(사무장 판별은 canConfirmBilling 재사용).
