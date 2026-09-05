@@ -1437,12 +1437,13 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     }
 
     // 매입가·구전을 다 채우고 누르는 마무리 버튼 — 이 순간에만 알림이 나간다.
-    columns.push({
+    // 금액 입력칸 바로 옆(= 상태 앞)에 둔다. 맨 오른쪽에 고정하면 금액을 치고 나서
+    // 시선이 화면 끝까지 건너뛰어야 해서 손이 어색해진다.
+    const purchaseCompleteColumn = {
       title: '관리',
       key: 'purchaseComplete',
       width: 120,
-      align: 'center',
-      fixed: 'right',
+      align: 'center' as const,
       render: (_: unknown, record: IBooking) => (
         <Popconfirm
           title="매입완료 알림을 보낼까요?"
@@ -1456,7 +1457,10 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           </Button>
         </Popconfirm>
       ),
-    });
+    };
+    const statusIdx = columns.findIndex(c => titleOf(c) === '상태');
+    if (statusIdx === -1) columns.push(purchaseCompleteColumn);
+    else columns.splice(statusIdx, 0, purchaseCompleteColumn);
   }
 
   // 애니원모터스 사무장 계정은 리포트를 안 보고 등록증 전송이 주 업무라, 진단리포트보다
