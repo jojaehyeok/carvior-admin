@@ -133,7 +133,12 @@ function computeGrossPrice(b: IBooking): { grossPrice: number; isManualPrice: bo
 // 끝났으므로 소급하지 않고 저장된 값만 쓴다 — 이 값을 앞당기면 지난달 지급액이 소급해서
 // 올라가 보이므로 실제 소급 지급을 결정한 게 아니면 건드리지 말 것.
 // 대시보드와 앱(settlement-history.tsx)이 같은 기준이어야 평가사가 보는 금액이 어긋나지 않는다.
-const BONUS_AUTO_FROM = '2026-09';
+const BONUS_AUTO_FROM = '2026-08';
+
+// 등급별 차등은 9월부터다. 8월은 등급 구분 없이 규정표 그대로(준오지 +13,000 / 오지 +25,000)
+// 적용한다 — 8월 정산 기준을 바꾸지 않기로 했고, 등급을 나눈 건 9월부터의 결정이라서다.
+const TIER_SPLIT_FROM = '2026-09';
+const BONUS_BEFORE_TIER_SPLIT = { semiRemote: 13000, remote: 25000, urgent: 13000 };
 
 // 오지/준오지/긴급 추가금(진단사 지급분) — 금액은 위 BONUS_BY_TIER 참고(등급별로 다름).
 // 발주사 청구는 remoteTier만 보고 자동 할증되는데 진단사 추가금은 관리자가 예약 수정 모달을
@@ -144,8 +149,12 @@ export function effectiveRemoteBonus(
   tier?: string | null,
 ): number {
   if (b.remoteBonus != null) return b.remoteBonus;
-  if ((b.preferredDateTime || '') < BONUS_AUTO_FROM) return 0; // 소급 적용 안 함
-  const rate = BONUS_BY_TIER[tier || 'general'] ?? BONUS_BY_TIER.general;
+  const visitedAt = b.preferredDateTime || '';
+  if (visitedAt < BONUS_AUTO_FROM) return 0; // 그 이전 달은 이미 정산이 끝나서 손대지 않는다
+  const rate =
+    visitedAt < TIER_SPLIT_FROM
+      ? BONUS_BEFORE_TIER_SPLIT
+      : BONUS_BY_TIER[tier || 'general'] ?? BONUS_BY_TIER.general;
   return (b.remoteTier === 'remote' ? rate.remote : b.remoteTier === 'semi_remote' ? rate.semiRemote : 0) + (b.isUrgent ? rate.urgent : 0);
 }
 
