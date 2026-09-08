@@ -55,6 +55,9 @@ interface IDriver {
   createdAt: string;
   tier?: DriverTier;
   canHandleOutsourced?: boolean;
+  // 평가사 본인 차량번호 — 고객 배정/예약변경 알림톡의 "평가 차량번호"로 나간다.
+  // 평가사가 앱 "내 스케줄"에서 직접 넣지만, 아직 안 넣은 분은 여기서 대신 등록한다.
+  carNumber?: string | null;
 }
 
 const TIER_CONFIG: Record<DriverTier, { color: string; label: string }> = {
@@ -91,6 +94,8 @@ const DriverList = () => {
   const [statsLoading, setStatsLoading] = useState(false);
   const [tempTier, setTempTier] = useState<DriverTier>('general');
   const [savingTier, setSavingTier] = useState(false);
+  const [tempCarNumber, setTempCarNumber] = useState('');
+  const [savingCarNumber, setSavingCarNumber] = useState(false);
   const [savingOutsourced, setSavingOutsourced] = useState(false);
   const [penalties, setPenalties] = useState<IDriverPenalty[]>([]);
   const [newPenaltyType, setNewPenaltyType] = useState<'penalty' | 'advantage'>('penalty');
@@ -126,6 +131,7 @@ const DriverList = () => {
     setPenalties([]);
     setNewPenaltyReason('');
     setTempTier(driver.tier || 'general');
+    setTempCarNumber(driver.carNumber || '');
     setIsModalOpen(true);
     setStatsLoading(true);
     try {
@@ -262,6 +268,28 @@ const DriverList = () => {
     }
   };
 
+  // 평가 차량번호 저장 — 앱의 "내 스케줄" 저장과 같은 엔드포인트를 쓴다(같은 화이트리스트).
+  const handleSaveCarNumber = async () => {
+    if (!selectedDriver) return;
+    setSavingCarNumber(true);
+    try {
+      const res = await fetch(`${API}/drivers/${selectedDriver.id}/availability`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ carNumber: tempCarNumber.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      message.success('평가 차량번호가 저장되었습니다.');
+      // 목록만 새로 받으면 열려있는 모달은 옛 값을 들고 있어 저장 버튼이 계속 활성화된다
+      setSelectedDriver({ ...selectedDriver, carNumber: tempCarNumber.trim() });
+      fetchDrivers();
+    } catch {
+      message.error('차량번호 저장 중 오류가 발생했습니다.');
+    } finally {
+      setSavingCarNumber(false);
+    }
+  };
+
   // 발주사 자체접수(외주) 건을 이 진단사 앱에 노출/처리 가능하게 할지 여부
   const handleToggleOutsourced = async (checked: boolean) => {
     if (!selectedDriver) return;
@@ -299,6 +327,13 @@ const DriverList = () => {
     { title: "아이디", dataIndex: "accountId", className: "font-medium text-slate-700" },
     { title: "성함", dataIndex: "name", className: "font-bold" },
     { title: "연락처", dataIndex: "phone" },
+    {
+      title: "평가 차량",
+      dataIndex: "carNumber",
+      width: 110,
+      render: (v?: string | null) =>
+        v ? <span className="font-medium">{v}</span> : <span className="text-red-400">미등록</span>,
+    },
     {
       title: "상태",
       dataIndex: "status",
@@ -379,6 +414,25 @@ const DriverList = () => {
               >
                 <Button loading={uploadingPhoto}>{selectedDriver.photoUrl ? '사진 변경' : '사진 등록'}</Button>
               </Upload>
+            </div>
+
+            {/* 평가 차량번호 — 고객에게 나가는 배정 안내에 표시됨(평가사 개인번호 대신 식별용) */}
+            <Divider plain>평가 차량번호</Divider>
+            <div className="flex items-center gap-2">
+              <Input
+                className="flex-1"
+                value={tempCarNumber}
+                onChange={(e) => setTempCarNumber(e.target.value)}
+                placeholder="예) 12가 3456 (미등록 시 안내에 '미등록'으로 표시)"
+              />
+              <Button
+                type="primary"
+                loading={savingCarNumber}
+                disabled={tempCarNumber.trim() === (selectedDriver.carNumber || '')}
+                onClick={handleSaveCarNumber}
+              >
+                저장
+              </Button>
             </div>
 
             {/* 등급 관리 — 정산(settlement-history)의 등급별 기본 진단비 기준이 됨 */}
