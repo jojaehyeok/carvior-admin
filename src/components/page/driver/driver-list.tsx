@@ -6,7 +6,8 @@ import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { CheckCircle, RefreshCw, UserCog, XCircle } from "lucide-react";
 import { useSession } from "next-auth/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { EMPTY_DRIVER_FILTERS, type IDriverFilters } from "./driver-search";
 import Cropper, { type Area } from "react-easy-crop";
 
 // react-easy-crop 공식 예제와 동일한 방식 — croppedAreaPixels 영역만 canvas에 그려서
@@ -85,7 +86,7 @@ interface IDriverPenalty {
   expiresAt: string;
 }
 
-const DriverList = () => {
+const DriverList = ({ filters = EMPTY_DRIVER_FILTERS }: { filters?: IDriverFilters }) => {
   const [data, setData] = useState<IDriver[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedDriver, setSelectedDriver] = useState<IDriver | null>(null);
@@ -311,6 +312,32 @@ const DriverList = () => {
     }
   };
 
+  // 검색 조건 적용. 진단사 수가 많지 않고 목록을 통째로 받아오는 구조라 서버 왕복 없이
+  // 화면에서 거른다 — 조건을 바꿔도 즉시 반영되고 새로고침 요청이 늘지 않는다.
+  const filtered = useMemo(() => {
+    const { from, to, statuses, field, keyword } = filters;
+    const needle = keyword.trim().toLowerCase();
+    // 연락처·차량번호는 하이픈·공백을 넣고 검색하는 경우가 많아 기호를 떼고 비교한다
+    const loose = (v: string) => v.replace(/[\s-]/g, '').toLowerCase();
+
+    return data.filter(d => {
+      if (from && dayjs(d.createdAt).format('YYYY-MM-DD') < from) return false;
+      if (to && dayjs(d.createdAt).format('YYYY-MM-DD') > to) return false;
+
+      if (statuses.length) {
+        // 예전 데이터에 남은 ACTIVE는 "승인완료"와 같은 것으로 본다
+        const s = d.status === 'ACTIVE' ? 'APPROVED' : d.status;
+        if (!statuses.includes(s)) return false;
+      }
+
+      if (!needle) return true;
+      const raw = (d[field] ?? '') as string;
+      return field === 'phone' || field === 'carNumber'
+        ? loose(raw).includes(loose(needle))
+        : raw.toLowerCase().includes(needle);
+    });
+  }, [data, filters]);
+
   const columns: ColumnsType<IDriver> = [
     {
       title: "관리",
@@ -369,11 +396,14 @@ const DriverList = () => {
   return (
     <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
       <div className="flex justify-between items-center mb-4">
-        <span className="text-sm text-slate-500">총 {data.length}명</span>
+        <span className="text-sm text-slate-500">
+          총 {filtered.length}명
+          {filtered.length !== data.length && <span className="ml-1 text-slate-400">(전체 {data.length}명)</span>}
+        </span>
         <Button icon={<RefreshCw size={14} />} onClick={fetchDrivers} loading={isLoading}>새로고침</Button>
       </div>
 
-      <DefaultTable<IDriver> columns={columns} dataSource={data} loading={isLoading} rowKey="id" />
+      <DefaultTable<IDriver> columns={columns} dataSource={filtered} loading={isLoading} rowKey="id" />
 
       <Modal
         title={`${selectedDriver?.name} 진단사 상세 정보`}
