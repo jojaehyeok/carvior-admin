@@ -56,7 +56,8 @@ interface IDriver {
   createdAt: string;
   tier?: DriverTier;
   canHandleOutsourced?: boolean;
-  // 평가사 본인 차량번호 — 고객 배정/예약변경 알림톡의 "평가 차량번호"로 나간다.
+  // 진단사 본인 차량번호 — 고객 배정/예약변경 알림톡의 "진단사 차량번호"로 나간다.
+  // ("평가 차량"이라고 하면 평가 대상인 고객 차로 읽혀서 라벨을 이렇게 통일했다)
   // 평가사가 앱 "내 스케줄"에서 직접 넣지만, 아직 안 넣은 분은 여기서 대신 등록한다.
   carNumber?: string | null;
 }
@@ -269,7 +270,7 @@ const DriverList = ({ filters = EMPTY_DRIVER_FILTERS }: { filters?: IDriverFilte
     }
   };
 
-  // 평가 차량번호 저장 — 앱의 "내 스케줄" 저장과 같은 엔드포인트를 쓴다(같은 화이트리스트).
+  // 진단사 차량번호 저장 — 앱의 "내 스케줄" 저장과 같은 엔드포인트를 쓴다(같은 화이트리스트).
   const handleSaveCarNumber = async () => {
     if (!selectedDriver) return;
     setSavingCarNumber(true);
@@ -280,7 +281,7 @@ const DriverList = ({ filters = EMPTY_DRIVER_FILTERS }: { filters?: IDriverFilte
         body: JSON.stringify({ carNumber: tempCarNumber.trim() }),
       });
       if (!res.ok) throw new Error();
-      message.success('평가 차량번호가 저장되었습니다.');
+      message.success('진단사 차량번호가 저장되었습니다.');
       // 목록만 새로 받으면 열려있는 모달은 옛 값을 들고 있어 저장 버튼이 계속 활성화된다
       setSelectedDriver({ ...selectedDriver, carNumber: tempCarNumber.trim() });
       fetchDrivers();
@@ -355,7 +356,7 @@ const DriverList = ({ filters = EMPTY_DRIVER_FILTERS }: { filters?: IDriverFilte
     { title: "성함", dataIndex: "name", className: "font-bold" },
     { title: "연락처", dataIndex: "phone" },
     {
-      title: "평가 차량",
+      title: "진단사 차량",
       dataIndex: "carNumber",
       width: 110,
       render: (v?: string | null) =>
@@ -446,14 +447,14 @@ const DriverList = ({ filters = EMPTY_DRIVER_FILTERS }: { filters?: IDriverFilte
               </Upload>
             </div>
 
-            {/* 평가 차량번호 — 고객에게 나가는 배정 안내에 표시됨(평가사 개인번호 대신 식별용) */}
-            <Divider plain>평가 차량번호</Divider>
+            {/* 진단사 차량번호 — 고객에게 나가는 배정 안내에 표시됨(진단사 개인번호 대신 식별용) */}
+            <Divider plain>진단사 차량번호</Divider>
             <div className="flex items-center gap-2">
               <Input
                 className="flex-1"
                 value={tempCarNumber}
                 onChange={(e) => setTempCarNumber(e.target.value)}
-                placeholder="예) 12가 3456 (미등록 시 안내에 '미등록'으로 표시)"
+                placeholder="진단사가 타고 가는 차량 (미등록 시 안내에 '미등록'으로 표시)"
               />
               <Button
                 type="primary"

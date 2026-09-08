@@ -103,7 +103,7 @@ const DriverSearch = ({ onSearch }: Props) => {
             <Select.Option value="name">성함</Select.Option>
             <Select.Option value="accountId">아이디</Select.Option>
             <Select.Option value="phone">연락처</Select.Option>
-            <Select.Option value="carNumber">평가 차량</Select.Option>
+            <Select.Option value="carNumber">진단사 차량</Select.Option>
           </Select>
           <Input
             placeholder="검색어를 입력해주세요"
