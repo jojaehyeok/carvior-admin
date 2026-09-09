@@ -79,10 +79,10 @@ interface IBooking {
   remoteBonus?: number | null;
   extraFee?: number | null;
   // 묶음 진단 — 서버가 판정해서 내려준다(bookings.service.ts attachBundleInfo).
-  // 한 장소를 한 번 이동해서 다 보므로 오지/긴급 할증은 대표건 하나에만 붙인다.
+  // 한 번 이동해서 여러 대를 보는 것 자체가 효율이라, 묶음 건에는 오지/긴급 할증을
+  // 아예 붙이지 않는다(대표건도 예외 없음).
   bundleKey?: string | null;
   bundleSize?: number;
-  isBundleLead?: boolean;
   contractWriter?: string;
   source?: string;
   createdAt: ISO8601DateTime;
@@ -156,14 +156,15 @@ export function effectiveRemoteBonus(
     remoteBonus?: number | null;
     preferredDateTime?: string;
     bundleKey?: string | null;
-    isBundleLead?: boolean;
+    bundleSize?: number;
   },
   tier?: string | null,
 ): number {
   // 관리자가 직접 넣은 금액은 묶음이든 아니든 그대로 존중한다(현장 사정으로 더 챙겨준 경우 등).
   if (b.remoteBonus != null) return b.remoteBonus;
-  // 묶음의 비대표건은 추가 이동이 없으므로 자동 추가금을 붙이지 않는다.
-  if (b.bundleKey != null && b.isBundleLead === false) return 0;
+  // 묶음 건에는 오지/긴급 추가금을 붙이지 않는다 — 한 번 이동해서 여러 대를 보는 것
+  // 자체가 효율이라 이동 할증 사유가 없다는 기준(발주사 청구도 같은 기준으로 낮춘다).
+  if (b.bundleKey != null && (b.bundleSize ?? 1) > 1) return 0;
   const visitedAt = b.preferredDateTime || '';
   if (visitedAt < BONUS_AUTO_FROM) return 0; // 그 이전 달은 이미 정산이 끝나서 손대지 않는다
   const rate =
@@ -176,13 +177,13 @@ export function effectiveRemoteBonus(
 // 무료처리(companyBillingAmount=0) 여부와 무관한 단가표 "정가". 무료로 해준 건이 원래
 // 얼마짜리였는지를 알아야 회사가 포기한 매출을 계산할 수 있어서 따로 분리했다.
 function computeListPrice(b: IBooking): number {
-  // 묶음 진단의 비대표건은 오지/긴급 할증을 붙이지 않는다 — 이동은 대표건 한 번뿐이라
-  // 건마다 할증을 매기면 실제 부담보다 많이 청구된다. 수출 촬영 할증은 차마다 실제로
-  // 하는 작업이라 그대로 붙는다.
-  const bundleFollower = b.bundleKey != null && b.isBundleLead === false;
-  if (!bundleFollower && b.remoteTier === 'remote') return REMOTE_PRICE;
+  // 묶음 진단은 오지/긴급 할증을 적용하지 않는다 — 한 장소로 한 번 이동해서 여러 대를
+  // 보는 구조라 건별 이동 부담이 없다고 보고, 전 건을 기본 단가로 청구한다.
+  // 수출 촬영 할증은 차마다 실제로 하는 작업이라 그대로 붙는다.
+  const inBundle = b.bundleKey != null && (b.bundleSize ?? 1) > 1;
+  if (!inBundle && b.remoteTier === 'remote') return REMOTE_PRICE;
   let base = BASE_PRICE;
-  if (!bundleFollower && (b.remoteTier === 'semi_remote' || b.isUrgent)) base = SEMI_REMOTE_OR_URGENT_PRICE;
+  if (!inBundle && (b.remoteTier === 'semi_remote' || b.isUrgent)) base = SEMI_REMOTE_OR_URGENT_PRICE;
   if (b.isExportBooking) base += EXPORT_VIDEO_SURCHARGE;
   return base;
 }

@@ -132,7 +132,6 @@ interface IBooking {
   // 묶음 진단 — 서버가 판정해서 내려준다(bookings.service.ts attachBundleInfo)
   bundleKey?: string | null;
   bundleSize?: number;
-  isBundleLead?: boolean;
   urgentCandidate?: boolean;
   createdAt: ISO8601DateTime;
 }
@@ -520,10 +519,10 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     const bonusRate = bonusTier === 'general'
       ? { semiRemote: 10000, remote: 20000, urgent: 10000 }
       : { semiRemote: 13000, remote: 25000, urgent: 13000 };
-    // 묶음의 비대표건은 추가 이동이 없어 자동 추가금을 붙이지 않는다(settlement.tsx의
-    // effectiveRemoteBonus와 같은 기준). 관리자가 직접 금액을 넣으면 그건 그대로 존중된다.
-    const bundleFollower = record.bundleKey != null && record.isBundleLead === false;
-    const defaultRemoteBonus = bundleFollower ? 0 :
+    // 묶음 건에는 오지/긴급 추가금을 붙이지 않는다(settlement.tsx의 effectiveRemoteBonus와
+    // 같은 기준). 관리자가 직접 금액을 넣으면 그건 그대로 존중된다.
+    const inBundle = record.bundleKey != null && (record.bundleSize ?? 1) > 1;
+    const defaultRemoteBonus = inBundle ? 0 :
       (record.remoteTier === 'remote' ? bonusRate.remote : record.remoteTier === 'semi_remote' ? bonusRate.semiRemote : 0) +
       (record.isUrgent ? bonusRate.urgent : 0);
     setTempRemoteBonus(record.remoteBonus ?? (defaultRemoteBonus > 0 ? defaultRemoteBonus : null));
@@ -904,8 +903,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           {/* 묶음은 슈퍼관리자 전용이 아니다 — 발주사도 왜 이 건에 오지 할증이 안 붙었는지
               알아야 하므로 청구 근거로 함께 노출한다. */}
           {(record.bundleSize ?? 1) > 1 && (
-            <Tag color={record.isBundleLead ? "purple" : "default"} className="m-0">
-              🔗묶음 {record.bundleSize}건{record.isBundleLead ? " · 대표" : ""}
+            <Tag color="purple" className="m-0">
+              🔗묶음 {record.bundleSize}건
             </Tag>
           )}
         </div>
