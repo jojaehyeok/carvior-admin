@@ -129,6 +129,10 @@ interface IBooking {
   // 오지/준오지 가격협상 여부, 긴급브로드캐스트 필요 여부를 판단하는 데 참고하는 뱃지
   nearestDriverKm?: number | null;
   remoteTier?: 'semi_remote' | 'remote' | null;
+  // 묶음 진단 — 서버가 판정해서 내려준다(bookings.service.ts attachBundleInfo)
+  bundleKey?: string | null;
+  bundleSize?: number;
+  isBundleLead?: boolean;
   urgentCandidate?: boolean;
   createdAt: ISO8601DateTime;
 }
@@ -516,7 +520,10 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     const bonusRate = bonusTier === 'general'
       ? { semiRemote: 10000, remote: 20000, urgent: 10000 }
       : { semiRemote: 13000, remote: 25000, urgent: 13000 };
-    const defaultRemoteBonus =
+    // 묶음의 비대표건은 추가 이동이 없어 자동 추가금을 붙이지 않는다(settlement.tsx의
+    // effectiveRemoteBonus와 같은 기준). 관리자가 직접 금액을 넣으면 그건 그대로 존중된다.
+    const bundleFollower = record.bundleKey != null && record.isBundleLead === false;
+    const defaultRemoteBonus = bundleFollower ? 0 :
       (record.remoteTier === 'remote' ? bonusRate.remote : record.remoteTier === 'semi_remote' ? bonusRate.semiRemote : 0) +
       (record.isUrgent ? bonusRate.urgent : 0);
     setTempRemoteBonus(record.remoteBonus ?? (defaultRemoteBonus > 0 ? defaultRemoteBonus : null));
@@ -891,7 +898,18 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "차량번호",
       dataIndex: "carNumber",
       align: "center",
-      render: (value: string) => <span className="font-bold text-blue-600">{value}</span>,
+      render: (value: string, record: IBooking) => (
+        <div className="flex flex-col items-center gap-1">
+          <span className="font-bold text-blue-600">{value}</span>
+          {/* 묶음은 슈퍼관리자 전용이 아니다 — 발주사도 왜 이 건에 오지 할증이 안 붙었는지
+              알아야 하므로 청구 근거로 함께 노출한다. */}
+          {(record.bundleSize ?? 1) > 1 && (
+            <Tag color={record.isBundleLead ? "purple" : "default"} className="m-0">
+              🔗묶음 {record.bundleSize}건{record.isBundleLead ? " · 대표" : ""}
+            </Tag>
+          )}
+        </div>
+      ),
     },
     // 오지/준오지/긴급후보 뱃지는 내부 운영(가격협상 판단 등) 참고용 — 발주사(Anyone모터스 등)
     // 회사 스코프 목록에는 노출하지 않고 슈퍼 관리자에게만 보여준다.
