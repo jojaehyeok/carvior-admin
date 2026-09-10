@@ -755,6 +755,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 알림 시점을 값 저장이 아니라 이 버튼으로 둔 이유: 매입가는 협의 중에 여러 번 고쳐지는데
   // 그때마다 알림이 가면 소음이 된다. 실수로 눌러서 알림이 나가는 것도 막으려고 확인을 받는다.
   const [purchaseCompleting, setPurchaseCompleting] = useState<number | null>(null);
+  const [unbundling, setUnbundling] = useState<number | null>(null);
   const handlePurchaseComplete = async (record: IBooking) => {
     setPurchaseCompleting(record.id);
     try {
@@ -770,6 +771,28 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       message.error('알림 발송에 실패했습니다.');
     } finally {
       setPurchaseCompleting(null);
+    }
+  };
+
+  // 묶음 해제 — 접수 담당자가 실수로 같은 장소에 두 번 신청한 경우처럼 자동 판정이
+  // 틀렸을 때 쓴다. 해제한 건은 나중에 같은 장소로 새 접수가 들어와도 다시 묶이지 않는다.
+  // 배정은 그대로 두므로 담당자를 바꿔야 하면 별도로 재배정해야 한다.
+  const handleUnbundle = async (record: IBooking) => {
+    setUnbundling(record.id);
+    try {
+      const res = await fetch(`${API_BASE}/external/request/${record.id}/unbundle`, { method: 'PATCH' });
+      if (!res.ok) throw new Error();
+      const data = await res.json() as { dissolved?: boolean };
+      message.success(
+        data.dissolved
+          ? `${record.carNumber} 묶음을 해제했습니다(묶음 해산).`
+          : `${record.carNumber}를 묶음에서 뺐습니다.`,
+      );
+      fetchBookings();
+    } catch {
+      message.error('묶음 해제에 실패했습니다.');
+    } finally {
+      setUnbundling(null);
     }
   };
 
@@ -903,9 +926,25 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           {/* 묶음은 슈퍼관리자 전용이 아니다 — 발주사도 왜 이 건에 오지 할증이 안 붙었는지
               알아야 하므로 청구 근거로 함께 노출한다. */}
           {(record.bundleSize ?? 1) > 1 && (
-            <Tag color="purple" className="m-0">
-              🔗묶음 {record.bundleSize}건
-            </Tag>
+            <div className="flex items-center gap-1">
+              <Tag color="purple" className="m-0">
+                🔗묶음 {record.bundleSize}건
+              </Tag>
+              {/* 해제는 청구·지급 금액이 바뀌는 조작이라 슈퍼관리자에게만 보인다 */}
+              {isSuperAdminView && (
+                <Popconfirm
+                  title="이 건을 묶음에서 뺄까요?"
+                  description="오지·긴급 할증이 다시 적용되고, 이후 같은 장소 접수와도 묶이지 않습니다."
+                  okText="해제"
+                  cancelText="취소"
+                  onConfirm={() => handleUnbundle(record)}
+                >
+                  <Button size="small" type="text" loading={unbundling === record.id} className="px-1 text-xs text-gray-400">
+                    해제
+                  </Button>
+                </Popconfirm>
+              )}
+            </div>
           )}
         </div>
       ),
