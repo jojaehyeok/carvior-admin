@@ -103,6 +103,8 @@ interface IBooking {
   transferredRegistrationUrl?: string | null; // 발주사가 직접 업로드하는 명의이전된 등록증 사진
   registrationSentToDealerAt?: string | null; // 딜러에게 등록증 SMS를 보낸 시각(건당 1회 제한)
   registrationSentToCustomerAt?: string | null; // 고객에게 등록증 SMS를 보낸 시각(건당 1회 제한)
+  priceFollowupSentToDealerAt?: string | null; // 딜러에게 가격 재안내 문자를 보낸 시각(1회 제한)
+  priceFollowupSentToCustomerAt?: string | null; // 차주에게 가격 재안내 문자를 보낸 시각(1회 제한)
   // 오더 기록 필드
   contractWriter?: string;
   vehicleTransferred?: boolean;
@@ -342,6 +344,76 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [dealerPhone, setDealerPhone] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [uploadingRegistration, setUploadingRegistration] = useState(false);
+
+  // --- 계약서 미작성 건 가격 재안내 문자 (애니원모터스 전용) ---
+  // 이전등록증 전송과 같은 방식: 딜러/차주를 골라 대상별 1회만, 건당 50원 과금 장부 기록.
+  // 미리보기 문구는 서버 bookings.service.ts의 PRICE_FOLLOWUP_MESSAGES와 같아야 한다
+  // (실제 발송은 서버에 고정된 문구로 나가서 여기서 바꿔 보낼 수는 없다).
+  const PRICE_FOLLOWUP_PREVIEW = [
+    '안녕하세요, 고객님. 애니원모터스 대표 유진욱입니다. (010-7370-9569)',
+    '',
+    '지난번 검차 진행했던 차량 관련해서 편하게 의견 여쭙고자 연락드렸습니다.',
+    '',
+    '혹시 제가 제시해 드린 금액이 기대에 못 미치셨거나 조금 아쉬우셨을까요?',
+    '',
+    '검차량이 많다 보니 사고 이력이나 누유, 예상 수리비 산정 과정에서 시각 차이가 있었을 수 있습니다. 말씀해 주시는 부분은 꼼꼼히 다시 검토해 보고, 가격적인 부분도 조금이라도 더 올려서 차주님 기준에 최대한 맞춰보겠습니다.',
+    '',
+    '부담 갖지 마시고 편하게 의견 남겨주시면 감사하겠습니다.',
+  ];
+  const [followupTarget, setFollowupTarget] = useState<IBooking | null>(null);
+  const [followupToDealer, setFollowupToDealer] = useState(false);
+  const [followupToCustomer, setFollowupToCustomer] = useState(false);
+  const [followupDealerPhone, setFollowupDealerPhone] = useState("");
+  const [followupCustomerPhone, setFollowupCustomerPhone] = useState("");
+  const [sendingFollowup, setSendingFollowup] = useState(false);
+
+  const openFollowupModal = (record: IBooking) => {
+    setFollowupTarget(record);
+    // 실수로 대표 명의 문자가 나가지 않게 체크는 항상 꺼둔 채로 시작한다(등록증 전송과 동일)
+    setFollowupToDealer(false);
+    setFollowupToCustomer(false);
+    setFollowupDealerPhone(record.contact || "");
+    setFollowupCustomerPhone(record.customerContact || "");
+  };
+
+  const handleSendFollowup = async () => {
+    if (!followupTarget) return;
+    setSendingFollowup(true);
+    try {
+      const res = await fetch(`${API_BASE}/external/request/${followupTarget.id}/price-followup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sendToDealer: followupToDealer,
+          sendToCustomer: followupToCustomer,
+          dealerPhone: followupDealerPhone,
+          customerPhone: followupCustomerPhone,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || '발송에 실패했습니다.');
+      const failures: string[] = data?.sendFailures || [];
+      if (failures.length > 0) message.error(`일부 전송에 실패했습니다 — ${failures.join(' / ')}`);
+      else message.success('가격 재안내 문자를 보냈습니다.');
+      setFollowupTarget(null);
+      fetchBookings();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : '발송에 실패했습니다.');
+    } finally {
+      setSendingFollowup(false);
+    }
+  };
+
+  const confirmSendFollowup = () => {
+    const count = Number(followupToDealer) + Number(followupToCustomer);
+    Modal.confirm({
+      title: '가격 재안내 문자를 보낼까요?',
+      content: `${count}명에게 발송됩니다 (건당 50원, VAT 포함). 대상별로 한 번만 보낼 수 있어요.`,
+      okText: '보내기',
+      cancelText: '취소',
+      onOk: handleSendFollowup,
+    });
+  };
 
   const openRegistrationModal = (record: IBooking) => {
     setRegistrationTarget(record);
@@ -1396,6 +1468,28 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         );
       },
     }] : []),
+    // 계약서 미작성 목록에서만 — 계약까지 가지 않은 건에 대표 명의로 가격 재안내 문자를 보낸다
+    ...(isAnyoneMotors && router.query.contractWriterMissing === 'true' ? [{
+      title: "가격 재안내",
+      key: "priceFollowup",
+      width: 120,
+      align: "center" as const,
+      render: (_: unknown, record: IBooking) => {
+        // 회색: 아직 안 보냄 / 파랑: 딜러·차주 중 하나라도 보냄 / 둘 다 보냈으면 비활성
+        const dealerSent = !!record.priceFollowupSentToDealerAt;
+        const customerSent = !!record.priceFollowupSentToCustomerAt;
+        return (
+          <Button
+            size="small"
+            type={dealerSent || customerSent ? "primary" : "default"}
+            disabled={dealerSent && customerSent}
+            onClick={() => openFollowupModal(record)}
+          >
+            {dealerSent && customerSent ? "전송완료" : "재안내 문자"}
+          </Button>
+        );
+      },
+    }] : []),
     // 애니원모터스는 "수정 요청" 대신 명의이전 등록증을 직접 업로드하는 열을 씀
     ...(isAnyoneMotors ? [{
       title: "이전 등록증",
@@ -2109,6 +2203,68 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           <p className="text-[11px] text-gray-400">
             링크 없이 짧은 안내 SMS만 발송돼요 — 받는 사람이 앱에서 직접 &ldquo;진단 내역 보기 → 수정하기&rdquo;로 들어가서 확인해야 해요.
           </p>
+        </div>
+      </Modal>
+
+      {/* 계약서 미작성 건 가격 재안내 문자 모달 (애니원모터스 전용) */}
+      <Modal
+        title={`가격 재안내 문자 — ${followupTarget?.carNumber}`}
+        open={!!followupTarget}
+        onOk={confirmSendFollowup}
+        onCancel={() => setFollowupTarget(null)}
+        confirmLoading={sendingFollowup}
+        okText="보내기"
+        okButtonProps={{ disabled: !followupToDealer && !followupToCustomer }}
+        cancelText="닫기"
+      >
+        <div className="py-2 space-y-3">
+          <Alert
+            type="info"
+            showIcon
+            message="보낼 대상을 체크하고 보내기를 누르세요. 건당 50원(VAT 포함)이며 대상별로 한 번만 보낼 수 있어요."
+          />
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={followupToDealer}
+                disabled={!!followupTarget?.priceFollowupSentToDealerAt}
+                onChange={e => setFollowupToDealer(e.target.checked)}
+              >
+                딜러에게 전송{followupTarget?.priceFollowupSentToDealerAt ? ' (전송완료)' : ''}
+              </Checkbox>
+              <Input
+                size="small"
+                value={followupDealerPhone}
+                onChange={e => setFollowupDealerPhone(e.target.value)}
+                disabled={!followupToDealer || !!followupTarget?.priceFollowupSentToDealerAt}
+                placeholder="딜러 연락처"
+                className="max-w-[160px]"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={followupToCustomer}
+                disabled={!!followupTarget?.priceFollowupSentToCustomerAt}
+                onChange={e => setFollowupToCustomer(e.target.checked)}
+              >
+                차주에게 전송{followupTarget?.priceFollowupSentToCustomerAt ? ' (전송완료)' : ''}
+              </Checkbox>
+              <Input
+                size="small"
+                value={followupCustomerPhone}
+                onChange={e => setFollowupCustomerPhone(e.target.value)}
+                disabled={!followupToCustomer || !!followupTarget?.priceFollowupSentToCustomerAt}
+                placeholder="차주 연락처"
+                className="max-w-[160px]"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-400 mb-1">보낼 문구 (수정 불가)</label>
+            <div className="whitespace-pre-wrap text-sm bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-64 overflow-y-auto">
+              {PRICE_FOLLOWUP_PREVIEW.join('\n')}
+            </div>
+          </div>
         </div>
       </Modal>
 

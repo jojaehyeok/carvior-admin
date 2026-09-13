@@ -238,7 +238,11 @@ const ReviewListPage: IDefaultLayoutPage = () => {
     {
       title: "사유",
       dataIndex: "purpose",
-      render: (v) => v === "request-update" ? "진단사/매니저 수정 요청" : v,
+      render: (v) => ({
+        "request-update": "진단사/매니저 수정 요청",
+        "registration-send": "이전 등록증 전송",
+        "price-followup": "가격 재안내 문자",
+      } as Record<string, string>)[v] ?? v,
     },
     {
       title: "과금액",
