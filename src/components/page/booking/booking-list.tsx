@@ -452,6 +452,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       setRegistrationTarget(prev => prev && savedUrl ? { ...prev, transferredRegistrationUrl: savedUrl } : prev);
       message.success('사진을 저장했습니다.');
       fetchBookings();
+      // 메뉴의 "등록증 전송 대기" 숫자를 바로 다시 세게 한다
+      window.dispatchEvent(new Event('cavior:registration-changed'));
     } catch {
       message.error('사진 저장에 실패했습니다.');
     } finally {
@@ -502,6 +504,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       }
       setRegistrationTarget(null);
       fetchBookings();
+      // 보낸 건은 전송 대기에서 빠지므로 메뉴 숫자를 바로 줄인다
+      window.dispatchEvent(new Event('cavior:registration-changed'));
     } catch {
       message.error('업로드 중 오류가 발생했습니다.');
     } finally {
@@ -913,7 +917,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
 
   // BookingSearch가 URL 쿼리로 넘긴 조건을 읽어 클라이언트 필터링
   const filteredData = useMemo(() => {
-    const { searchType, searchText, status, adminMemo, searchDateType, dateStart, dateEnd, contractWriterMissing } = router.query;
+    const { searchType, searchText, status, adminMemo, searchDateType, dateStart, dateEnd, contractWriterMissing, registrationPending } = router.query;
 
     return data.filter((item) => {
       // 검색어 필터
@@ -950,6 +954,14 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
 
       // "계약서 미작성 목록" 메뉴 전용 — 계약서 작성자가 비어있는 건만
       if (contractWriterMissing === 'true' && item.contractWriter) return false;
+
+      // "등록증 전송 대기" 메뉴 전용 — 사진은 저장했는데 딜러·고객 누구에게도 아직 안 보낸 건만.
+      // 메뉴 옆 숫자(bookings.service.ts countRegistrationPending)와 같은 기준이어야 한다.
+      if (registrationPending === 'true') {
+        const hasPhoto = !!item.transferredRegistrationUrl;
+        const anySent = !!item.registrationSentToDealerAt || !!item.registrationSentToCustomerAt;
+        if (!hasPhoto || anySent || item.status === 'CANCELLED') return false;
+      }
 
       return true;
     });
@@ -1641,6 +1653,11 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           {router.query.contractWriterMissing === 'true' && (
             <Tag color="orange" closable onClose={() => router.push(router.pathname)}>
               계약서 미작성 건만 표시 중
+            </Tag>
+          )}
+          {router.query.registrationPending === 'true' && (
+            <Tag color="green" closable onClose={() => router.push(router.pathname)}>
+              등록증 전송 대기 건만 표시 중
             </Tag>
           )}
         </div>

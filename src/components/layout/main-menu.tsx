@@ -2,6 +2,7 @@ import { Divider } from "antd";
 import { BarChart2, Banknote, Building2, Car, Home, KeyRound, MessageCircle, Monitor, Package2, Settings, ShoppingBag, Star } from "lucide-react";
 import { useSession } from "next-auth/react";
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/router";
 import Menu, { IMenu } from "./nav";
 
 const API = process.env.NEXT_PUBLIC_API_ENDPOINT;
@@ -165,7 +166,8 @@ const superAdminMenuData: IMenu[] = [
  * bookingPath를 지정 안 하면 동적 라우트(/diagnosis/[company])로 자동 연결되므로,
  * "관리자 계정 관리"에서 새 발주사 계정을 만들면 코드 배포 없이 바로 메뉴가 동작한다.
  */
-const buildCompanyMenu = (company: string, bookingPath?: string): IMenu[] => [
+// options.registration — 등록증 보내기 기능을 쓰는 발주사(현재 애니원모터스)만 "등록증 전송 대기" 메뉴를 붙인다.
+const buildCompanyMenu = (company: string, bookingPath?: string, options?: { registration?: boolean }): IMenu[] => [
   {
     id: "home",
     name: "홈",
@@ -191,13 +193,20 @@ const buildCompanyMenu = (company: string, bookingPath?: string): IMenu[] => [
         // 미작성 목록을 보고 있을 때도 같이 활성으로 칠해졌다 — 그래서 두 개가 동시에 켜져 보였다.
         // 이 항목은 "필터 없는 전체 목록"이므로 그 쿼리가 없을 때만 활성으로 본다.
         isActive: (router, link) =>
-          router.pathname === link?.path && !router.query.contractWriterMissing,
+          router.pathname === link?.path && !router.query.contractWriterMissing && !router.query.registrationPending,
       },
       {
         id: "companyContractWriterMissing",
         name: "계약서 미작성 목록",
         link: { path: bookingPath ?? `/diagnosis/${company}`, query: { contractWriterMissing: "true" } },
       },
+      // 등록증 사진은 저장했는데 아직 딜러·고객 누구에게도 안 보낸 건만 모아 보는 목록.
+      // 옆 숫자(badge)는 MainMenu가 채운다 — 사진을 저장하면 늘고 보내면 줄어든다.
+      ...(options?.registration ? [{
+        id: "companyRegistrationPending",
+        name: "등록증 전송 대기",
+        link: { path: bookingPath ?? `/diagnosis/${company}`, query: { registrationPending: "true" } },
+      }] : []),
       {
         id: "companySelfDiagnosisList",
         name: "자체 진단 목록",
@@ -224,7 +233,7 @@ const buildCompanyMenu = (company: string, bookingPath?: string): IMenu[] => [
  * 없으면 아래 MainMenu에서 buildCompanyMenu(company)로 동적 라우트에 자동 연결됨.
  */
 const COMPANY_MENUS: Record<string, IMenu[]> = {
-  "anyone-motors": buildCompanyMenu("anyone-motors", "/diagnosis/anyone-motors"),
+  "anyone-motors": buildCompanyMenu("anyone-motors", "/diagnosis/anyone-motors", { registration: true }),
   "gwangmyeong-motors": buildCompanyMenu("gwangmyeong-motors", "/diagnosis/gwangmyeong-motors"),
 };
 
@@ -244,6 +253,31 @@ const MainMenu = () => {
   const role = session?.user?.role;
   const company = session?.user?.company;
   const [companyLinks, setCompanyLinks] = useState<IMenu[]>([]);
+  const router = useRouter();
+  const [registrationPendingCount, setRegistrationPendingCount] = useState(0);
+
+  // "등록증 전송 대기" 옆 숫자. 화면을 옮길 때마다 다시 세고, 예약목록에서 사진을 저장하거나
+  // 등록증을 보내면 cavior:registration-changed 신호를 받아 바로 다시 센다 — 그래야 보내는 순간
+  // 숫자가 줄어든다. 등록증 보내기를 쓰는 발주사(애니원모터스) 계정에서만 부른다.
+  useEffect(() => {
+    if (role !== "COMPANY_ADMIN" || company !== "anyone-motors") return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch(`${API}/external/request/registration-pending-count?source=${encodeURIComponent(company)}`);
+        const data = await res.json();
+        if (!cancelled) setRegistrationPendingCount(Number(data?.count) || 0);
+      } catch {
+        // 숫자는 참고용이라 실패해도 메뉴는 그대로 둔다
+      }
+    };
+    load();
+    window.addEventListener("cavior:registration-changed", load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("cavior:registration-changed", load);
+    };
+  }, [role, company, router.asPath]);
 
   // 슈퍼 관리자 세션에서만 필요 — 등록된 발주사 관리자 계정 목록을 조회해서
   // "발주사 관리" 서브메뉴를 채운다. "발주사 승인 관리"에서 새 계정을 승인하면
@@ -284,6 +318,17 @@ const MainMenu = () => {
     // 전용 페이지가 있는 발주사는 COMPANY_MENUS 매핑을, 없으면(관리자 계정 관리에서
     // 새로 등록한 발주사) 동적 라우트로 자동 연결되는 메뉴를 생성한다.
     menuData = COMPANY_MENUS[company] ?? buildCompanyMenu(company);
+    // 메뉴 틀은 모듈 상수라 직접 고치지 않고 복사본에 숫자만 얹는다
+    menuData = menuData.map((item) =>
+      item.submenu
+        ? {
+            ...item,
+            submenu: item.submenu.map((sub) =>
+              sub.id === "companyRegistrationPending" ? { ...sub, badge: registrationPendingCount } : sub,
+            ),
+          }
+        : item,
+    );
   } else {
     menuData = superAdminMenuData.map((item) =>
       item.id === "companyList" ? { ...item, submenu: [CARVIOR_DIRECT_LINK, ...companyLinks] } : item

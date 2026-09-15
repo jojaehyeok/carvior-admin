@@ -22,6 +22,11 @@ const NavItem = ({ item }: INavItemProps) => {
       >
         {item.icon}
         <span className="cursor-pointer grow">{item.name}</span>
+        {!!item.badge && item.badge > 0 && (
+          <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-xs font-bold leading-5 text-center">
+            {item.badge > 99 ? "99+" : item.badge}
+          </span>
+        )}
         <ChevronRight className="w-6 h-6 text-white active-check" />
       </Link>
     </li>

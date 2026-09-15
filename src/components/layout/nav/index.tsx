@@ -17,6 +17,8 @@ export interface IMenu {
   };
   icon?: React.ReactNode;
   isActive?: (router: NextRouter, link: IMenu["link"]) => boolean;
+  /** 메뉴 이름 옆에 띄울 숫자(처리 대기 건수 등). 0이거나 없으면 표시하지 않는다. */
+  badge?: number;
   submenu?: IMenu[];
 }
 
