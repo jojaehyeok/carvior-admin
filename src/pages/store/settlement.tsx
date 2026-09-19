@@ -85,8 +85,19 @@ interface IBooking {
   bundleSize?: number;
   contractWriter?: string;
   source?: string;
+  // 상품구분 — 구매동행/비대면검차. 둘 다 현장 직접지급 건이라 진단사 월지급액에서 제외된다.
+  requestType?: 'PURCHASE_ESCORT' | 'REMOTE_INSPECTION' | null;
   createdAt: ISO8601DateTime;
 }
+
+// 수출건/구매동행/비대면검차는 비용을 받는 즉시 진단사에게 직접 지급하고 있어서, 월정산
+// 지급액에 다시 넣으면 이중지급이 된다. 진단사 앱 settlement-history.tsx의 isDirectPaidBooking과
+// 반드시 같은 기준이어야 한다 — 다르면 진단사에게 보이는 금액과 실지급액이 어긋난다.
+const isDirectPaidBooking = (b: IBooking) =>
+  !!b.isExportBooking ||
+  b.source === 'CARVIOR_INSPECTION' ||
+  b.requestType === 'PURCHASE_ESCORT' ||
+  b.requestType === 'REMOTE_INSPECTION';
 
 interface IDriver {
   id: number;
@@ -98,7 +109,8 @@ interface IPayrollRow {
   driverId: string;
   driverName: string;
   tier: string;
-  count: number;
+  count: number; // 월정산으로 지급할 건수(직접지급 건은 빠져 있음)
+  directPaidCount: number; // 수출/구매동행/비대면검차 — 이미 직접 지급해서 이 정산에서 뺀 건수
   claimTotal: number; // 이번 달 이 진단사한테 걸린 클레임 차감 합계(원) — 얼마나 깎였는지 바로 보이게
   freeCount: number; // 이 진단사 담당 건 중 클레임 보상으로 발주사에 무료처리된 건수
   bonusTotal: number; // 오지·준오지·긴급 추가금 합계 — 지급기준액이 어떻게 나온 건지 보이게
@@ -334,25 +346,32 @@ const SettlementPage: IDefaultLayoutPage = () => {
 
       // 진단사 지급금액 — 같은 발주사 필터(selectedSource) 범위 안에서 진단사별로 합산.
       // "전체" 조회면 자연히 전체 발주사 기준 지급액이 된다.
-      const byDriver = new Map<string, { count: number; grossTotal: number; claimTotal: number; freeCount: number; bonusTotal: number }>();
+      const byDriver = new Map<string, { count: number; grossTotal: number; claimTotal: number; freeCount: number; bonusTotal: number; directPaidCount: number }>();
       for (const b of filtered) {
         if (!b.assignedDriverId) continue;
         const driverId = String(b.assignedDriverId);
+        const prev = byDriver.get(driverId) || { count: 0, grossTotal: 0, claimTotal: 0, freeCount: 0, bonusTotal: 0, directPaidCount: 0 };
+        // 직접지급 건은 금액·건수 모두 지급액 집계에서 빼되, 몇 건이었는지는 따로 세서
+        // 화면에 보여준다(진단은 했는데 지급액에 안 잡히는 이유를 알 수 있어야 함).
+        if (isDirectPaidBooking(b)) {
+          byDriver.set(driverId, { ...prev, directPaidCount: prev.directPaidCount + 1 });
+          continue;
+        }
         const tier = tierById.get(driverId) || 'general';
         const baseFee = BASE_FEE_BY_TIER[tier] ?? BASE_FEE_BY_TIER.general;
         const claim = b.claimDeduction || 0;
         const bonus = effectiveRemoteBonus(b, tier);
         const gross = baseFee + bonus + (b.extraFee || 0) - claim;
-        const prev = byDriver.get(driverId) || { count: 0, grossTotal: 0, claimTotal: 0, freeCount: 0, bonusTotal: 0 };
         byDriver.set(driverId, {
           count: prev.count + 1,
           grossTotal: prev.grossTotal + gross,
           claimTotal: prev.claimTotal + claim,
           freeCount: prev.freeCount + (b.companyBillingAmount === 0 ? 1 : 0),
           bonusTotal: prev.bonusTotal + bonus,
+          directPaidCount: prev.directPaidCount,
         });
       }
-      const payroll: IPayrollRow[] = Array.from(byDriver.entries()).map(([driverId, { count, grossTotal, claimTotal, freeCount, bonusTotal }]) => {
+      const payroll: IPayrollRow[] = Array.from(byDriver.entries()).map(([driverId, { count, grossTotal, claimTotal, freeCount, bonusTotal, directPaidCount }]) => {
         const withholding = Math.round(grossTotal * WITHHOLDING_RATE);
         return {
           driverId,
@@ -364,6 +383,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
           claimTotal,
           grossTotal,
           withholding,
+          directPaidCount,
           netTotal: grossTotal - withholding,
         };
       });
@@ -480,6 +500,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
       '진단사명': r.driverName,
       '등급': TIER_LABEL[r.tier] || r.tier,
       '완료건수': r.count,
+      '직접지급건수': r.directPaidCount || '',
       '오지긴급추가금': r.bonusTotal || '',
       '무료처리건수': r.freeCount || '',
       '클레임차감': r.claimTotal || '',
@@ -488,7 +509,7 @@ const SettlementPage: IDefaultLayoutPage = () => {
       '실지급액': r.netTotal,
     }));
     const ws = XLSX.utils.json_to_sheet(dataRows);
-    ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+    ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `${monthLabel} 진단사 지급`);
     XLSX.writeFile(wb, `카비어_진단사지급_${selectedMonth?.format('YYYYMM')}.xlsx`);
@@ -500,6 +521,15 @@ const SettlementPage: IDefaultLayoutPage = () => {
     { title: '진단사명', dataIndex: 'driverName', width: 120 },
     { title: '등급', dataIndex: 'tier', width: 90, render: (v: string) => TIER_LABEL[v] || v },
     { title: '완료건수', dataIndex: 'count', width: 90, align: 'right' },
+    {
+      title: '직접지급',
+      dataIndex: 'directPaidCount',
+      width: 100,
+      align: 'right',
+      // 수출/구매동행/비대면검차 — 비용 받는 즉시 이미 지급한 건이라 완료건수·지급액에서 빠져 있다.
+      // 진단은 했는데 왜 지급액에 안 잡히는지 여기서 확인할 수 있어야 해서 별도 열로 둔다.
+      render: (v: number) => v > 0 ? <span className="text-teal-600">{v}건</span> : <span className="text-gray-300">-</span>,
+    },
     {
       title: '오지·긴급 추가금',
       dataIndex: 'bonusTotal',
