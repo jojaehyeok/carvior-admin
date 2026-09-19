@@ -34,3 +34,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# env (실제 값은 저장소에 올리지 않는다 — .env.example 참고)
+.env
