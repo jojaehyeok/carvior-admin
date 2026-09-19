@@ -1046,6 +1046,13 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       align: "center" as const,
       render: (_: unknown, record: IBooking) => {
         const tags: React.ReactNode[] = [];
+        // 상품구분을 맨 앞에 — 비대면검차는 리포트가 딜러에게만 가고 정산도 직접지급이라
+        // 목록에서 바로 구분돼야 한다(예전엔 맨 뒤 컬럼이라 스크롤해야 보였음).
+        if (record.requestType === 'REMOTE_INSPECTION') {
+          tags.push(<Tag key="remote-inspection" color="purple">💻비대면검차</Tag>);
+        } else if (record.requestType === 'PURCHASE_ESCORT') {
+          tags.push(<Tag key="purchase-escort" color="blue">🧑구매동행</Tag>);
+        }
         if (record.paymentMethod === 'BANK_TRANSFER' && !record.depositConfirmed) {
           tags.push(
             <Tag key="pending-deposit" color="volcano">
@@ -1550,16 +1557,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       dataIndex: "source",
       align: "center",
       render: (value: string) => value ? <Tag>{value}</Tag> : <span className="text-gray-300">-</span>,
-    },
-    {
-      // 비대면검차 건은 완료 리포트가 고객이 아니라 딜러에게 나가므로 목록에서 바로 구분되게 한다.
-      title: "상품구분",
-      dataIndex: "requestType",
-      align: "center",
-      render: (value?: string | null) =>
-        value === 'REMOTE_INSPECTION' ? <Tag color="purple">비대면검차</Tag>
-          : value === 'PURCHASE_ESCORT' ? <Tag color="blue">구매동행</Tag>
-            : <span className="text-gray-300">-</span>,
     },
   ];
 
