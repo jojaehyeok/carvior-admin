@@ -84,6 +84,8 @@ interface IBooking {
   address: string;
   preferredDateTime: string;
   source?: string;
+  // 상품 구분 — 비대면검차면 완료 리포트 알림톡이 고객이 아니라 딜러에게만 나간다.
+  requestType?: 'PURCHASE_ESCORT' | 'REMOTE_INSPECTION' | null;
   status: 'PENDING' | 'ASSIGNED' | 'COMPLETED' | 'CANCELLED';
   carHash?: string | null;
   firstCompletedAt?: string | null;
@@ -171,6 +173,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [tempCarOwner, setTempCarOwner] = useState("");
   const [tempCarModel, setTempCarModel] = useState("");
   // 배정 전에 접수 정보(딜러이름/딜러번호/주소)가 잘못 들어온 경우 바로잡기 위한 용도
+  const [tempRequestType, setTempRequestType] = useState<'PURCHASE_ESCORT' | 'REMOTE_INSPECTION' | null>(null);
   const [tempDealerName, setTempDealerName] = useState("");
   const [tempContact, setTempContact] = useState("");
   const [tempAddress, setTempAddress] = useState("");
@@ -570,6 +573,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setTempCarNumber(record.carNumber || "");
     setTempCarOwner(record.carOwner || "");
     setTempCarModel(record.carModel || "");
+    setTempRequestType(record.requestType ?? null);
     setTempDealerName(record.dealerName || "");
     setTempContact(record.contact || "");
     setTempAddress(record.address || "");
@@ -674,6 +678,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           carNumber: tempCarNumber.trim() || '미정',
           carModel: tempCarModel.trim() || null,
           carOwner: tempCarOwner.trim() || '미정',
+          requestType: tempRequestType,
           dealerName: tempDealerName.trim(),
           contact: tempContact.trim(),
           address: tempAddress.trim(),
@@ -1546,6 +1551,16 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       align: "center",
       render: (value: string) => value ? <Tag>{value}</Tag> : <span className="text-gray-300">-</span>,
     },
+    {
+      // 비대면검차 건은 완료 리포트가 고객이 아니라 딜러에게 나가므로 목록에서 바로 구분되게 한다.
+      title: "상품구분",
+      dataIndex: "requestType",
+      align: "center",
+      render: (value?: string | null) =>
+        value === 'REMOTE_INSPECTION' ? <Tag color="purple">비대면검차</Tag>
+          : value === 'PURCHASE_ESCORT' ? <Tag color="blue">구매동행</Tag>
+            : <span className="text-gray-300">-</span>,
+    },
   ];
 
   // 매입팀 계정(isPurchaseTeam)은 매입가 판단만 하므로 그 업무에 필요한 컬럼만 남긴다 —
@@ -1932,6 +1947,42 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           {/* 오더 기록 구분선 */}
           <div className="border-t pt-4">
             <p className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">오더 기록</p>
+
+            {/* 상품구분 — 비대면검차로 두면 완료 리포트가 고객이 아니라 딜러에게만 발송된다.
+                발송 번호를 저장 전에 눈으로 확인할 수 있게 바로 아래에 띄워준다(딜러번호 칸은
+                실제로는 "신청자 번호"라, 고객 직접신청 건이면 고객 번호가 들어있을 수 있음) */}
+            <div className="mb-3">
+              <label className="block text-xs font-bold text-gray-400 mb-1">상품구분</label>
+              <Select
+                className="w-full"
+                value={tempRequestType}
+                onChange={value => setTempRequestType(value)}
+                placeholder="미지정 (기존 방식대로 발송)"
+                allowClear
+                options={[
+                  { value: 'PURCHASE_ESCORT', label: '구매동행 — 리포트 고객 발송' },
+                  { value: 'REMOTE_INSPECTION', label: '비대면검차 — 리포트 딜러 발송' },
+                ]}
+              />
+              {tempRequestType === 'REMOTE_INSPECTION' && (() => {
+                // 백엔드와 동일한 우선순위: dealerContact(접수 시 받은 딜러 번호) → contact(신청자 번호)
+                const bookingDealerContact = (editingBooking?.dealerContact || "").trim();
+                const reportPhone = bookingDealerContact || tempContact.trim();
+                return (
+                  <p className="text-xs mt-1">
+                    {reportPhone ? (
+                      <span className="text-blue-600">
+                        완료 시 리포트 발송 → <b>{formatPhone(reportPhone)}</b>
+                        {!bookingDealerContact && <span className="text-gray-400"> (딜러번호 칸 값)</span>}
+                        {' '}· 고객에게는 발송되지 않습니다
+                      </span>
+                    ) : (
+                      <span className="text-red-500">딜러 연락처가 없어 리포트가 발송되지 않습니다</span>
+                    )}
+                  </p>
+                );
+              })()}
+            </div>
 
             {/* 딜러이름 / 딜러번호 */}
             <div className="grid grid-cols-2 gap-3 mb-3">
