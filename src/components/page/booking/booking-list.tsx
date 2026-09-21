@@ -1228,19 +1228,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       ),
     },
     {
-      // 탁송 배차용 — 평가사가 앱에서 표시한 값이라 읽기 전용이다.
-      title: "탁송",
-      key: "transport",
-      align: "center" as const,
-      render: (_: unknown, record: IBooking) => {
-        const tag = record.transportStatus ? TRANSPORT_TAG[record.transportStatus] : null;
-        if (!tag) return <span className="text-gray-300">-</span>;
-        const reasons = transportReasonText(record);
-        const badge = <Tag color={tag.color}>{tag.label}</Tag>;
-        return reasons ? <Tooltip title={reasons}>{badge}</Tooltip> : badge;
-      },
-    },
-    {
       title: "배정 진단사",
       dataIndex: "assignedDriverName",
       align: "center",
@@ -1590,6 +1577,19 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       dataIndex: "source",
       align: "center",
       render: (value: string) => value ? <Tag>{value}</Tag> : <span className="text-gray-300">-</span>,
+    },
+    {
+      // 탁송 배차용 — 평가사가 앱에서 표시한 값이라 읽기 전용이다. 맨 끝 컬럼.
+      title: "탁송",
+      key: "transport",
+      align: "center" as const,
+      render: (_: unknown, record: IBooking) => {
+        const tag = record.transportStatus ? TRANSPORT_TAG[record.transportStatus] : null;
+        if (!tag) return <span className="text-gray-300">-</span>;
+        const reasons = transportReasonText(record);
+        const badge = <Tag color={tag.color}>{tag.label}</Tag>;
+        return reasons ? <Tooltip title={reasons}>{badge}</Tooltip> : badge;
+      },
     },
   ];
 
