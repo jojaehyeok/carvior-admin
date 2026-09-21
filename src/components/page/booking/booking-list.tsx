@@ -3,7 +3,7 @@
 import DefaultTable from "@/components/shared/ui/default-table";
 import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
 import { ISO8601DateTime } from "@/types/common";
-import { Alert, Button, Checkbox, Image, Input, InputNumber, Modal, Popconfirm, Popover, Select, Spin, Switch, Tag, message } from "antd";
+import { Alert, Button, Checkbox, Image, Input, InputNumber, Modal, Popconfirm, Popover, Select, Spin, Switch, Tag, Tooltip, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { Copy, Eye, FileText, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
@@ -36,6 +36,20 @@ const isReportEditExpired = (record: { firstCompletedAt?: string | null }) => {
   if (!record.firstCompletedAt) return false; // completedAt 정보가 없는 구버전 데이터는 막지 않음
   return Date.now() - new Date(record.firstCompletedAt).getTime() > REPORT_EDIT_WINDOW_MS;
 };
+
+// 탁송 가능 여부 — 평가사가 진단 현장에서 앱으로 표시한 값. 배차 담당자가 목록만 보고
+// 로드(탁송) 차량을 보낼 수 있는 건인지 바로 판단하라고 뱃지로 띄운다.
+const TRANSPORT_TAG: Record<string, { color: string; label: string }> = {
+  AVAILABLE: { color: "green", label: "🟢탁송 가능" },
+  CONDITIONAL: { color: "gold", label: "🟡조건부" },
+  UNAVAILABLE: { color: "red", label: "🔴탁송 불가" },
+};
+
+// 조건부 사유 + 기타메모를 한 줄로 — 목록 툴팁과 상세 모달에서 같이 쓴다
+const transportReasonText = (record: {
+  transportReasons?: string[] | null;
+  transportNote?: string | null;
+}) => [...(record.transportReasons ?? []), record.transportNote].filter(Boolean).join(" · ");
 
 // 진단일시(방문예정, "YYYY-MM-DD HH:mm")부터 진단완료일시까지 실제로 몇 시간 걸렸는지 계산
 function formatDuration(preferredDateTime?: string | null, completedAt?: string | null): string | null {
@@ -89,6 +103,12 @@ interface IBooking {
   status: 'PENDING' | 'ASSIGNED' | 'COMPLETED' | 'CANCELLED';
   carHash?: string | null;
   firstCompletedAt?: string | null;
+  // 탁송 가능 여부 — 진단 현장에서 평가사가 앱으로 표시한다.
+  // null은 "아직 확인 안 됨"이지 "탁송 가능"이 아니다.
+  transportStatus?: 'AVAILABLE' | 'CONDITIONAL' | 'UNAVAILABLE' | null;
+  transportReasons?: string[] | null;
+  transportNote?: string | null;
+  transportCheckedAt?: string | null;
   adminMemo?: string;
   additionalMemo?: string | null; // 접수폼(간편신청/당근 등)에서 딜러가 직접 입력한 요청사항 원본
   assignedDriverId?: string | null;
@@ -1208,6 +1228,19 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       ),
     },
     {
+      // 탁송 배차용 — 평가사가 앱에서 표시한 값이라 읽기 전용이다.
+      title: "탁송",
+      key: "transport",
+      align: "center" as const,
+      render: (_: unknown, record: IBooking) => {
+        const tag = record.transportStatus ? TRANSPORT_TAG[record.transportStatus] : null;
+        if (!tag) return <span className="text-gray-300">-</span>;
+        const reasons = transportReasonText(record);
+        const badge = <Tag color={tag.color}>{tag.label}</Tag>;
+        return reasons ? <Tooltip title={reasons}>{badge}</Tooltip> : badge;
+      },
+    },
+    {
       title: "배정 진단사",
       dataIndex: "assignedDriverName",
       align: "center",
@@ -1807,6 +1840,24 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 return duration ? <span className="text-gray-400"> (소요시간: {duration})</span> : null;
               })()}
             </p>
+            {editingBooking?.transportStatus && (
+              <p className="text-gray-500 flex items-start gap-2">
+                탁송 가능 여부:
+                <span>
+                  <Tag color={TRANSPORT_TAG[editingBooking.transportStatus]?.color}>
+                    {TRANSPORT_TAG[editingBooking.transportStatus]?.label}
+                  </Tag>
+                  {transportReasonText(editingBooking) && (
+                    <span className="text-gray-500">{transportReasonText(editingBooking)}</span>
+                  )}
+                  {editingBooking.transportCheckedAt && (
+                    <span className="text-gray-400 text-[11px] block mt-0.5">
+                      평가사 표시: {dayjs(editingBooking.transportCheckedAt).format("YYYY-MM-DD HH:mm")}
+                    </span>
+                  )}
+                </span>
+              </p>
+            )}
             {editingBooking?.source && (
               <p className="text-gray-400 flex items-center gap-2">
                 출처: <Tag>{editingBooking.source}</Tag>
