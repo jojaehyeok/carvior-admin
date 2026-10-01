@@ -3,7 +3,7 @@
 import DefaultTable from "@/components/shared/ui/default-table";
 import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
 import { ISO8601DateTime } from "@/types/common";
-import { Alert, Button, Checkbox, Image, Input, InputNumber, Modal, Popconfirm, Popover, Select, Spin, Switch, Tag, Tooltip, message } from "antd";
+import { Alert, Button, Calendar, Checkbox, DatePicker, Image, Input, InputNumber, Modal, Popconfirm, Popover, Segmented, Select, Spin, Switch, Tag, Tooltip, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { Copy, Eye, FileText, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
@@ -176,8 +176,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [reportOnly, setReportOnly] = useState(false);
   const [purchasePriceOnly, setPurchasePriceOnly] = useState(false);
-  // 월 칩 — 'all'이 기본(전체 기간). 특정 달을 고르면 그 달 건만 보여준다.
-  const [monthFilter, setMonthFilter] = useState<string>('all');
+  // 월 단위로 끊어 본다 — 달을 고르거나(기본: 이번 달) "전체 기간"을 켜서 다 본다.
+  // 캘린더는 달력 한 장이 곧 한 달이라 전체 기간 개념이 없다(그땐 체크박스를 잠근다).
+  const [selectedMonth, setSelectedMonth] = useState<dayjs.Dayjs>(dayjs());
+  const [allPeriod, setAllPeriod] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const monthFilter = allPeriod && viewMode === 'list' ? 'all' : selectedMonth.format('YYYY-MM');
   // bookingId → storeItemId (스마트옥션 매물로 이미 등록됐는지 확인용)
   const [storeItemMap, setStoreItemMap] = useState<Record<number, string>>({});
 
@@ -1025,22 +1029,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     return String(raw).replace('T', ' ').slice(0, 7); // YYYY-MM
   }, []);
 
-  // 월 칩 목록 — 최근 달이 앞에 오고, 각 달의 건수를 같이 보여준다.
-  const monthOptions = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const item of filteredData) {
-      const key = monthKeyOf(item);
-      if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    return Array.from(counts.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [filteredData, monthKeyOf]);
-
-  // 고른 달이 조건이 바뀌어 사라졌으면(예: 상태 필터 변경) 전체로 되돌린다 — 빈 화면 방지
-  useEffect(() => {
-    if (monthFilter !== 'all' && !monthOptions.some(([m]) => m === monthFilter)) {
-      setMonthFilter('all');
-    }
-  }, [monthOptions, monthFilter]);
 
   // 정렬: 배정 안 된 건을 맨 위로 모으고(접수됐는데 아직 담당자가 없는 건이 제일 급하다),
   // 그 아래는 방문할 날짜가 가까운 순. 일정이 아직 없는 건은 맨 뒤로 보낸다.
@@ -1828,29 +1816,90 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         <Button type="primary" icon={<RefreshCw size={14} />} onClick={() => fetchBookings()} loading={isLoading}>새로고침</Button>
       </DefaultTableBtn>
 
-      {/* 월 칩 — 기본은 전체 기간이고, 한 달만 보고 싶을 때 눌러서 좁힌다.
-          기준 날짜는 진단일시(없으면 접수일)라 "언제 가는 건인지"로 묶인다. */}
-      {monthOptions.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 mb-3">
-          <Tag.CheckableTag
-            checked={monthFilter === 'all'}
-            onChange={() => setMonthFilter('all')}
+      {/* 월 선택 / 전체 기간 / 리스트·캘린더 전환 — 기준 날짜는 진단일시(없으면 접수일)라
+          "언제 가는 건인지"로 묶인다. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <DatePicker
+            picker="month"
+            value={selectedMonth}
+            onChange={(v) => v && setSelectedMonth(v)}
+            allowClear={false}
+            format="YYYY년 M월"
+            disabled={allPeriod && viewMode === 'list'}
+          />
+          <Checkbox
+            checked={allPeriod}
+            disabled={viewMode === 'calendar'}
+            onChange={(e) => setAllPeriod(e.target.checked)}
           >
-            전체 {filteredData.length}건
-          </Tag.CheckableTag>
-          {monthOptions.map(([month, count]) => (
-            <Tag.CheckableTag
-              key={month}
-              checked={monthFilter === month}
-              onChange={() => setMonthFilter(month)}
-            >
-              {month} ({count})
-            </Tag.CheckableTag>
-          ))}
+            전체 기간
+          </Checkbox>
+          <Button size="small" onClick={() => { setSelectedMonth(dayjs()); setAllPeriod(false); }}>
+            이번 달
+          </Button>
+          <span className="text-sm text-gray-500">
+            {monthFilter === 'all' ? '전체' : selectedMonth.format('YYYY년 M월')} <b>{sortedData.length}</b>건
+            <span className="ml-2 text-xs text-red-500">● 미배정</span>
+            <span className="ml-1 text-xs text-blue-500">● 배정</span>
+            <span className="ml-1 text-xs text-green-600">● 완료</span>
+          </span>
+        </div>
+        <Segmented
+          value={viewMode}
+          onChange={(v) => setViewMode(v as 'list' | 'calendar')}
+          options={[
+            { label: '리스트', value: 'list' },
+            { label: '캘린더', value: 'calendar' },
+          ]}
+        />
+      </div>
+
+      {/* 캘린더 — 진단일시 기준으로 그 날 방문할 건을 올려둔다. 건을 누르면 리스트에서
+          누른 것과 같은 상세 창이 열린다. */}
+      {viewMode === 'calendar' && (
+        <div className="border border-gray-100 rounded-lg p-2 mb-4">
+          <Calendar
+            value={selectedMonth}
+            onPanelChange={(v) => setSelectedMonth(v)}
+            onSelect={(v) => setSelectedMonth(v)}
+            cellRender={(current, info) => {
+              if (info.type !== 'date') return info.originNode;
+              const day = current.format('YYYY-MM-DD');
+              const items = sortedData.filter(
+                (b) => (b.preferredDateTime || b.createdAt || '').replace('T', ' ').slice(0, 10) === day,
+              );
+              if (items.length === 0) return null;
+              return (
+                <ul className="m-0 p-0 list-none">
+                  {items.slice(0, 3).map((b) => {
+                    const color =
+                      b.status === 'CANCELLED' ? 'text-gray-400'
+                        : b.status === 'COMPLETED' ? 'text-green-600'
+                          : b.status === 'PENDING' && !b.assignedDriverId ? 'text-red-500'
+                            : 'text-blue-500';
+                    return (
+                      <li
+                        key={b.id}
+                        className={`truncate text-xs cursor-pointer hover:underline ${color}`}
+                        title={`${b.carModel || '차량 정보 없음'} · ${b.carNumber || ''} · ${b.assignedDriverName || '미배정'}`}
+                        onClick={(e) => { e.stopPropagation(); openModal(b); }}
+                      >
+                        ● {b.carModel || b.carNumber || '차량 정보 없음'}
+                      </li>
+                    );
+                  })}
+                  {items.length > 3 && (
+                    <li className="text-[11px] text-gray-400">+{items.length - 3} more</li>
+                  )}
+                </ul>
+              );
+            }}
+          />
         </div>
       )}
 
-      <div className="overflow-x-auto">
+      <div className={viewMode === 'calendar' ? 'hidden' : 'overflow-x-auto'}>
         <DefaultTable<IBooking>
           columns={groupedColumns}
           dataSource={tableData}
