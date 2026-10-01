@@ -109,6 +109,9 @@ interface IBooking {
   transportReasons?: string[] | null;
   transportNote?: string | null;
   transportCheckedAt?: string | null;
+  // 표에 끼워 넣는 월 구분줄 전용(실제 예약이 아님) — 이 값이 있으면 구분줄로 그린다.
+  __monthLabel?: string;
+  __monthCount?: number;
   adminMemo?: string;
   additionalMemo?: string | null; // 접수폼(간편신청/당근 등)에서 딜러가 직접 입력한 요청사항 원본
   assignedDriverId?: string | null;
@@ -173,6 +176,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [reportOnly, setReportOnly] = useState(false);
   const [purchasePriceOnly, setPurchasePriceOnly] = useState(false);
+  // 월 칩 — 'all'이 기본(전체 기간). 특정 달을 고르면 그 달 건만 보여준다.
+  const [monthFilter, setMonthFilter] = useState<string>('all');
   // bookingId → storeItemId (스마트옥션 매물로 이미 등록됐는지 확인용)
   const [storeItemMap, setStoreItemMap] = useState<Record<number, string>>({});
 
@@ -274,8 +279,10 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const effectiveCompany = companyFilter !== undefined ? companyFilter : (session?.user?.company ?? null);
 
   // 1. 신청 목록 가져오기 (발주사 필터 적용)
-  const fetchBookings = useCallback(async () => {
-    setIsLoading(true);
+  // silent=true면 로딩 스피너도, 실패 토스트도 안 띄운다 — 15초마다 도는 자동 갱신용.
+  // (자동 갱신 때마다 표가 깜빡이거나 네트워크가 잠깐 끊겼다고 에러창이 뜨면 업무에 방해됨)
+  const fetchBookings = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const url = new URL(`${API_BASE}/external/request/list`);
       if (effectiveCompany) {
@@ -290,9 +297,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       const result = await response.json();
       setData(result);
     } catch (err) {
-      message.error("신청 목록 로드 실패");
+      if (!silent) message.error("신청 목록 로드 실패");
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, [API_BASE, effectiveCompany]);
 
@@ -329,6 +336,25 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     // 매물 조회 자체를 스킵 — 불필요한 API 호출과 store-items 데이터 노출을 줄임
     if (!effectiveCompany) fetchStoreItemMap();
   }, [fetchBookings, fetchDrivers, fetchStoreItemMap, effectiveCompany]);
+
+  // 진단사 배정·진단일시 변경은 앱이나 다른 관리자 화면에서도 일어나는데, 지금까지는
+  // 새로고침을 눌러야만 보였다 — 15초마다 조용히 다시 불러온다.
+  // 상세 모달이나 셀 안에서 수정 중일 때는 건너뛴다(입력하던 값이 덮여 사라지지 않게).
+  // 다른 탭을 보고 있을 때도 건너뛰고, 탭으로 돌아오면 바로 한 번 당겨온다.
+  useEffect(() => {
+    const canRefresh = () => !document.hidden && !isModalOpen && inlineEditingId === null;
+    const timer = setInterval(() => {
+      if (canRefresh()) fetchBookings(true);
+    }, 15000);
+    const onFocus = () => {
+      if (canRefresh()) fetchBookings(true);
+    };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [fetchBookings, isModalOpen, inlineEditingId]);
 
   // --- 자동차등록증 원본 확인 (대시보드 로그인 계정만 — 공개 리포트 페이지엔 개인정보 보호를 위해 안 올림) ---
   const [loadingRegId, setLoadingRegId] = useState<number | null>(null);
@@ -992,6 +1018,73 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     });
   }, [data, router.query, reportOnly, purchasePriceOnly]);
 
+  // 월 구분은 "언제 가는 건인지"가 기준이라 진단일시를 쓰고, 아직 일정이 없으면 접수일로 대신한다.
+  const monthKeyOf = useCallback((item: IBooking) => {
+    const raw = item.preferredDateTime || item.createdAt;
+    if (!raw) return '';
+    return String(raw).replace('T', ' ').slice(0, 7); // YYYY-MM
+  }, []);
+
+  // 월 칩 목록 — 최근 달이 앞에 오고, 각 달의 건수를 같이 보여준다.
+  const monthOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of filteredData) {
+      const key = monthKeyOf(item);
+      if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return Array.from(counts.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [filteredData, monthKeyOf]);
+
+  // 고른 달이 조건이 바뀌어 사라졌으면(예: 상태 필터 변경) 전체로 되돌린다 — 빈 화면 방지
+  useEffect(() => {
+    if (monthFilter !== 'all' && !monthOptions.some(([m]) => m === monthFilter)) {
+      setMonthFilter('all');
+    }
+  }, [monthOptions, monthFilter]);
+
+  // 정렬: 배정 안 된 건을 맨 위로 모으고(접수됐는데 아직 담당자가 없는 건이 제일 급하다),
+  // 그 아래는 방문할 날짜가 가까운 순. 일정이 아직 없는 건은 맨 뒤로 보낸다.
+  const sortedData = useMemo(() => {
+    const byMonth = monthFilter === 'all'
+      ? filteredData
+      : filteredData.filter((item) => monthKeyOf(item) === monthFilter);
+
+    const visitKey = (item: IBooking) => (item.preferredDateTime || '').replace('T', ' ');
+    const unassigned = (item: IBooking) => item.status === 'PENDING' && !item.assignedDriverId;
+
+    return [...byMonth].sort((a, b) => {
+      if (unassigned(a) !== unassigned(b)) return unassigned(a) ? -1 : 1;
+      const ka = visitKey(a);
+      const kb = visitKey(b);
+      if (!ka && !kb) return 0;
+      if (!ka) return 1;
+      if (!kb) return -1;
+      return ka.localeCompare(kb);
+    });
+  }, [filteredData, monthFilter, monthKeyOf]);
+
+  // 전체 기간을 볼 때만 월이 바뀌는 자리에 구분줄을 끼워 넣는다(한 달만 볼 땐 필요 없음).
+  // 표 전체 폭을 차지하는 행이라, 첫 컬럼이 colSpan으로 나머지를 덮는 antd 방식을 쓴다.
+  const tableData = useMemo(() => {
+    if (monthFilter !== 'all') return sortedData;
+    const rows: IBooking[] = [];
+    let lastMonth = '';
+    for (const item of sortedData) {
+      const key = monthKeyOf(item);
+      if (key && key !== lastMonth) {
+        lastMonth = key;
+        const [y, m] = key.split('-');
+        rows.push({
+          id: `month-${key}` as unknown as number,
+          __monthLabel: `${y}년 ${Number(m)}월`,
+          __monthCount: sortedData.filter((r) => monthKeyOf(r) === key).length,
+        } as unknown as IBooking);
+      }
+      rows.push(item);
+    }
+    return rows;
+  }, [sortedData, monthFilter, monthKeyOf]);
+
   // 스마트옥션 매물 등록/수정은 슈퍼 관리자 전용 기능 — 발주사 계정에서 보는
   // 회사 스코프 목록(companyFilter가 있는 경우)에서는 컬럼 자체를 숨긴다.
   const isSuperAdminView = !effectiveCompany;
@@ -1438,7 +1531,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "상태",
       dataIndex: "status",
       align: "center",
-      render: (status: string) => {
+      render: (status: string, record: IBooking) => {
+        // 접수는 됐는데 담당 진단사가 아직 없는 건은 "대기중" 대신 빨간 미배정으로 — 목록에서
+        // 바로 눈에 띄어야 배정을 놓치지 않는다(발주사 대표 요청).
+        if (status === 'PENDING' && !record.assignedDriverId) {
+          return <Tag color="red">🔴 미배정</Tag>;
+        }
         const config = statusConfig[status] || { color: "default", label: status };
         return <Tag color={config.color}>{config.label}</Tag>;
       },
@@ -1454,8 +1552,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       dataIndex: "preferredDateTime",
       align: "center",
       // 소스마다 구분자가 다를 수 있어("YYYY-MM-DD HH:mm" vs "YYYY-MM-DDTHH:mm") 비교 전에 통일
+      // 기본 정렬은 아래 sortedData에서 "미배정 먼저 → 진단일시 임박순"으로 한 번에 처리한다.
+      // 여기 sorter는 관리자가 컬럼을 눌러 직접 정렬을 바꾸고 싶을 때만 쓰인다.
       sorter: (a, b) => (a.preferredDateTime || '').replace('T', ' ').localeCompare((b.preferredDateTime || '').replace('T', ' ')),
-      defaultSortOrder: "ascend",
       // 더블클릭하면 모달 없이 셀 안에서 바로 입력창으로 바뀜(슈퍼관리자만) — Enter/포커스아웃 시 저장
       render: (value: string | null, record) => {
         if (inlineEditingId === record.id) {
@@ -1682,6 +1781,26 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     }
   }
 
+  // 월 구분줄은 예약이 아니라 표 안에 끼워 넣은 안내줄이라, 첫 컬럼이 나머지를 colSpan으로
+  // 덮어 한 줄 전체를 쓰게 만든다(antd에서 전체폭 행을 그리는 표준 방식).
+  const groupedColumns = columns.map((col, idx) => ({
+    ...col,
+    onCell: (record: IBooking) =>
+      record.__monthLabel
+        ? ({ colSpan: idx === 0 ? columns.length : 0 } as object)
+        : ({} as object),
+    render: (value: unknown, record: IBooking, index: number) => {
+      if (record.__monthLabel) {
+        return idx === 0
+          ? <span className="font-bold text-gray-700">{record.__monthLabel} · {record.__monthCount}건</span>
+          : null;
+      }
+      const original = (col as { render?: (v: unknown, r: IBooking, i: number) => React.ReactNode }).render;
+      if (original) return original(value, record, index);
+      return value as React.ReactNode;
+    },
+  })) as typeof columns;
+
   return (
     <div className="p-4 bg-white rounded-lg shadow-sm">
       <DefaultTableBtn className="justify-between mb-4">
@@ -1706,23 +1825,50 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             </Tag>
           )}
         </div>
-        <Button type="primary" icon={<RefreshCw size={14} />} onClick={fetchBookings} loading={isLoading}>새로고침</Button>
+        <Button type="primary" icon={<RefreshCw size={14} />} onClick={() => fetchBookings()} loading={isLoading}>새로고침</Button>
       </DefaultTableBtn>
+
+      {/* 월 칩 — 기본은 전체 기간이고, 한 달만 보고 싶을 때 눌러서 좁힌다.
+          기준 날짜는 진단일시(없으면 접수일)라 "언제 가는 건인지"로 묶인다. */}
+      {monthOptions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <Tag.CheckableTag
+            checked={monthFilter === 'all'}
+            onChange={() => setMonthFilter('all')}
+          >
+            전체 {filteredData.length}건
+          </Tag.CheckableTag>
+          {monthOptions.map(([month, count]) => (
+            <Tag.CheckableTag
+              key={month}
+              checked={monthFilter === month}
+              onChange={() => setMonthFilter(month)}
+            >
+              {month} ({count})
+            </Tag.CheckableTag>
+          ))}
+        </div>
+      )}
 
       <div className="overflow-x-auto">
         <DefaultTable<IBooking>
-          columns={columns}
-          dataSource={filteredData}
+          columns={groupedColumns}
+          dataSource={tableData}
           loading={isLoading}
           rowKey="id"
+          pagination={{ pageSize: 50, showSizeChanger: true, pageSizeOptions: [20, 50, 100, 200], showTotal: (t) => `${t}건` }}
           // antd 테이블은 배경색을 <tr>가 아니라 각 <td> 셀 단위로 칠해서, row 클래스에
           // 붙인 옅은 배경(bg-blue-50 등)이 셀 배경에 가려 안 보이는 문제가 있었음 —
           // 셀 배경까지 강제로 덮어써서 실제로 눈에 보이게 함.
           // 차량이전/계약상태 둘 중 하나만 완료면 초록, 둘 다 완료면 파랑.
           rowClassName={(record) => {
+            if (record.__monthLabel) return "[&>td]:!bg-gray-100 [&>td]:!py-1.5";
+            // 미배정은 왼쪽에 빨간 띠를 세워 목록을 훑을 때 바로 걸리게 한다.
+            const unassigned = record.status === 'PENDING' && !record.assignedDriverId;
+            const mark = unassigned ? "[&>td:first-child]:!border-l-4 [&>td:first-child]:!border-l-red-500 " : "";
             const both = record.vehicleTransferred && record.contractConfirmed;
             const either = record.vehicleTransferred || record.contractConfirmed;
-            return both ? "[&>td]:!bg-blue-50" : either ? "[&>td]:!bg-green-50" : "";
+            return mark + (both ? "[&>td]:!bg-blue-50" : either ? "[&>td]:!bg-green-50" : "");
           }}
         />
       </div>

@@ -55,7 +55,10 @@ const BookingSearch = () => {
             </Select>
           </Form.Item>
           <Form.Item name="searchDatePeriod">
-            <DateRangeField direction={searchDateType === "preferredDate" ? "future" : "past"} />
+            <DateRangeField
+              direction={searchDateType === "preferredDate" ? "future" : "past"}
+              onQuickSelect={() => form.submit()}
+            />
           </Form.Item>
         </FieldInline>
 
