@@ -14,7 +14,9 @@ const LoginPage = () => {
 
         {/* 상단 로고 */}
         <div className="absolute top-10 left-10 flex items-center gap-2">
-          <img src="/logo.png" style={{ height: '44px', width: 'auto' }} alt="chavata logo" />
+          {/* logo.png는 흰 배경이 박혀 있어 그라데이션 위에서 흰 박스로 보였다 —
+              사이드바와 같은 logo-icon.svg(배경 없는 퍼플 타일)로 통일 */}
+          <img src="/logo-icon.svg" style={{ height: '44px', width: '44px' }} alt="카비어 로고" />
           <span className="text-white text-2xl font-black tracking-tighter">차바타</span>
         </div>
 
@@ -66,7 +68,12 @@ const LoginPage = () => {
 
             {/* 로그인 헤더 — 글자로 쓴 CHAVATA 대신 실제 앱 로고를 쓴다(앱·대시보드 통일) */}
             <div className="flex flex-col items-center justify-center px-2 mt-8 sm:mt-0 mb-10">
-              <img src="/logo.png" style={{ height: '52px', width: 'auto' }} alt="카비어 차바타" />
+              <div className="flex items-center gap-2.5">
+                <img src="/logo-icon.svg" style={{ height: '44px', width: '44px' }} alt="카비어 로고" />
+                <span className="text-3xl font-black tracking-tight text-[#63489a]">
+                  CARVIOR <span className="text-slate-400">차바타</span>
+                </span>
+              </div>
               <div className="mt-3 text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                 Management System
               </div>
