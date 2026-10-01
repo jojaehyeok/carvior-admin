@@ -1665,8 +1665,10 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       align: "center",
       render: (value: string) => value ? <Tag>{value}</Tag> : <span className="text-gray-300">-</span>,
     },
-    {
-      // 탁송 배차용 — 평가사가 앱에서 표시한 값이라 읽기 전용이다. 맨 끝 컬럼.
+    // 탁송 배차용 — 평가사가 앱에서 표시한 값이라 읽기 전용이다. 맨 끝 컬럼.
+    // 아직 카비어 내부 배차용으로만 쓰는 값이라 발주사 스코프 목록에는 노출하지 않는다
+    // (오지/준오지 뱃지를 슈퍼관리자에게만 보여주는 것과 같은 기준).
+    ...(isSuperAdminView ? [{
       title: "탁송",
       key: "transport",
       align: "center" as const,
@@ -1677,7 +1679,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         const badge = <Tag color={tag.color}>{tag.label}</Tag>;
         return reasons ? <Tooltip title={reasons}>{badge}</Tooltip> : badge;
       },
-    },
+    }] : []),
   ];
 
   // 매입팀 계정(isPurchaseTeam)은 매입가 판단만 하므로 그 업무에 필요한 컬럼만 남긴다 —
@@ -2035,7 +2037,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 return duration ? <span className="text-gray-400"> (소요시간: {duration})</span> : null;
               })()}
             </p>
-            {editingBooking?.transportStatus && (
+            {isSuperAdminView && editingBooking?.transportStatus && (
               <p className="text-gray-500 flex items-start gap-2">
                 탁송 가능 여부:
                 <span>
