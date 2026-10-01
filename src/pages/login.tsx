@@ -24,14 +24,14 @@ const LoginPage = () => {
             Smart Admin<br />
             Management
           </h1>
-          <p className="text-blue-100 text-lg opacity-80">
+          <p className="text-slate-200 text-lg opacity-90">
             차바타 진단 신청 및 딜러 관리 시스템에 접속하신 것을 환영합니다.
           </p>
         </div>
 
         {/* 하단 인증 배지 */}
         <div className="absolute inline-flex items-center gap-2 px-4 py-2 font-bold text-white border-2 border-white/30 rounded-full left-10 bottom-10 backdrop-blur-sm">
-          <ShieldCheck width={20} height={20} className="text-blue-200" />
+          <ShieldCheck width={20} height={20} className="text-slate-200" />
           SECURE ADMIN ACCESS
         </div>
       </div>
@@ -64,15 +64,10 @@ const LoginPage = () => {
               />
             ) : null}
 
-            {/* 로그인 헤더 */}
+            {/* 로그인 헤더 — 글자로 쓴 CHAVATA 대신 실제 앱 로고를 쓴다(앱·대시보드 통일) */}
             <div className="flex flex-col items-center justify-center px-2 mt-8 sm:mt-0 mb-10">
-              <div className="lg:hidden mb-6">
-                <img src="/logo.png" style={{ height: '40px', width: 'auto' }} alt="logo" />
-              </div>
-              <h2 className="text-4xl font-black leading-tight inter tracking-tighter text-blue-600">
-                CHAVATA
-              </h2>
-              <div className="mt-2 text-sm font-medium text-gray-400 uppercase tracking-widest">
+              <img src="/logo.png" style={{ height: '52px', width: 'auto' }} alt="카비어 차바타" />
+              <div className="mt-3 text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                 Management System
               </div>
             </div>

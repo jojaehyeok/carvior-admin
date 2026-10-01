@@ -9,27 +9,27 @@ const GradientBg = ({ className }: IGradientBgProps) => {
     <svg xmlns="http://www.w3.org/2000/svg" className={className}>
       <defs>
         <linearGradient id="a" gradientUnits="objectBoundingBox" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="red">
+          <stop offset="0" stopColor="#63489a">
             <animate
               attributeName="stop-color"
-              values="red;purple;blue;green;yellow;orange;red;"
-              dur="20s"
+              values="#63489a;#4c3a7e;#8b7bb8;#b8bcc9;#63489a;"
+              dur="40s"
               repeatCount="indefinite"
             ></animate>
           </stop>
-          <stop offset=".5" stopColor="purple">
+          <stop offset=".5" stopColor="#8b7bb8">
             <animate
               attributeName="stop-color"
-              values="purple;blue;green;yellow;orange;red;purple;"
-              dur="20s"
+              values="#8b7bb8;#b8bcc9;#63489a;#4c3a7e;#8b7bb8;"
+              dur="40s"
               repeatCount="indefinite"
             ></animate>
           </stop>
-          <stop offset="1" stopColor="blue">
+          <stop offset="1" stopColor="#4c3a7e">
             <animate
               attributeName="stop-color"
-              values="blue;green;yellow;orange;red;purple;blue;"
-              dur="20s"
+              values="#4c3a7e;#63489a;#b8bcc9;#8b7bb8;#4c3a7e;"
+              dur="40s"
               repeatCount="indefinite"
             ></animate>
           </stop>
@@ -38,24 +38,24 @@ const GradientBg = ({ className }: IGradientBgProps) => {
             type="rotate"
             from="0 .5 .5"
             to="360 .5 .5"
-            dur="20s"
+            dur="40s"
             repeatCount="indefinite"
           />
         </linearGradient>
         <linearGradient id="b" gradientUnits="objectBoundingBox" x1="0" y1="1" x2="1" y2="1">
-          <stop offset="0" stopColor="red">
+          <stop offset="0" stopColor="#63489a">
             <animate
               attributeName="stop-color"
-              values="red;purple;blue;green;yellow;orange;red;"
-              dur="20s"
+              values="#63489a;#4c3a7e;#8b7bb8;#b8bcc9;#63489a;"
+              dur="40s"
               repeatCount="indefinite"
             ></animate>
           </stop>
-          <stop offset="1" stopColor="purple" stopOpacity="0">
+          <stop offset="1" stopColor="#8b7bb8" stopOpacity="0">
             <animate
               attributeName="stop-color"
-              values="purple;blue;green;yellow;orange;red;purple;"
-              dur="20s"
+              values="#8b7bb8;#b8bcc9;#63489a;#4c3a7e;#8b7bb8;"
+              dur="40s"
               repeatCount="indefinite"
             ></animate>
           </stop>
@@ -63,7 +63,7 @@ const GradientBg = ({ className }: IGradientBgProps) => {
             attributeName="gradientTransform"
             type="rotate"
             values="360 .5 .5;0 .5 .5"
-            dur="10s"
+            dur="30s"
             repeatCount="indefinite"
           />
         </linearGradient>
