@@ -117,6 +117,9 @@ function StatCard({
   total,
   accent,
   sub,
+  todayHref,
+  weekHref,
+  totalHref,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -125,24 +128,40 @@ function StatCard({
   total: number;
   accent: string;
   sub?: React.ReactNode;
+  // 숫자를 누르면 그 숫자에 해당하는 목록으로 바로 넘어간다(링크가 없으면 그냥 숫자로 둔다)
+  todayHref?: string;
+  weekHref?: string;
+  totalHref?: string;
 }) {
+  // 숫자를 감싸는 링크 — 누를 수 있다는 걸 밑줄로만 살짝 알린다(카드 모양은 그대로)
+  const numberLink = (href: string | undefined, node: React.ReactNode) =>
+    href ? (
+      <Link href={href} className="hover:underline underline-offset-4 decoration-2 decoration-violet-300">
+        {node}
+      </Link>
+    ) : (
+      node
+    );
+
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-col gap-3 shadow-sm">
       <div className="flex items-center justify-between">
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${accent}`}>
           {icon}
         </div>
-        <span className="text-xs text-gray-400 font-semibold">누적 {total.toLocaleString()}</span>
+        <span className="text-xs text-gray-400 font-semibold">
+          {numberLink(totalHref, <>누적 {total.toLocaleString()}</>)}
+        </span>
       </div>
       <p className="text-sm font-bold text-gray-500">{label}</p>
       <div className="flex items-end gap-3">
         <div>
           <p className="text-[10px] text-gray-400 mb-0.5">오늘</p>
-          <p className="text-2xl font-extrabold text-gray-900">{today}</p>
+          <p className="text-2xl font-extrabold text-gray-900">{numberLink(todayHref, today)}</p>
         </div>
         <div className="pb-1">
           <p className="text-[10px] text-gray-400 mb-0.5">이번 주</p>
-          <p className="text-lg font-bold text-gray-600">{week}</p>
+          <p className="text-lg font-bold text-gray-600">{numberLink(weekHref, week)}</p>
         </div>
       </div>
       {sub}
@@ -157,6 +176,24 @@ const IndexPage: IDefaultLayoutPage = () => {
   // COMPANY_ADMIN(예: 애니원모터스)은 진단 신청 통계도 자사 것만 봐야 한다.
   const company = (session?.user as any)?.company ?? null;
   const isCompanyAdmin = !!company;
+
+  // 카드 숫자·뱃지에서 진단 신청 목록으로 넘어갈 때 쓰는 링크.
+  // 목록 화면이 URL 쿼리로 필터를 읽으므로(booking-list의 filteredData) 거기에 맞춘다.
+  // 날짜 기준은 통계와 같은 접수일(createdAt)이다 — 눌러서 나온 건수가 카드 숫자와 같아야 한다.
+  const todayStr = dayjs().format("YYYY-MM-DD");
+  const weekStartStr = dayjs().startOf("week").format("YYYY-MM-DD"); // 통계와 같게 일요일 시작
+  const bookingHref = (params: { status?: string; dateStart?: string; dateEnd?: string }) => {
+    const base = company ? `/diagnosis/${company}` : "/diagnosis/bookings";
+    const query = new URLSearchParams();
+    if (params.status) query.set("status", params.status);
+    if (params.dateStart) {
+      query.set("searchDateType", "createdAt");
+      query.set("dateStart", params.dateStart);
+      query.set("dateEnd", params.dateEnd ?? params.dateStart);
+    }
+    const qs = query.toString();
+    return qs ? `${base}?${qs}` : base;
+  };
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -239,12 +276,19 @@ const IndexPage: IDefaultLayoutPage = () => {
               today={s?.booking.today ?? 0}
               week={s?.booking.week ?? 0}
               total={s?.booking.total ?? 0}
+              todayHref={bookingHref({ dateStart: todayStr, dateEnd: todayStr })}
+              weekHref={bookingHref({ dateStart: weekStartStr, dateEnd: todayStr })}
+              totalHref={bookingHref({})}
               sub={
                 <div className="flex gap-1 flex-wrap">
                   {Object.entries(s?.booking.byStatus ?? {}).map(([k, v]) => (
-                    <Tag key={k} color={STATUS_CONFIG[k]?.color} className="text-[10px] m-0">
-                      {STATUS_CONFIG[k]?.label} {v}
-                    </Tag>
+                    // 상태 뱃지를 누르면 그 상태만 걸러진 목록으로 간다 —
+                    // 특히 "대기중"은 아직 평가사가 안 정해진 건이라 바로 확인할 일이 많다.
+                    <Link key={k} href={bookingHref({ status: k })}>
+                      <Tag color={STATUS_CONFIG[k]?.color} className="text-[10px] m-0 cursor-pointer">
+                        {STATUS_CONFIG[k]?.label} {v}
+                      </Tag>
+                    </Link>
                   ))}
                 </div>
               }

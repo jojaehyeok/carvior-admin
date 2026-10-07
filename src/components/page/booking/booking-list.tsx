@@ -179,7 +179,18 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 월 단위로 끊어 본다 — 달을 고르거나(기본: 이번 달) "전체 기간"을 켜서 다 본다.
   // 캘린더는 달력 한 장이 곧 한 달이라 전체 기간 개념이 없다(그땐 체크박스를 잠근다).
   const [selectedMonth, setSelectedMonth] = useState<dayjs.Dayjs>(dayjs());
+  // 홈 화면 카드("대기중 10", "오늘 2")처럼 조건을 들고 들어온 경우엔 이번 달로 좁히면
+  // 지난달 건이 빠져서 숫자가 안 맞는다 — 조건이 있으면 전체 기간으로 연다.
   const [allPeriod, setAllPeriod] = useState(false);
+  const appliedUrlFilterRef = useRef(false);
+  useEffect(() => {
+    if (!router.isReady || appliedUrlFilterRef.current) return;
+    appliedUrlFilterRef.current = true;
+    const { status, dateStart, searchText, contractWriterMissing, registrationPending } = router.query;
+    if (status || dateStart || searchText || contractWriterMissing || registrationPending) {
+      setAllPeriod(true);
+    }
+  }, [router.isReady, router.query]);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const monthFilter = allPeriod && viewMode === 'list' ? 'all' : selectedMonth.format('YYYY-MM');
   // bookingId → storeItemId (스마트옥션 매물로 이미 등록됐는지 확인용)
