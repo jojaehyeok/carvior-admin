@@ -36,6 +36,20 @@ interface Stats {
     week: number;
     month: number;
     byStatus: { PENDING: number; ASSIGNED: number; COMPLETED: number; CANCELLED: number };
+    // 오늘 방문예정(진단일시 기준) 건수와, 그중 담당 평가사가 아직 없는 건수
+    visitToday?: number;
+    visitTodayUnassigned?: number;
+    visitTodayList?: {
+      id: number;
+      carNumber: string;
+      carModel?: string | null;
+      dealerName?: string | null;
+      status: string;
+      address?: string | null;
+      preferredDateTime?: string | null;
+      assignedDriverName?: string | null;
+      assignedDriverId?: string | null;
+    }[];
     recent: {
       id: number;
       carNumber: string;
@@ -182,12 +196,20 @@ const IndexPage: IDefaultLayoutPage = () => {
   // 날짜 기준은 통계와 같은 접수일(createdAt)이다 — 눌러서 나온 건수가 카드 숫자와 같아야 한다.
   const todayStr = dayjs().format("YYYY-MM-DD");
   const weekStartStr = dayjs().startOf("week").format("YYYY-MM-DD"); // 통계와 같게 일요일 시작
-  const bookingHref = (params: { status?: string; dateStart?: string; dateEnd?: string }) => {
+  const bookingHref = (params: {
+    status?: string;
+    dateStart?: string;
+    dateEnd?: string;
+    // 날짜 기준 — 접수일(기본)이냐 방문예정일(진단일시)이냐
+    by?: "createdAt" | "preferredDate";
+    unassigned?: boolean;
+  }) => {
     const base = company ? `/diagnosis/${company}` : "/diagnosis/bookings";
     const query = new URLSearchParams();
     if (params.status) query.set("status", params.status);
+    if (params.unassigned) query.set("unassigned", "true");
     if (params.dateStart) {
-      query.set("searchDateType", "createdAt");
+      query.set("searchDateType", params.by ?? "createdAt");
       query.set("dateStart", params.dateStart);
       query.set("dateEnd", params.dateEnd ?? params.dateStart);
     }
@@ -280,7 +302,26 @@ const IndexPage: IDefaultLayoutPage = () => {
               weekHref={bookingHref({ dateStart: weekStartStr, dateEnd: todayStr })}
               totalHref={bookingHref({})}
               sub={
-                <div className="flex gap-1 flex-wrap">
+                <div className="flex flex-col gap-2">
+                  {/* 오늘 나가는 건 — 접수일이 아니라 방문예정일 기준이라 위 "오늘"과 다른 숫자다.
+                      담당 평가사가 아직 없는 건은 빨갛게 따로 띄워 바로 눈에 걸리게 한다. */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Link href={bookingHref({ by: "preferredDate", dateStart: todayStr })}>
+                      <Tag color="purple" className="text-[10px] m-0 cursor-pointer">
+                        오늘 방문예정 {s?.booking.visitToday ?? 0}
+                      </Tag>
+                    </Link>
+                    {(s?.booking.visitTodayUnassigned ?? 0) > 0 ? (
+                      <Link href={bookingHref({ by: "preferredDate", dateStart: todayStr, unassigned: true })}>
+                        <Tag color="red" className="text-[10px] m-0 cursor-pointer font-bold">
+                          🔴 미배정 {s?.booking.visitTodayUnassigned}
+                        </Tag>
+                      </Link>
+                    ) : (
+                      <span className="text-[10px] text-gray-400">미배정 없음</span>
+                    )}
+                  </div>
+                  <div className="flex gap-1 flex-wrap">
                   {Object.entries(s?.booking.byStatus ?? {}).map(([k, v]) => (
                     // 상태 뱃지를 누르면 그 상태만 걸러진 목록으로 간다 —
                     // 특히 "대기중"은 아직 평가사가 안 정해진 건이라 바로 확인할 일이 많다.
@@ -290,6 +331,7 @@ const IndexPage: IDefaultLayoutPage = () => {
                       </Tag>
                     </Link>
                   ))}
+                  </div>
                 </div>
               }
             />
@@ -436,6 +478,66 @@ const IndexPage: IDefaultLayoutPage = () => {
           )}
 
           <Divider />
+
+          {/* 오늘 방문예정 — 접수일이 아니라 "오늘 평가사가 나가는 건"이라, 사무실에서
+              아침에 제일 먼저 보는 목록이다. 담당자가 안 정해진 건은 맨 위에 빨갛게 올린다. */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <p className="text-sm font-bold text-gray-700">
+                오늘 방문예정 <span className="text-violet-600">{s?.booking.visitToday ?? 0}</span>건
+                {(s?.booking.visitTodayUnassigned ?? 0) > 0 && (
+                  <span className="ml-2 text-red-500">· 미배정 {s?.booking.visitTodayUnassigned}건</span>
+                )}
+              </p>
+              <Link
+                href={bookingHref({ by: "preferredDate", dateStart: todayStr })}
+                className="text-xs text-violet-600 font-semibold hover:underline"
+              >
+                전체 보기 →
+              </Link>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {(s?.booking.visitTodayList ?? []).length === 0 ? (
+                <p className="p-6 text-center text-sm text-gray-400">오늘 방문 예정인 진단이 없습니다.</p>
+              ) : (
+                [...(s?.booking.visitTodayList ?? [])]
+                  // 담당자 없는 건 먼저, 그다음 방문 시간 순
+                  .sort((a, b) => {
+                    const ua = a.assignedDriverId ? 1 : 0;
+                    const ub = b.assignedDriverId ? 1 : 0;
+                    if (ua !== ub) return ua - ub;
+                    return (a.preferredDateTime || "").localeCompare(b.preferredDateTime || "");
+                  })
+                  .map((b) => {
+                    const unassigned = !b.assignedDriverId;
+                    return (
+                      <div
+                        key={b.id}
+                        className={`px-5 py-3 flex items-center gap-4 ${unassigned ? "bg-red-50/60" : "hover:bg-gray-50"} transition-colors`}
+                      >
+                        <span className="text-sm font-bold text-gray-700 w-12 flex-shrink-0">
+                          {(b.preferredDateTime || "").replace("T", " ").slice(11, 16) || "-"}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-gray-900">{b.carNumber}</span>
+                            {b.carModel && <span className="text-xs text-gray-500 truncate">{b.carModel}</span>}
+                          </div>
+                          <p className="text-xs text-gray-400 truncate">
+                            {b.dealerName ? `${b.dealerName} · ` : ""}{b.address}
+                          </p>
+                        </div>
+                        {unassigned ? (
+                          <Tag color="red" className="text-[10px] m-0 font-bold flex-shrink-0">🔴 미배정</Tag>
+                        ) : (
+                          <span className="text-xs text-gray-500 flex-shrink-0">{b.assignedDriverName}</span>
+                        )}
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+          </div>
 
           {/* 최근 진단 신청 */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

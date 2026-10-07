@@ -983,7 +983,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
 
   // BookingSearch가 URL 쿼리로 넘긴 조건을 읽어 클라이언트 필터링
   const filteredData = useMemo(() => {
-    const { searchType, searchText, status, adminMemo, searchDateType, dateStart, dateEnd, contractWriterMissing, registrationPending } = router.query;
+    const { searchType, searchText, status, adminMemo, searchDateType, dateStart, dateEnd, contractWriterMissing, registrationPending, unassigned } = router.query;
 
     return data.filter((item) => {
       // 검색어 필터
@@ -1011,6 +1011,10 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         if (dateStart && itemDate < String(dateStart)) return false;
         if (dateEnd && itemDate > String(dateEnd)) return false;
       }
+
+      // 홈 카드의 "미배정"에서 넘어온 경우 — 담당 평가사가 아직 없는 건만.
+      // 취소된 건은 배정할 일이 없으니 뺀다.
+      if (unassigned === 'true' && (item.assignedDriverId || item.status === 'CANCELLED')) return false;
 
       // 리포트 있는 건만 보기 토글 — 진단완료 + carHash(리포트 해시)가 실제로 있는 건만
       if (reportOnly && !(item.status === 'COMPLETED' && item.carHash)) return false;
@@ -1823,6 +1827,11 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           {router.query.registrationPending === 'true' && (
             <Tag color="green" closable onClose={() => router.push(router.pathname)}>
               등록증 전송 대기 건만 표시 중
+            </Tag>
+          )}
+          {router.query.unassigned === 'true' && (
+            <Tag color="red" closable onClose={() => router.push(router.pathname)}>
+              미배정 건만 표시 중
             </Tag>
           )}
         </div>
