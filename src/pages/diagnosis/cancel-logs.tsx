@@ -16,8 +16,11 @@ interface INoshowShot {
 
 interface ICancelLog {
   id: number;
-  driverId: string;
-  driverName: string;
+  driverId: string | null;
+  driverName: string | null;
+  // 누가 취소했는지 — driver(진단사 앱) | admin(대시보드). 예전 로그엔 없어서 비어 있을 수 있다.
+  cancelledBy?: "driver" | "admin";
+  adminLogin?: string | null;
   bookingId: number;
   carNumber?: string;
   carOwner?: string;
@@ -98,7 +101,24 @@ const CancelLogPage: IDefaultLayoutPage = () => {
     },
     { title: "차량번호", dataIndex: "carNumber", width: 120 },
     { title: "차주", dataIndex: "carOwner", width: 100, render: (v?: string) => v || <span className="text-gray-300">-</span> },
-    { title: "진단사", dataIndex: "driverName", width: 100 },
+    {
+      // 전엔 진단사 취소만 남아서 관리자가 취소한 건은 기록이 아예 없었다.
+      title: "취소 주체",
+      key: "cancelledBy",
+      width: 130,
+      render: (_: unknown, r: ICancelLog) =>
+        r.cancelledBy === "admin" ? (
+          <span className="text-xs font-semibold text-red-500">관리자 {r.adminLogin ?? ""}</span>
+        ) : (
+          <span className="text-xs text-gray-500">진단사</span>
+        ),
+    },
+    {
+      title: "진단사",
+      dataIndex: "driverName",
+      width: 100,
+      render: (v?: string | null) => v || <span className="text-gray-300">-</span>,
+    },
     {
       title: "취소 사유",
       dataIndex: "cancelReason",

@@ -735,6 +735,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: isUnassigning ? 'PENDING' : tempStatus,
+          // 관리자가 취소한 건도 "누가 취소했는지"가 남아야 나중에 되짚을 수 있다
+          adminLogin: session?.user?.login,
           adminMemo: tempMemo,
           carNumber: tempCarNumber.trim() || '미정',
           carModel: tempCarModel.trim() || null,
