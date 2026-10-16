@@ -6,7 +6,7 @@ import { ISO8601DateTime } from "@/types/common";
 import { Alert, Button, Calendar, Checkbox, DatePicker, Image, Input, InputNumber, Modal, Popconfirm, Popover, Segmented, Select, Spin, Switch, Tag, Tooltip, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
-import { Copy, Eye, FileText, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
+import { Copy, Eye, FileText, GripVertical, MessageSquare, PenSquare, RefreshCw, UserPlus } from "lucide-react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -183,6 +183,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 계정별로 이 브라우저에 저장한다(서버에 안 올리므로 PC를 바꾸면 기본 순서로 시작).
   const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
   const dragColKeyRef = useRef<string | null>(null);
+  // 끌고 있는 컬럼과, 지금 놓으면 어디로 들어가는지(왼쪽/오른쪽) — 헤더에 선으로 표시한다
+  const [draggingColKey, setDraggingColKey] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ key: string; side: 'left' | 'right' } | null>(null);
   const columnOrderStorageKey = `booking-column-order:${session?.user?.login ?? 'guest'}`;
 
   useEffect(() => {
@@ -194,14 +197,16 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     }
   }, [columnOrderStorageKey]);
 
-  // 끌어다 놓은 컬럼을 그 자리로 옮긴다(현재 화면에 보이는 순서 기준으로 새 순서를 만든다).
-  const moveColumn = (fromKey: string, toKey: string, currentKeys: string[]) => {
+  // 끌어다 놓은 컬럼을 표시된 자리(대상 컬럼의 왼쪽/오른쪽)로 옮긴다.
+  const moveColumn = (fromKey: string, toKey: string, side: 'left' | 'right', currentKeys: string[]) => {
     if (!fromKey || fromKey === toKey) return;
     const next = [...currentKeys];
     const from = next.indexOf(fromKey);
+    if (from === -1) return;
+    next.splice(from, 1); // 먼저 빼고 나서 대상 위치를 다시 찾아야 자리가 한 칸씩 밀리지 않는다
     const to = next.indexOf(toKey);
-    if (from === -1 || to === -1) return;
-    next.splice(to, 0, next.splice(from, 1)[0]);
+    if (to === -1) return;
+    next.splice(side === 'left' ? to : to + 1, 0, fromKey);
     setColumnOrder(next);
     try {
       localStorage.setItem(columnOrderStorageKey, JSON.stringify(next));
@@ -1888,17 +1893,61 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       const original = (col as { onCell?: (r: IBooking, i?: number) => object }).onCell;
       return original ? original(record, rowIndex) : ({} as object);
     },
+    // 제목 왼쪽의 손잡이(⋮⋮)를 보고 끌 수 있다는 걸 알게 한다
+    title: (
+      <span className="inline-flex items-center gap-1">
+        <GripVertical size={12} className="opacity-30 shrink-0" />
+        {col.title as React.ReactNode}
+      </span>
+    ),
     // 제목을 끌어다 놓으면 컬럼 순서가 바뀐다(사람마다 보는 순서가 달라서).
     onHeaderCell: () => ({
       draggable: true,
-      onDragStart: () => { dragColKeyRef.current = colKey(col); },
-      onDragOver: (e: React.DragEvent) => e.preventDefault(),
+      onDragStart: (e: React.DragEvent) => {
+        dragColKeyRef.current = colKey(col);
+        setDraggingColKey(colKey(col));
+        e.dataTransfer.effectAllowed = 'move';
+        // 끌리는 동안 커서를 따라다니는 반투명 제목(브라우저 기본 고스트가 th 전체라 너무 큼)
+        const ghost = document.createElement('div');
+        ghost.textContent = String((col as { title?: unknown }).title ?? '');
+        ghost.style.cssText =
+          'position:absolute;top:-1000px;padding:4px 10px;background:#ede9fe;color:#5b21b6;' +
+          'border:1px solid #c4b5fd;border-radius:6px;font-size:12px;font-weight:700;';
+        document.body.appendChild(ghost);
+        e.dataTransfer.setDragImage(ghost, 0, 0);
+        setTimeout(() => ghost.remove(), 0);
+      },
+      onDragOver: (e: React.DragEvent) => {
+        e.preventDefault();
+        if (!dragColKeyRef.current || dragColKeyRef.current === colKey(col)) return;
+        // 칸의 어느 쪽에 가까운지로 "왼쪽에 넣을지 오른쪽에 넣을지"를 정한다
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const side = e.clientX < rect.left + rect.width / 2 ? 'left' : 'right';
+        setDropTarget((prev) =>
+          prev?.key === colKey(col) && prev.side === side ? prev : { key: colKey(col), side },
+        );
+      },
+      onDragEnd: () => { dragColKeyRef.current = null; setDraggingColKey(null); setDropTarget(null); },
       onDrop: (e: React.DragEvent) => {
         e.preventDefault();
-        moveColumn(dragColKeyRef.current ?? '', colKey(col), columns.map(colKey));
+        const side = dropTarget?.key === colKey(col) ? dropTarget.side : 'left';
+        moveColumn(dragColKeyRef.current ?? '', colKey(col), side, columns.map(colKey));
         dragColKeyRef.current = null;
+        setDraggingColKey(null);
+        setDropTarget(null);
       },
-      style: { cursor: 'grab', userSelect: 'none' },
+      style: {
+        cursor: 'grab',
+        userSelect: 'none',
+        // 끌고 있는 컬럼은 흐리게, 놓일 자리에는 보라색 세로선
+        opacity: draggingColKey === colKey(col) ? 0.4 : undefined,
+        boxShadow:
+          dropTarget?.key === colKey(col)
+            ? dropTarget.side === 'left'
+              ? 'inset 3px 0 0 #7c3aed'
+              : 'inset -3px 0 0 #7c3aed'
+            : undefined,
+      } as React.CSSProperties,
     }),
     render: (value: unknown, record: IBooking, index: number) => {
       if (record.__monthLabel) {
