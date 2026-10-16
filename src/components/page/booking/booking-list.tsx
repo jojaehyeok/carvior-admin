@@ -37,6 +37,9 @@ const isReportEditExpired = (record: { firstCompletedAt?: string | null }) => {
   return Date.now() - new Date(record.firstCompletedAt).getTime() > REPORT_EDIT_WINDOW_MS;
 };
 
+// 컬럼을 구분하는 이름 — key가 있으면 key, 없으면 제목을 쓴다(저장된 순서와 대조할 때 기준).
+const colKey = (col: { key?: React.Key; title?: unknown }) => String(col.key ?? col.title ?? '');
+
 // 탁송 가능 여부 — 평가사가 진단 현장에서 앱으로 표시한 값. 배차 담당자가 목록만 보고
 // 로드(탁송) 차량을 보낼 수 있는 건인지 바로 판단하라고 뱃지로 띄운다.
 const TRANSPORT_TAG: Record<string, { color: string; label: string }> = {
@@ -176,6 +179,44 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [reportOnly, setReportOnly] = useState(false);
   const [purchasePriceOnly, setPurchasePriceOnly] = useState(false);
+  // 컬럼 순서는 사람마다 보는 방식이 달라서 각자 바꿔 쓸 수 있게 한다.
+  // 계정별로 이 브라우저에 저장한다(서버에 안 올리므로 PC를 바꾸면 기본 순서로 시작).
+  const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
+  const dragColKeyRef = useRef<string | null>(null);
+  const columnOrderStorageKey = `booking-column-order:${session?.user?.login ?? 'guest'}`;
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(columnOrderStorageKey);
+      setColumnOrder(saved ? JSON.parse(saved) : null);
+    } catch {
+      setColumnOrder(null);
+    }
+  }, [columnOrderStorageKey]);
+
+  // 끌어다 놓은 컬럼을 그 자리로 옮긴다(현재 화면에 보이는 순서 기준으로 새 순서를 만든다).
+  const moveColumn = (fromKey: string, toKey: string, currentKeys: string[]) => {
+    if (!fromKey || fromKey === toKey) return;
+    const next = [...currentKeys];
+    const from = next.indexOf(fromKey);
+    const to = next.indexOf(toKey);
+    if (from === -1 || to === -1) return;
+    next.splice(to, 0, next.splice(from, 1)[0]);
+    setColumnOrder(next);
+    try {
+      localStorage.setItem(columnOrderStorageKey, JSON.stringify(next));
+    } catch {
+      // 저장이 막힌 브라우저(사생활 보호 모드 등)에서도 이번 화면에서는 그대로 쓰게 둔다
+    }
+  };
+
+  const resetColumnOrder = () => {
+    setColumnOrder(null);
+    try {
+      localStorage.removeItem(columnOrderStorageKey);
+    } catch {}
+  };
+
   // 월 단위로 끊어 본다 — 달을 고르거나(기본: 이번 달) "전체 기간"을 켜서 다 본다.
   // 캘린더는 달력 한 장이 곧 한 달이라 전체 기간 개념이 없다(그땐 체크박스를 잠근다).
   const [selectedMonth, setSelectedMonth] = useState<dayjs.Dayjs>(dayjs());
@@ -1821,6 +1862,22 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     }
   }
 
+  // 진단일시를 맨 앞으로 — 배차는 "언제 가는 건인지"부터 보기 때문에 제일 왼쪽이 자연스럽다.
+  // (사용자가 순서를 직접 바꿔두면 아래 columnOrder가 그 순서를 덮어쓴다)
+  {
+    const visitIdx = columns.findIndex(c => String((c as { title?: unknown }).title ?? '') === '진단일시');
+    if (visitIdx > 0) columns = [columns[visitIdx], ...columns.filter((_, i) => i !== visitIdx)];
+  }
+
+  // 사용자가 바꿔둔 컬럼 순서가 있으면 그대로 적용한다.
+  // 저장된 목록에 없는 컬럼(새로 생긴 것·권한에 따라 나타나는 것)은 원래 자리 느낌으로 뒤에 붙인다.
+  if (columnOrder && columnOrder.length > 0) {
+    const keyed = new Map(columns.map(c => [colKey(c), c]));
+    const ordered = columnOrder.map(k => keyed.get(k)).filter(Boolean) as typeof columns;
+    const rest = columns.filter(c => !columnOrder.includes(colKey(c)));
+    columns = [...ordered, ...rest];
+  }
+
   // 월 구분줄은 예약이 아니라 표 안에 끼워 넣은 안내줄이라, 첫 컬럼이 나머지를 colSpan으로
   // 덮어 한 줄 전체를 쓰게 만든다(antd에서 전체폭 행을 그리는 표준 방식).
   const groupedColumns = columns.map((col, idx) => ({
@@ -1831,6 +1888,18 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       const original = (col as { onCell?: (r: IBooking, i?: number) => object }).onCell;
       return original ? original(record, rowIndex) : ({} as object);
     },
+    // 제목을 끌어다 놓으면 컬럼 순서가 바뀐다(사람마다 보는 순서가 달라서).
+    onHeaderCell: () => ({
+      draggable: true,
+      onDragStart: () => { dragColKeyRef.current = colKey(col); },
+      onDragOver: (e: React.DragEvent) => e.preventDefault(),
+      onDrop: (e: React.DragEvent) => {
+        e.preventDefault();
+        moveColumn(dragColKeyRef.current ?? '', colKey(col), columns.map(colKey));
+        dragColKeyRef.current = null;
+      },
+      style: { cursor: 'grab', userSelect: 'none' },
+    }),
     render: (value: unknown, record: IBooking, index: number) => {
       if (record.__monthLabel) {
         return idx === 0
@@ -1872,7 +1941,14 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             </Tag>
           )}
         </div>
-        <Button type="primary" icon={<RefreshCw size={14} />} onClick={() => fetchBookings()} loading={isLoading}>새로고침</Button>
+        <div className="flex items-center gap-2">
+          {/* 컬럼 제목을 끌어서 순서를 바꿀 수 있다는 걸 모르면 아무도 안 쓴다 — 안내를 같이 둔다 */}
+          <span className="text-[11px] text-gray-400">컬럼 제목을 끌어서 순서를 바꿀 수 있어요</span>
+          {columnOrder && columnOrder.length > 0 && (
+            <Button size="small" onClick={resetColumnOrder}>컬럼 순서 초기화</Button>
+          )}
+          <Button type="primary" icon={<RefreshCw size={14} />} onClick={() => fetchBookings()} loading={isLoading}>새로고침</Button>
+        </div>
       </DefaultTableBtn>
 
       {/* 월 선택 / 전체 기간 / 리스트·캘린더 전환 — 기준 날짜는 진단일시(없으면 접수일)라
