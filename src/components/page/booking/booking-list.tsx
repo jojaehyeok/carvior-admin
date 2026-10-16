@@ -1142,18 +1142,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 구전은 계약금/매입가와 달리 애니원모터스 계정이면(사무장 권한 여부와 무관하게) 누구나 토글 가능
   const canConfirmOldDealerFee = canConfirmBilling || isAnyoneMotors;
 
+  // "관리(상세)" 컬럼은 없앴다 — 이제 행 아무 데나 누르면 상세가 열린다.
+  // 누르면 뭔가 동작하는 칸(버튼·입력칸·리포트 링크 등)은 행 클릭을 막아둔다(onRow 참고).
   let columns: ColumnsType<IBooking> = [
-    {
-      title: "관리",
-      key: "action",
-      width: 80,
-      align: "center",
-      render: (_, record) => (
-        <Button size="small" icon={<Eye size={14} />} onClick={() => openModal(record)}>
-          상세
-        </Button>
-      ),
-    },
     {
       title: "차량번호",
       dataIndex: "carNumber",
@@ -1599,6 +1590,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       // 기본 정렬은 아래 sortedData에서 "미배정 먼저 → 진단일시 임박순"으로 한 번에 처리한다.
       // 여기 sorter는 관리자가 컬럼을 눌러 직접 정렬을 바꾸고 싶을 때만 쓰인다.
       sorter: (a, b) => (a.preferredDateTime || '').replace('T', ' ').localeCompare((b.preferredDateTime || '').replace('T', ' ')),
+      // 이 칸은 더블클릭으로 바로 고치는 칸이라 행 클릭(상세 열기)에서 빼둔다 —
+      // 안 빼면 첫 클릭에 모달이 떠서 더블클릭 수정이 아예 안 된다.
+      onCell: () => ({ className: 'no-row-click' }),
       // 더블클릭하면 모달 없이 셀 안에서 바로 입력창으로 바뀜(슈퍼관리자만) — Enter/포커스아웃 시 저장
       render: (value: string | null, record) => {
         if (inlineEditingId === record.id) {
@@ -1831,10 +1825,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 덮어 한 줄 전체를 쓰게 만든다(antd에서 전체폭 행을 그리는 표준 방식).
   const groupedColumns = columns.map((col, idx) => ({
     ...col,
-    onCell: (record: IBooking) =>
-      record.__monthLabel
-        ? ({ colSpan: idx === 0 ? columns.length : 0 } as object)
-        : ({} as object),
+    onCell: (record: IBooking, rowIndex?: number) => {
+      if (record.__monthLabel) return { colSpan: idx === 0 ? columns.length : 0 } as object;
+      // 컬럼이 원래 갖고 있던 onCell(진단일시의 no-row-click 등)은 그대로 살린다
+      const original = (col as { onCell?: (r: IBooking, i?: number) => object }).onCell;
+      return original ? original(record, rowIndex) : ({} as object);
+    },
     render: (value: unknown, record: IBooking, index: number) => {
       if (record.__monthLabel) {
         return idx === 0
@@ -1973,6 +1969,26 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           // 붙인 옅은 배경(bg-blue-50 등)이 셀 배경에 가려 안 보이는 문제가 있었음 —
           // 셀 배경까지 강제로 덮어써서 실제로 눈에 보이게 함.
           // 차량이전/계약상태 둘 중 하나만 완료면 초록, 둘 다 완료면 파랑.
+          // 행 아무 데나 누르면 상세가 열린다("관리 > 상세" 버튼을 없앤 대신).
+          // 단, 눌러서 뭔가 하는 칸(버튼·링크·입력칸·스위치·셀렉트, 그리고 더블클릭으로
+          // 고치는 진단일시 칸)에서 시작된 클릭은 무시한다 — 안 그러면 리포트를 보려다
+          // 모달이 같이 뜨고, 더블클릭 수정도 안 된다.
+          onRow={(record) => ({
+            onClick: (e) => {
+              if (record.__monthLabel) return;
+              const el = e.target as HTMLElement;
+              if (
+                el.closest(
+                  'button, a, input, textarea, .no-row-click, .ant-select, .ant-switch, ' +
+                  '.ant-input-number, .ant-picker, .ant-popover, .ant-dropdown, .ant-modal',
+                )
+              ) {
+                return;
+              }
+              openModal(record);
+            },
+            style: record.__monthLabel ? undefined : { cursor: 'pointer' },
+          })}
           rowClassName={(record) => {
             if (record.__monthLabel) return "[&>td]:!bg-gray-100 [&>td]:!py-1.5";
             // 미배정은 왼쪽에 빨간 띠를 세워 목록을 훑을 때 바로 걸리게 한다.
