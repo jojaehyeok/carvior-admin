@@ -1991,7 +1991,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         onOk={handleUpdate}
         onCancel={() => setIsModalOpen(false)}
         confirmLoading={isUpdating}
-        width={560}
+        width={1040}
+        // 내용이 길어도 창이 화면 밖으로 넘치지 않게 — 넘치는 부분만 안쪽에서 스크롤된다
+        styles={{ body: { maxHeight: "calc(100vh - 220px)", overflowY: "auto" } }}
         // 왼쪽 끝에 "예약 취소"를 따로 둔다 — 저장 버튼 옆에 붙이면 잘못 누르기 쉽다.
         footer={[
           editingBooking?.status === "CANCELLED" ? (
@@ -2028,7 +2030,11 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           </Button>,
         ]}
       >
-        <div className="space-y-4 py-4">
+        {/* 세로로 길어 스크롤을 계속 올렸다 내렸다 해야 해서 두 칸으로 나눴다.
+            왼쪽은 "지금 이 건을 어떻게 처리할지"(주소·차량·상태·배정),
+            오른쪽은 "기록으로 남기는 것"(오더 기록·정산·메모). 좁은 화면에선 한 칸으로 접힌다. */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-4 py-4 items-start">
+          <div className="space-y-4 min-w-0">
           {/* 기본 정보 */}
           <div className="p-3 bg-gray-50 rounded-lg text-sm space-y-2">
             <div>
@@ -2283,8 +2289,11 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             )}
           </div>
 
+          </div>
+
+          <div className="space-y-4 min-w-0">
           {/* 오더 기록 구분선 */}
-          <div className="border-t pt-4">
+          <div className="border-t pt-4 lg:border-t-0 lg:pt-0">
             <p className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">오더 기록</p>
 
             {/* 상품구분 — 비대면검차로 두면 완료 리포트가 고객이 아니라 딜러에게만 발송된다.
@@ -2547,6 +2556,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           <div>
             <label className="block text-xs font-bold text-gray-400 mb-1">관리자 메모</label>
             <Input.TextArea value={tempMemo} onChange={e => setTempMemo(e.target.value)} rows={3} placeholder="진단사에게 전달할 내용을 입력하세요." />
+          </div>
           </div>
         </div>
       </Modal>
