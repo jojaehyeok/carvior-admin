@@ -720,6 +720,37 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     }
   };
 
+  // --- 예약 취소 (상세 모달 전용) ---
+  // 상태 셀렉트에서도 "취소"를 고를 수 있지만 그건 다른 수정과 같이 저장돼서, 왜 취소했는지가
+  // 안 남는다. 여기선 사유를 받아서 취소 로그에 관리자 아이디와 함께 남긴다.
+  const [cancelReasonInput, setCancelReasonInput] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+
+  const handleAdminCancel = async () => {
+    if (!editingBooking) return;
+    setCancelling(true);
+    try {
+      const res = await fetch(`${API_BASE}/external/request/${editingBooking.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "CANCELLED",
+          adminLogin: session?.user?.login,
+          cancelReason: cancelReasonInput.trim() || "관리자 취소",
+        }),
+      });
+      if (!res.ok) throw new Error();
+      message.success("예약을 취소했습니다.");
+      setIsModalOpen(false);
+      setCancelReasonInput("");
+      fetchBookings();
+    } catch {
+      message.error("취소 처리 중 오류가 발생했습니다.");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   // --- 💾 저장 로직 ---
   const handleUpdate = async () => {
     if (!editingBooking) return;
@@ -1129,7 +1160,15 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       align: "center",
       render: (value: string, record: IBooking) => (
         <div className="flex flex-col items-center gap-1">
-          <span className="font-bold text-blue-600">{value}</span>
+          {/* 차량번호를 누르면 상세가 열린다 — 맨 왼쪽 "상세" 버튼까지 가지 않아도 되게 */}
+          <button
+            type="button"
+            onClick={() => openModal(record)}
+            className="font-bold text-blue-600 hover:underline cursor-pointer bg-transparent border-0 p-0"
+            title="상세 보기"
+          >
+            {value}
+          </button>
           {/* 묶음은 슈퍼관리자 전용이 아니다 — 발주사도 왜 이 건에 오지 할증이 안 붙었는지
               알아야 하므로 청구 근거로 함께 노출한다. */}
           {(record.bundleSize ?? 1) > 1 && (
@@ -1952,9 +1991,42 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         onOk={handleUpdate}
         onCancel={() => setIsModalOpen(false)}
         confirmLoading={isUpdating}
-        okText="변경사항 저장"
-        cancelText="취소"
         width={560}
+        // 왼쪽 끝에 "예약 취소"를 따로 둔다 — 저장 버튼 옆에 붙이면 잘못 누르기 쉽다.
+        footer={[
+          editingBooking?.status === "CANCELLED" ? (
+            <span key="cancelled" className="float-left text-xs font-semibold text-red-500 leading-8">
+              이미 취소된 예약입니다
+            </span>
+          ) : (
+            <Popconfirm
+              key="cancel"
+              title="이 예약을 취소할까요?"
+              description={
+                <div style={{ width: 260 }}>
+                  <p className="text-xs text-gray-500 mb-2">
+                    취소 사유를 적어주세요. 취소 로그에 관리자 아이디와 함께 남습니다.
+                  </p>
+                  <Input
+                    placeholder="예: 고객 변심, 중복 접수"
+                    value={cancelReasonInput}
+                    onChange={(e) => setCancelReasonInput(e.target.value)}
+                  />
+                </div>
+              }
+              okText="예약 취소"
+              okButtonProps={{ danger: true, loading: cancelling }}
+              cancelText="닫기"
+              onConfirm={handleAdminCancel}
+            >
+              <Button danger className="float-left">예약 취소</Button>
+            </Popconfirm>
+          ),
+          <Button key="close" onClick={() => setIsModalOpen(false)}>닫기</Button>,
+          <Button key="save" type="primary" loading={isUpdating} onClick={handleUpdate}>
+            변경사항 저장
+          </Button>,
+        ]}
       >
         <div className="space-y-4 py-4">
           {/* 기본 정보 */}
