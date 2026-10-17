@@ -241,6 +241,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     }
   }, [router.isReady, router.query]);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  // 캘린더에서 날짜를 눌렀는지 — 누른 날의 전체 목록을 달력 아래에 펼친다
+  const [selectedDayPicked, setSelectedDayPicked] = useState(false);
   const monthFilter = allPeriod && viewMode === 'list' ? 'all' : selectedMonth.format('YYYY-MM');
   // bookingId → storeItemId (스마트옥션 매물로 이미 등록됐는지 확인용)
   const [storeItemMap, setStoreItemMap] = useState<Record<number, string>>({});
@@ -1148,6 +1150,16 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     });
   }, [filteredData, monthFilter, monthKeyOf]);
 
+  // 캘린더에서 고른 날짜의 건 전체 — 달력 칸엔 3건까지만 들어가서 아래에 펼쳐 보여준다.
+  // 날짜를 한 번도 안 눌렀으면(selectedDayPicked=false) 펼치지 않는다.
+  const selectedDayItems = useMemo(() => {
+    if (!selectedDayPicked) return null;
+    const day = selectedMonth.format('YYYY-MM-DD');
+    return sortedData.filter(
+      (b) => (b.preferredDateTime || b.createdAt || '').replace('T', ' ').slice(0, 10) === day,
+    );
+  }, [sortedData, selectedMonth, selectedDayPicked]);
+
   // 전체 기간을 볼 때만 월이 바뀌는 자리에 구분줄을 끼워 넣는다(한 달만 볼 땐 필요 없음).
   // 표 전체 폭을 차지하는 행이라, 첫 컬럼이 colSpan으로 나머지를 덮는 antd 방식을 쓴다.
   const tableData = useMemo(() => {
@@ -2051,8 +2063,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         <div className="border border-gray-100 rounded-lg p-2 mb-4">
           <Calendar
             value={selectedMonth}
-            onPanelChange={(v) => setSelectedMonth(v)}
-            onSelect={(v) => setSelectedMonth(v)}
+            onPanelChange={(v) => { setSelectedMonth(v); setSelectedDayPicked(false); }}
+            onSelect={(v) => { setSelectedMonth(v); setSelectedDayPicked(true); }}
             cellRender={(current, info) => {
               if (info.type !== 'date') return info.originNode;
               const day = current.format('YYYY-MM-DD');
@@ -2080,12 +2092,67 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                     );
                   })}
                   {items.length > 3 && (
-                    <li className="text-[11px] text-gray-400">+{items.length - 3} more</li>
+                    <li className="text-[11px] font-semibold text-violet-500">
+                      +{items.length - 3}건 더 · 눌러서 전체 보기
+                    </li>
                   )}
                 </ul>
               );
             }}
           />
+        </div>
+      )}
+
+      {/* 날짜를 누르면 그날 전체를 아래에 펼친다 — 칸에는 3건까지만 들어가서
+          "+N건 더"가 뜨면 나머지를 볼 방법이 없었다. */}
+      {viewMode === 'calendar' && selectedDayItems && (
+        <div className="border border-gray-100 rounded-lg mb-4 overflow-hidden">
+          <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+            <p className="text-sm font-bold text-gray-700">
+              {selectedMonth.format('YYYY년 M월 D일 (ddd)')} · {selectedDayItems.length}건
+              {selectedDayItems.some((b) => !b.assignedDriverId && b.status !== 'CANCELLED') && (
+                <span className="ml-2 text-red-500">
+                  · 미배정 {selectedDayItems.filter((b) => !b.assignedDriverId && b.status !== 'CANCELLED').length}건
+                </span>
+              )}
+            </p>
+            <span className="text-xs text-gray-400">건을 누르면 상세가 열립니다</span>
+          </div>
+          <div className="divide-y divide-gray-50 max-h-96 overflow-y-auto">
+            {selectedDayItems.length === 0 ? (
+              <p className="p-6 text-center text-sm text-gray-400">이 날짜에는 진단이 없습니다.</p>
+            ) : (
+              selectedDayItems.map((b) => {
+                const unassigned = !b.assignedDriverId && b.status !== 'CANCELLED';
+                return (
+                  <div
+                    key={b.id}
+                    onClick={() => openModal(b)}
+                    className={`px-4 py-2.5 flex items-center gap-3 cursor-pointer ${unassigned ? 'bg-red-50/60' : 'hover:bg-gray-50'}`}
+                  >
+                    <span className="text-sm font-bold text-gray-700 w-12 shrink-0">
+                      {(b.preferredDateTime || '').replace('T', ' ').slice(11, 16) || '-'}
+                    </span>
+                    <Tag color={statusConfig[b.status]?.color} className="m-0 shrink-0">
+                      {statusConfig[b.status]?.label ?? b.status}
+                    </Tag>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-gray-900">{b.carNumber}</span>
+                        {b.carModel && <span className="text-xs text-gray-500 truncate">{b.carModel}</span>}
+                      </div>
+                      <p className="text-xs text-gray-400 truncate">
+                        {b.dealerName ? `${b.dealerName} · ` : ''}{b.address}
+                      </p>
+                    </div>
+                    {unassigned
+                      ? <Tag color="red" className="m-0 shrink-0 font-bold">🔴 미배정</Tag>
+                      : <span className="text-xs text-gray-500 shrink-0">{b.assignedDriverName}</span>}
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
 
