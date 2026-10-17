@@ -183,6 +183,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 계정별로 이 브라우저에 저장한다(서버에 안 올리므로 PC를 바꾸면 기본 순서로 시작).
   const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
   const dragColKeyRef = useRef<string | null>(null);
+  // 컬럼 제목을 눌러 정렬을 켰는지 — 켜져 있으면 월 구분줄을 빼고(같이 정렬돼 뒤섞인다)
+  // 기본 정렬("미배정 먼저 → 임박순")도 antd가 덮어쓴다.
+  const [isColumnSorted, setIsColumnSorted] = useState(false);
   // 끌고 있는 컬럼과, 지금 놓으면 어디로 들어가는지(왼쪽/오른쪽) — 헤더에 선으로 표시한다
   const [draggingColKey, setDraggingColKey] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ key: string; side: 'left' | 'right' } | null>(null);
@@ -1148,7 +1151,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   // 전체 기간을 볼 때만 월이 바뀌는 자리에 구분줄을 끼워 넣는다(한 달만 볼 땐 필요 없음).
   // 표 전체 폭을 차지하는 행이라, 첫 컬럼이 colSpan으로 나머지를 덮는 antd 방식을 쓴다.
   const tableData = useMemo(() => {
-    if (monthFilter !== 'all') return sortedData;
+    // 컬럼 정렬(접수일순 등)을 켜면 구분줄까지 같이 정렬돼 뒤섞이므로 그땐 넣지 않는다
+    if (monthFilter !== 'all' || isColumnSorted) return sortedData;
     const rows: IBooking[] = [];
     let lastMonth = '';
     for (const item of sortedData) {
@@ -1195,6 +1199,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "차량번호",
       dataIndex: "carNumber",
       align: "center",
+      sorter: (a, b) => String(a.carNumber ?? "").localeCompare(String(b.carNumber ?? "")),
       render: (value: string, record: IBooking) => (
         <div className="flex flex-col items-center gap-1">
           {/* 차량번호를 누르면 상세가 열린다 — 맨 왼쪽 "상세" 버튼까지 가지 않아도 되게 */}
@@ -1281,6 +1286,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "차량명",
       dataIndex: "carModel",
       align: "center",
+      sorter: (a, b) => String(a.carModel ?? "").localeCompare(String(b.carModel ?? "")),
       render: (value: string | null | undefined, record: IBooking) => {
         const specParts = [record.carSpecManufacturer, record.carSpecModel, record.carSpecBadge].filter(Boolean);
         // 예상시세는 매입 판단 참고용이라 SUPER_ADMIN에게만 노출(데모 단계, 진단사 앱과 동일 계산값을
@@ -1327,6 +1333,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "딜러이름",
       dataIndex: "dealerName",
       align: "center",
+      sorter: (a, b) => String(a.dealerName ?? "").localeCompare(String(b.dealerName ?? "")),
       render: (value?: string) => value || <span className="text-gray-300">-</span>,
     },
     {
@@ -1405,6 +1412,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "배정 진단사",
       dataIndex: "assignedDriverName",
       align: "center",
+      sorter: (a, b) => String(a.assignedDriverName ?? "").localeCompare(String(b.assignedDriverName ?? "")),
       render: (value: string, record: IBooking) => {
         const assignedDriver = drivers.find(d => String(d.id) === String(record.assignedDriverId));
         const phone = assignedDriver?.phone;
@@ -1612,6 +1620,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "상태",
       dataIndex: "status",
       align: "center",
+      sorter: (a, b) => String(a.status ?? "").localeCompare(String(b.status ?? "")),
       render: (status: string, record: IBooking) => {
         // 접수는 됐는데 담당 진단사가 아직 없는 건은 "대기중" 대신 빨간 미배정으로 — 목록에서
         // 바로 눈에 띄어야 배정을 놓치지 않는다(발주사 대표 요청).
@@ -1626,6 +1635,8 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "접수일",
       dataIndex: "createdAt",
       align: "center",
+      // 눌러도 아무 일이 없다는 제보 — 정렬 기능 자체가 없었다(진단일시에만 있었음)
+      sorter: (a, b) => String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')),
       render: (value: ISO8601DateTime) => dayjs(value).format("YYYY-MM-DD"),
     },
     {
@@ -1759,6 +1770,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "출처",
       dataIndex: "source",
       align: "center",
+      sorter: (a, b) => String(a.source ?? "").localeCompare(String(b.source ?? "")),
       render: (value: string) => value ? <Tag>{value}</Tag> : <span className="text-gray-300">-</span>,
     },
     // 탁송 배차용 — 평가사가 앱에서 표시한 값이라 읽기 전용이다. 맨 끝 컬럼.
@@ -2090,6 +2102,10 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           loading={isLoading}
           rowKey="id"
           pagination={{ pageSize: 50, showSizeChanger: true, pageSizeOptions: [20, 50, 100, 200], showTotal: (t) => `${t}건` }}
+          onChange={(_pagination, _filters, sorter) => {
+            const s = Array.isArray(sorter) ? sorter[0] : sorter;
+            setIsColumnSorted(!!s?.order);
+          }}
           // antd 테이블은 배경색을 <tr>가 아니라 각 <td> 셀 단위로 칠해서, row 클래스에
           // 붙인 옅은 배경(bg-blue-50 등)이 셀 배경에 가려 안 보이는 문제가 있었음 —
           // 셀 배경까지 강제로 덮어써서 실제로 눈에 보이게 함.
