@@ -1199,7 +1199,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "차량번호",
       dataIndex: "carNumber",
       align: "center",
-      sorter: (a, b) => String(a.carNumber ?? "").localeCompare(String(b.carNumber ?? "")),
       render: (value: string, record: IBooking) => (
         <div className="flex flex-col items-center gap-1">
           {/* 차량번호를 누르면 상세가 열린다 — 맨 왼쪽 "상세" 버튼까지 가지 않아도 되게 */}
@@ -1286,7 +1285,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "차량명",
       dataIndex: "carModel",
       align: "center",
-      sorter: (a, b) => String(a.carModel ?? "").localeCompare(String(b.carModel ?? "")),
       render: (value: string | null | undefined, record: IBooking) => {
         const specParts = [record.carSpecManufacturer, record.carSpecModel, record.carSpecBadge].filter(Boolean);
         // 예상시세는 매입 판단 참고용이라 SUPER_ADMIN에게만 노출(데모 단계, 진단사 앱과 동일 계산값을
@@ -1333,7 +1331,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "딜러이름",
       dataIndex: "dealerName",
       align: "center",
-      sorter: (a, b) => String(a.dealerName ?? "").localeCompare(String(b.dealerName ?? "")),
       render: (value?: string) => value || <span className="text-gray-300">-</span>,
     },
     {
@@ -1412,7 +1409,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "배정 진단사",
       dataIndex: "assignedDriverName",
       align: "center",
-      sorter: (a, b) => String(a.assignedDriverName ?? "").localeCompare(String(b.assignedDriverName ?? "")),
       render: (value: string, record: IBooking) => {
         const assignedDriver = drivers.find(d => String(d.id) === String(record.assignedDriverId));
         const phone = assignedDriver?.phone;
@@ -1620,7 +1616,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "상태",
       dataIndex: "status",
       align: "center",
-      sorter: (a, b) => String(a.status ?? "").localeCompare(String(b.status ?? "")),
       render: (status: string, record: IBooking) => {
         // 접수는 됐는데 담당 진단사가 아직 없는 건은 "대기중" 대신 빨간 미배정으로 — 목록에서
         // 바로 눈에 띄어야 배정을 놓치지 않는다(발주사 대표 요청).
@@ -1770,7 +1765,6 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       title: "출처",
       dataIndex: "source",
       align: "center",
-      sorter: (a, b) => String(a.source ?? "").localeCompare(String(b.source ?? "")),
       render: (value: string) => value ? <Tag>{value}</Tag> : <span className="text-gray-300">-</span>,
     },
     // 탁송 배차용 — 평가사가 앱에서 표시한 값이라 읽기 전용이다. 맨 끝 컬럼.
