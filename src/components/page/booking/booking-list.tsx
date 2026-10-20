@@ -1477,7 +1477,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                       color="green"
                       className="text-xs"
                       style={{ cursor: 'pointer' }}
-                      onClick={() => handleAdminConfirmSeen(record)}
+                      onClick={(e) => { e.stopPropagation(); handleAdminConfirmSeen(record); }}
                     >
                       ✅ 확인 {dayjs(record.driverSeenAt).format('MM/DD HH:mm')}
                     </Tag>
@@ -1487,7 +1487,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                       color="red"
                       className="text-xs"
                       style={{ cursor: 'pointer' }}
-                      onClick={() => handleAdminConfirmSeen(record)}
+                      onClick={(e) => { e.stopPropagation(); handleAdminConfirmSeen(record); }}
                     >
                       👀 미확인 (클릭해서 확인처리)
                     </Tag>
@@ -1511,7 +1511,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         <Tag
           color={value ? "blue" : "red"}
           style={{ cursor: "pointer", fontWeight: 700 }}
-          onClick={() => handleToggleBoolField(record, "vehicleTransferred", "차량 이전")}
+          onClick={(e) => { e.stopPropagation(); handleToggleBoolField(record, "vehicleTransferred", "차량 이전"); }}
         >
           {value ? "완료" : "미완료"}
         </Tag>
@@ -1527,7 +1527,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         <Tag
           color={value ? "blue" : "red"}
           style={{ cursor: "pointer", fontWeight: 700 }}
-          onClick={() => handleToggleBoolField(record, "contractConfirmed", "계약상태")}
+          onClick={(e) => { e.stopPropagation(); handleToggleBoolField(record, "contractConfirmed", "계약상태"); }}
         >
           {value ? "확인" : "미확인"}
         </Tag>
@@ -1557,7 +1557,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             <Tag
               color={done ? "blue" : "red"}
               style={{ cursor: canConfirmBilling ? "pointer" : "default", fontWeight: 700 }}
-              onClick={canConfirmBilling ? () => handleToggleBoolField(record, "contractDepositSeen", "계약금") : undefined}
+              onClick={canConfirmBilling ? (e) => { e.stopPropagation(); handleToggleBoolField(record, "contractDepositSeen", "계약금"); } : undefined}
             >
               {done ? "완료" : "미완료"}
             </Tag>
@@ -1589,7 +1589,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             <Tag
               color={done ? "blue" : "red"}
               style={{ cursor: canConfirmBilling ? "pointer" : "default", fontWeight: 700 }}
-              onClick={canConfirmBilling ? () => handleToggleBoolField(record, "purchasePriceSeen", "매입가") : undefined}
+              onClick={canConfirmBilling ? (e) => { e.stopPropagation(); handleToggleBoolField(record, "purchasePriceSeen", "매입가"); } : undefined}
             >
               {done ? "완료" : "미완료"}
             </Tag>
@@ -1616,7 +1616,7 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
             <Tag
               color={done ? "blue" : "red"}
               style={{ cursor: canConfirmOldDealerFee ? "pointer" : "default", fontWeight: 700 }}
-              onClick={canConfirmOldDealerFee ? () => handleToggleBoolField(record, "oldDealerFeeSeen", "구전") : undefined}
+              onClick={canConfirmOldDealerFee ? (e) => { e.stopPropagation(); handleToggleBoolField(record, "oldDealerFeeSeen", "구전"); } : undefined}
             >
               {done ? "완료" : "미완료"}
             </Tag>
