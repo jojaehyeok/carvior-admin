@@ -1,5 +1,5 @@
 import { Divider } from "antd";
-import { BarChart2, Banknote, Building2, Car, Home, KeyRound, MessageCircle, Monitor, Package2, Settings, ShoppingBag, Star } from "lucide-react";
+import { BarChart2, Banknote, Building2, Car, Flag, Home, KeyRound, MessageCircle, Monitor, Package2, Settings, ShoppingBag, Star } from "lucide-react";
 import { useSession } from "next-auth/react";
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/router";
@@ -113,6 +113,12 @@ const superAdminMenuData: IMenu[] = [
     name: "발주사 정산",
     icon: <BarChart2 className="w-5 h-5" />,
     link: { path: "/store/settlement" },
+  },
+  {
+    id: "reports",
+    name: "신고 관리",
+    icon: <Flag className="w-5 h-5" />,
+    link: { path: "/admin/reports" },
   },
   {
     id: "cs",
@@ -255,6 +261,7 @@ const MainMenu = () => {
   const [companyLinks, setCompanyLinks] = useState<IMenu[]>([]);
   const router = useRouter();
   const [registrationPendingCount, setRegistrationPendingCount] = useState(0);
+  const [reportPendingCount, setReportPendingCount] = useState(0);
 
   // "등록증 전송 대기" 옆 숫자. 화면을 옮길 때마다 다시 세고, 예약목록에서 사진을 저장하거나
   // 등록증을 보내면 cavior:registration-changed 신호를 받아 바로 다시 센다 — 그래야 보내는 순간
@@ -278,6 +285,25 @@ const MainMenu = () => {
       window.removeEventListener("cavior:registration-changed", load);
     };
   }, [role, company, router.asPath]);
+
+  // "신고 관리" 옆 숫자 — 접수 상태로 남은 신고 건수. 화면을 옮길 때마다 다시 센다.
+  // 슈퍼 관리자만 보는 메뉴라 발주사 계정에서는 부르지 않는다.
+  useEffect(() => {
+    if (role === "COMPANY_ADMIN") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API}/admin/reports/pending-count`, {
+          headers: { "x-internal-key": process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? "" },
+        });
+        const data = await res.json();
+        if (!cancelled) setReportPendingCount(Number(data?.count) || 0);
+      } catch {
+        // 숫자는 참고용이라 실패해도 메뉴는 그대로 둔다
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [role, router.asPath]);
 
   // 슈퍼 관리자 세션에서만 필요 — 등록된 발주사 관리자 계정 목록을 조회해서
   // "발주사 관리" 서브메뉴를 채운다. "발주사 승인 관리"에서 새 계정을 승인하면
@@ -330,9 +356,11 @@ const MainMenu = () => {
         : item,
     );
   } else {
-    menuData = superAdminMenuData.map((item) =>
-      item.id === "companyList" ? { ...item, submenu: [CARVIOR_DIRECT_LINK, ...companyLinks] } : item
-    );
+    menuData = superAdminMenuData.map((item) => {
+      if (item.id === "companyList") return { ...item, submenu: [CARVIOR_DIRECT_LINK, ...companyLinks] };
+      if (item.id === "reports") return { ...item, badge: reportPendingCount };
+      return item;
+    });
   }
 
   return (
