@@ -48,6 +48,9 @@ interface IStoreItem {
   adminMemo?: string;
   carNumber: string;
   status: 'active' | 'sold' | 'hidden' | 'pending';
+  // 'personal'은 개인 직거래(정찰제, /market에 공개), 'auction'은 기존 딜러 경매
+  listingType?: 'auction' | 'personal';
+  askingPrice?: number | null;
   hidePrice?: boolean;
   registeredAt: string;
   photos?: Record<string, string[]>;
@@ -317,9 +320,22 @@ const StoreList = () => {
     },
     { title: '차량명', dataIndex: 'titleKo' },
     {
+      // 개인 직거래는 승인하면 딜러 경매가 아니라 /market(개인 매물)에 공개된다 —
+      // 승인 전에 어느 쪽인지 보이지 않으면 엉뚱한 곳에 올린다.
+      title: '구분', key: 'listingType', width: 110,
+      render: (_: any, item: IStoreItem) =>
+        item.listingType === 'personal'
+          ? <Tag color="purple">개인 직거래</Tag>
+          : <Tag color="blue">딜러 경매</Tag>,
+    },
+    {
       title: '판매가', key: 'price',
       render: (_: any, item: IStoreItem) => {
         if (item.hidePrice || item.status === 'sold') return <span className="text-gray-400 text-xs">가격 미표시</span>;
+        // 개인 직거래는 정찰가(askingPrice)가 실제로 노출되는 가격이다
+        if (item.listingType === 'personal' && item.askingPrice) {
+          return <span className="font-bold text-purple-600">{fmtKRW(item.askingPrice)} <span className="text-[10px] text-gray-400">정찰</span></span>;
+        }
         if (!item.priceKRW) return <span className="text-gray-300 text-xs">-</span>;
         return <span className="font-bold text-green-600">{fmtKRW(item.priceKRW)}</span>;
       },
