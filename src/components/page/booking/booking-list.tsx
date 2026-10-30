@@ -2219,28 +2219,36 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
               이미 취소된 예약입니다
             </span>
           ) : (
-            <Popconfirm
-              key="cancel"
-              title="이 예약을 취소할까요?"
-              description={
-                <div style={{ width: 260 }}>
-                  <p className="text-xs text-gray-500 mb-2">
-                    취소 사유를 적어주세요. 취소 로그에 관리자 아이디와 함께 남습니다.
-                  </p>
-                  <Input
-                    placeholder="예: 고객 변심, 중복 접수"
-                    value={cancelReasonInput}
-                    onChange={(e) => setCancelReasonInput(e.target.value)}
-                  />
-                </div>
-              }
-              okText="예약 취소"
-              okButtonProps={{ danger: true, loading: cancelling }}
-              cancelText="닫기"
-              onConfirm={handleAdminCancel}
-            >
-              <Button danger className="float-left">예약 취소</Button>
-            </Popconfirm>
+            // 사유 입력칸은 버튼 위에 늘 보이게 둔다 — 팝업 안에 숨겨두면
+            // 적는 자리가 있는 줄 모르고 그냥 눌러서 사유 없는 취소 로그가 쌓인다.
+            <div key="cancel" className="float-left text-left" style={{ width: 300 }}>
+              <Input
+                size="small"
+                placeholder="취소 사유 (예: 고객 변심, 중복 접수)"
+                value={cancelReasonInput}
+                onChange={(e) => setCancelReasonInput(e.target.value)}
+                className="mb-1.5"
+              />
+              <Popconfirm
+                title="이 예약을 취소할까요?"
+                description={
+                  <div style={{ width: 250 }}>
+                    <p className="text-xs text-gray-500">
+                      배정된 평가사에게 사유와 함께 앱 알림이 갑니다.
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      사유: {cancelReasonInput.trim() || "관리자 취소"}
+                    </p>
+                  </div>
+                }
+                okText="예약 취소"
+                okButtonProps={{ danger: true, loading: cancelling }}
+                cancelText="닫기"
+                onConfirm={handleAdminCancel}
+              >
+                <Button danger size="small" block>예약 취소</Button>
+              </Popconfirm>
+            </div>
           ),
           <Button key="close" onClick={() => setIsModalOpen(false)}>닫기</Button>,
           <Button key="save" type="primary" loading={isUpdating} onClick={handleUpdate}>
