@@ -1,5 +1,7 @@
 import { getDefaultLayout, IDefaultLayoutPage, IPageHeader } from "@/components/layout/default-layout";
-import RequireSuperAdmin from "@/components/shared/require-super-admin";
+import Spinner from "@/components/shared/spinner";
+import { useAuth } from "@/lib/auth/auth-provider";
+import { useRouter } from "next/router";
 import { Image, Select, Table, Tag, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
@@ -40,15 +42,30 @@ const VERDICT = {
 } as const;
 
 const CancelLogPage: IDefaultLayoutPage = () => {
+  const { session } = useAuth();
+  const router = useRouter();
+  const role = session.user.role;
+  const company = session.user.company;
+  // 발주사 계정은 자사 의뢰(source) 건만 본다. 소속이 없는 발주사 계정은 전체가 보이면
+  // 안 되므로 아예 조회하지 않는다(백엔드도 source 없이 부르면 전체를 준다).
+  const isCompanyAdmin = role === "COMPANY_ADMIN";
+  const allowed = role === "SUPER_ADMIN" || (isCompanyAdmin && !!company);
+
   const [logs, setLogs] = useState<ICancelLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [reasonFilter, setReasonFilter] = useState<string | undefined>();
   const [monthFilter, setMonthFilter] = useState<string | undefined>();
 
+  useEffect(() => {
+    if (!allowed) router.replace("/");
+  }, [allowed, router]);
+
   const fetchLogs = useCallback(async () => {
+    if (!allowed) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API}/external/request/cancel-logs`);
+      const query = isCompanyAdmin ? `?source=${encodeURIComponent(company as string)}` : "";
+      const res = await fetch(`${API}/external/request/cancel-logs${query}`);
       const data = await res.json();
       setLogs(Array.isArray(data) ? data : []);
     } catch {
@@ -56,7 +73,7 @@ const CancelLogPage: IDefaultLayoutPage = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [allowed, isCompanyAdmin, company]);
 
   useEffect(() => {
     fetchLogs();
@@ -129,7 +146,7 @@ const CancelLogPage: IDefaultLayoutPage = () => {
         return (
           <div className="flex items-center gap-1">
             <Tag color={color}>{v || "-"}</Tag>
-            {n > 1 && <span className="text-xs text-gray-400">누적 {n}회</span>}
+            {!isCompanyAdmin && n > 1 && <span className="text-xs text-gray-400">누적 {n}회</span>}
           </div>
         );
       },
@@ -178,8 +195,10 @@ const CancelLogPage: IDefaultLayoutPage = () => {
   const noshowCount = rows.filter((r) => r.cancelReason === "판매자 노쇼").length;
   const suspectCount = rows.filter((r) => r.proofVerdict === "suspect").length;
 
+  if (!allowed) return <Spinner />;
+
   return (
-    <RequireSuperAdmin>
+    <>
       <div className="p-4 bg-white rounded-lg shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <Select
@@ -220,7 +239,7 @@ const CancelLogPage: IDefaultLayoutPage = () => {
           pagination={{ pageSize: 30, showSizeChanger: false }}
         />
       </div>
-    </RequireSuperAdmin>
+    </>
   );
 };
 

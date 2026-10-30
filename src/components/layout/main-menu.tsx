@@ -173,7 +173,11 @@ const superAdminMenuData: IMenu[] = [
  * "관리자 계정 관리"에서 새 발주사 계정을 만들면 코드 배포 없이 바로 메뉴가 동작한다.
  */
 // options.registration — 등록증 보내기 기능을 쓰는 발주사(현재 애니원모터스)만 "등록증 전송 대기" 메뉴를 붙인다.
-const buildCompanyMenu = (company: string, bookingPath?: string, options?: { registration?: boolean }): IMenu[] => [
+const buildCompanyMenu = (
+  company: string,
+  bookingPath?: string,
+  options?: { registration?: boolean; cancelLogs?: boolean },
+): IMenu[] => [
   {
     id: "home",
     name: "홈",
@@ -223,6 +227,13 @@ const buildCompanyMenu = (company: string, bookingPath?: string, options?: { reg
         name: "실시간 지도 배정",
         link: { path: "/diagnosis/map" },
       },
+      // 취소 로그는 전체가 아니라 자사 의뢰(source) 건만 보인다 — 페이지가 발주사 계정이면
+      // source를 붙여서 조회한다. 쓰는 발주사에만 켠다.
+      ...(options?.cancelLogs ? [{
+        id: "companyCancelLogs",
+        name: "취소 로그",
+        link: { path: "/diagnosis/cancel-logs" },
+      }] : []),
     ],
   },
   {
@@ -239,7 +250,7 @@ const buildCompanyMenu = (company: string, bookingPath?: string, options?: { reg
  * 없으면 아래 MainMenu에서 buildCompanyMenu(company)로 동적 라우트에 자동 연결됨.
  */
 const COMPANY_MENUS: Record<string, IMenu[]> = {
-  "anyone-motors": buildCompanyMenu("anyone-motors", "/diagnosis/anyone-motors", { registration: true }),
+  "anyone-motors": buildCompanyMenu("anyone-motors", "/diagnosis/anyone-motors", { registration: true, cancelLogs: true }),
   "gwangmyeong-motors": buildCompanyMenu("gwangmyeong-motors", "/diagnosis/gwangmyeong-motors"),
 };
 
