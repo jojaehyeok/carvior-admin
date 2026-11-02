@@ -2213,48 +2213,55 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         // 내용이 길어도 창이 화면 밖으로 넘치지 않게 — 넘치는 부분만 안쪽에서 스크롤된다
         styles={{ body: { maxHeight: "calc(100vh - 220px)", overflowY: "auto" } }}
         // 왼쪽 끝에 "예약 취소"를 따로 둔다 — 저장 버튼 옆에 붙이면 잘못 누르기 쉽다.
-        footer={[
-          editingBooking?.status === "CANCELLED" ? (
-            <span key="cancelled" className="float-left text-xs font-semibold text-red-500 leading-8">
-              이미 취소된 예약입니다
-            </span>
-          ) : (
-            // 사유 입력칸은 버튼 위에 늘 보이게 둔다 — 팝업 안에 숨겨두면
-            // 적는 자리가 있는 줄 모르고 그냥 눌러서 사유 없는 취소 로그가 쌓인다.
-            <div key="cancel" className="float-left text-left" style={{ width: 300 }}>
-              <Input
-                size="small"
-                placeholder="취소 사유 (예: 고객 변심, 중복 접수)"
-                value={cancelReasonInput}
-                onChange={(e) => setCancelReasonInput(e.target.value)}
-                className="mb-1.5"
-              />
-              <Popconfirm
-                title="이 예약을 취소할까요?"
-                description={
-                  <div style={{ width: 250 }}>
-                    <p className="text-xs text-gray-500">
-                      배정된 평가사에게 사유와 함께 앱 알림이 갑니다.
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      사유: {cancelReasonInput.trim() || "관리자 취소"}
-                    </p>
-                  </div>
-                }
-                okText="예약 취소"
-                okButtonProps={{ danger: true, loading: cancelling }}
-                cancelText="닫기"
-                onConfirm={handleAdminCancel}
-              >
-                <Button danger size="small" block>예약 취소</Button>
-              </Popconfirm>
+        // float 대신 flex로 둔다. float는 부모 높이를 늘리지 않아서, 입력칸+버튼이
+        // 푸터 밖으로 흘러나가 창 아래쪽에 딱 붙어 보였다.
+        footer={
+          <div className="flex items-end justify-between gap-4 pb-1">
+            {editingBooking?.status === "CANCELLED" ? (
+              <span className="text-xs font-semibold text-red-500 leading-8">
+                이미 취소된 예약입니다
+              </span>
+            ) : (
+              // 사유 입력칸은 버튼 위에 늘 보이게 둔다 — 팝업 안에 숨겨두면
+              // 적는 자리가 있는 줄 모르고 그냥 눌러서 사유 없는 취소 로그가 쌓인다.
+              <div className="text-left" style={{ width: 300 }}>
+                <Input
+                  size="small"
+                  placeholder="취소 사유 (예: 고객 변심, 중복 접수)"
+                  value={cancelReasonInput}
+                  onChange={(e) => setCancelReasonInput(e.target.value)}
+                  className="mb-1.5"
+                />
+                <Popconfirm
+                  title="이 예약을 취소할까요?"
+                  description={
+                    <div style={{ width: 250 }}>
+                      <p className="text-xs text-gray-500">
+                        배정된 평가사에게 사유와 함께 앱 알림이 갑니다.
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        사유: {cancelReasonInput.trim() || "관리자 취소"}
+                      </p>
+                    </div>
+                  }
+                  okText="예약 취소"
+                  okButtonProps={{ danger: true, loading: cancelling }}
+                  cancelText="닫기"
+                  onConfirm={handleAdminCancel}
+                >
+                  <Button danger size="small" block>예약 취소</Button>
+                </Popconfirm>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <Button onClick={() => setIsModalOpen(false)}>닫기</Button>
+              <Button type="primary" loading={isUpdating} onClick={handleUpdate}>
+                변경사항 저장
+              </Button>
             </div>
-          ),
-          <Button key="close" onClick={() => setIsModalOpen(false)}>닫기</Button>,
-          <Button key="save" type="primary" loading={isUpdating} onClick={handleUpdate}>
-            변경사항 저장
-          </Button>,
-        ]}
+          </div>
+        }
       >
         {/* 세로로 길어 스크롤을 계속 올렸다 내렸다 해야 해서 두 칸으로 나눴다.
             왼쪽은 "지금 이 건을 어떻게 처리할지"(주소·차량·상태·배정),
