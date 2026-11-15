@@ -584,6 +584,9 @@ const StoreRegisterPageInner = () => {
         </div>
       </div>
 
+      {/* 폼이 좌우 두 칸을 다 감싼다 — 옵션 칩은 가로로 넓어서 오른쪽 좁은 칸에
+          두면 글자가 한 줄에 두세 개씩밖에 안 들어간다 */}
+      <Form form={form} layout="vertical" size="middle">
       <div className="flex gap-6 items-start">
         {/* ── 왼쪽: 사진 편집 ── */}
         <div className="w-[55%] flex flex-col gap-4">
@@ -654,6 +657,14 @@ const StoreRegisterPageInner = () => {
             />
           </div>
 
+          {/* 옵션 — 사진 바로 아래. 여기서 고른 것이 매물 상세 "옵션정보"에 그대로 나간다 */}
+          <div className="bg-white rounded-xl border border-gray-100 p-4">
+            <p className="text-xs font-bold text-gray-500 mb-3">⚙️ 옵션</p>
+            <Form.Item name="options" noStyle>
+              <OptionPicker />
+            </Form.Item>
+          </div>
+
           {/* 진단 메모 */}
           {inspection?.evaluation && (
             <div className="bg-gray-50 rounded-xl border border-gray-100 p-4 grid grid-cols-2 gap-3">
@@ -696,7 +707,7 @@ const StoreRegisterPageInner = () => {
             )}
           </div>
 
-          <Form form={form} layout="vertical" size="middle">
+          <div>
             <div className="grid grid-cols-2 gap-x-4">
               <Form.Item label="차량명 (한국어)" name="titleKo" rules={[{ required: true }]} className="col-span-2">
                 <Input placeholder="예: 기아 더 뉴 쏘렌토" />
@@ -738,10 +749,6 @@ const StoreRegisterPageInner = () => {
                   formatter={v => v ? `${Number(v).toLocaleString()}` : ''}
                 />
               </Form.Item>
-              {/* 매물 상세의 "옵션정보" 탭에 그대로 나간다 — 안 고르면 그 탭이 빈 채로 뜬다 */}
-              <Form.Item label="옵션" name="options" className="col-span-2">
-                <OptionPicker />
-              </Form.Item>
               <Form.Item label="어드민 메모" name="adminMemo" className="col-span-2">
                 <Input.TextArea rows={2} placeholder="내부 참고 메모 (외부 미노출)" />
               </Form.Item>
@@ -770,9 +777,10 @@ const StoreRegisterPageInner = () => {
                 {isEditMode ? '수정 저장' : '스토어에 등록하기'}
               </Button>
             </div>
-          </Form>
+          </div>
         </div>
       </div>
+      </Form>
 
       {/* ── 라이트박스 ── */}
       {lightbox && (
