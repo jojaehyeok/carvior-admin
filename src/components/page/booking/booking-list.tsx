@@ -1,6 +1,7 @@
 'use client';
 
 import DefaultTable from "@/components/shared/ui/default-table";
+import ListingReference, { IListingData } from './listing-reference';
 import DefaultTableBtn from "@/components/shared/ui/default-table-btn";
 import { ISO8601DateTime } from "@/types/common";
 import { Alert, Button, Calendar, Checkbox, DatePicker, Image, Input, InputNumber, Modal, Popconfirm, Popover, Segmented, Select, Spin, Switch, Tag, Tooltip, message } from "antd";
@@ -109,6 +110,8 @@ interface IBooking {
   dealerName: string;
   dealerContact?: string | null;
   listingUrl?: string | null;
+  // 접수 때 매물 링크에서 받아둔 기록부·진단 (ListingReference가 그린다)
+  listingData?: IListingData | null;
   contact: string;
   address: string;
   preferredDateTime: string;
@@ -2595,6 +2598,19 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
               </div>
             )}
           </div>
+
+          {/* 매물 참고자료 — 배정을 정하는 자리 바로 아래에 둔다.
+              어떤 차인지(교환 이력·침수 등)를 보고 누구를 보낼지 판단하게 된다. */}
+          {editingBooking && (
+            <ListingReference
+              bookingId={editingBooking.id}
+              listingUrl={editingBooking.listingUrl}
+              data={editingBooking.listingData}
+              onRefreshed={next =>
+                setEditingBooking(prev => (prev ? { ...prev, listingData: next } : prev))
+              }
+            />
+          )}
 
           </div>
 
