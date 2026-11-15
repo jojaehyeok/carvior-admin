@@ -78,6 +78,18 @@ interface IDriver {
   canHandleOutsourced?: boolean;
 }
 
+// 예약 주소 기준 가까운 진단사 후보 — GET /external/request/:id/nearby-drivers
+interface INearbyDriver {
+  id: number;
+  name: string;
+  phone?: string;
+  tier?: 'general' | 'certified' | 'agent';
+  km: number | null;
+  isActive: boolean;
+  locationFresh: boolean;
+  regionMatch: boolean;
+}
+
 // 등급별 기본 진단비(원) — 진단사 정산(앱 정산내역)의 기준 금액
 const BASE_FEE_BY_TIER: Record<string, number> = { general: 50000, certified: 60000, agent: 65000 };
 
@@ -269,6 +281,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
   const [tempContact, setTempContact] = useState("");
   const [tempAddress, setTempAddress] = useState("");
   const [selectedDriver, setSelectedDriver] = useState<{ id: string, name: string } | null>(null);
+  // 상세 모달에서 "가까운 진단사" 칩으로 보여줄 후보 (예약 주소 기준 거리순)
+  const [nearbyDrivers, setNearbyDrivers] = useState<INearbyDriver[]>([]);
+  const [loadingNearby, setLoadingNearby] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [broadcasting, setBroadcasting] = useState(false);
   const [confirmingDeposit, setConfirmingDeposit] = useState(false);
@@ -634,7 +649,9 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setRequestCategory(undefined);
     setRequestMessage("");
     // 기본값: 원래 배정된 진단사. 필요하면 매니저 등 다른 대상으로 바꿀 수 있음
-    const assigned = drivers.find(d => d.accountId === record.assignedDriverId);
+    // assignedDriverId에는 drivers.id가 문자열로 들어간다(accountId 아님) — 여기서
+    // accountId와 비교하고 있어서 기본 수신자가 한 번도 안 잡혔다.
+    const assigned = drivers.find(d => String(d.id) === String(record.assignedDriverId));
     setRequestRecipientId(assigned?.id);
   };
 
@@ -692,7 +709,15 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     setIsEditingAddress(false);
     setPlaceQuery("");
     setShowPlaceResults(false);
-    setSelectedDriver(record.assignedDriverId ? { id: record.assignedDriverId, name: record.assignedDriverName || "" } : null);
+    setSelectedDriver(record.assignedDriverId ? { id: String(record.assignedDriverId), name: record.assignedDriverName || "" } : null);
+    // 가까운 진단사 후보 — 주소 기준이라 예약마다 다르다. 모달을 열 때 그 건으로 다시 받는다.
+    setNearbyDrivers([]);
+    setLoadingNearby(true);
+    fetch(`${API_BASE}/external/request/${record.id}/nearby-drivers`)
+      .then(r => (r.ok ? r.json() : []))
+      .then(list => setNearbyDrivers(Array.isArray(list) ? list : []))
+      .catch(() => setNearbyDrivers([]))
+      .finally(() => setLoadingNearby(false));
     setTempContractWriter(record.contractWriter || "");
     setTempVehicleTransferred(record.vehicleTransferred ?? false);
     setTempContractConfirmed(record.contractConfirmed ?? false);
@@ -2449,12 +2474,20 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           <div>
             <label className="block text-xs font-bold text-gray-400 mb-1">진단사 배정</label>
             <div className="flex gap-2">
+              {/* value는 문자열, options의 value도 문자열로 맞춘다.
+                  숫자 value에 문자열 value를 물리면 antd가 짝을 못 찾아서 이름 대신
+                  숫자(진단사 id)를 그대로 그렸다 — 그게 "고르면 숫자로 나오던" 증상이다. */}
               <Select
                 className="flex-1"
-                placeholder="진단사 선택"
+                placeholder="이름으로 검색하거나 아래 가까운 진단사에서 고르세요"
                 value={selectedDriver?.id}
                 onChange={(val, opt: any) => setSelectedDriver({ id: String(val), name: opt.label })}
-                options={drivers.map(d => ({ value: d.id, label: d.name }))}
+                options={drivers.map(d => ({ value: String(d.id), label: d.name }))}
+                showSearch
+                optionFilterProp="label"
+                filterOption={(input, option) =>
+                  String(option?.label ?? "").toLowerCase().includes(input.toLowerCase())
+                }
                 allowClear
                 onClear={() => setSelectedDriver(null)}
               />
@@ -2470,6 +2503,47 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 </Button>
               )}
             </div>
+
+            {/* 가까운 진단사 칩 — 누르면 위 선택칸에 담기고, "변경사항 저장"으로 확정된다.
+                한 번 클릭에 바로 배정하지 않는 건, 잘못 눌러도 되돌릴 수 있게 하려는 것이다
+                (배정되는 순간 그 진단사 폰으로 알림이 간다). */}
+            {(loadingNearby || nearbyDrivers.length > 0) && (
+              <div className="mt-2">
+                <p className="text-xs text-gray-400 mb-1">
+                  가까운 진단사 {loadingNearby && <span className="text-gray-300">불러오는 중…</span>}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {nearbyDrivers.map(d => {
+                    const picked = String(d.id) === selectedDriver?.id;
+                    return (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => setSelectedDriver({ id: String(d.id), name: d.name })}
+                        title={[
+                          d.phone,
+                          d.isActive ? "활동중" : "비활동",
+                          d.locationFresh ? "위치 최신" : "위치 오래됨",
+                          d.regionMatch ? "담당지역" : "담당지역 아님",
+                        ].filter(Boolean).join(" · ")}
+                        className={[
+                          "px-2.5 py-1 rounded-full border text-xs transition-colors",
+                          picked
+                            ? "border-blue-500 bg-blue-50 text-blue-600 font-semibold"
+                            : "border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50/40",
+                        ].join(" ")}
+                      >
+                        {/* 활동중이 아니면 바로 옆에 있어도 당장 못 갈 수 있다 — 점으로 구분해둔다 */}
+                        <span className={d.isActive && d.locationFresh ? "text-green-500" : "text-gray-300"}>●</span>{" "}
+                        {d.name}
+                        {d.km != null && <span className="text-gray-400"> {d.km}km</span>}
+                        {d.regionMatch && <span className="text-gray-300"> · 담당</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {editingBooking?.cancelledByDriverAt && (
               <p className="text-xs text-orange-500 mt-1">
                 🔄 진단사 취소로 재대기 중 ({dayjs(editingBooking.cancelledByDriverAt).format('MM/DD HH:mm')})
