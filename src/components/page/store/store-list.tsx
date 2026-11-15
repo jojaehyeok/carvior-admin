@@ -9,6 +9,7 @@ import { Edit, Eye, Gavel, RefreshCw, Trash2 } from "lucide-react";
 import { useRouter } from "next/router";
 import React, { useCallback, useEffect, useState } from "react";
 import BidStatusModal from "./bid-status-modal";
+import OptionPicker from './option-picker';
 
 const CAVIOR_BASE = (process.env.NEXT_PUBLIC_API_ENDPOINT || 'https://carvior.store/api/v1').replace('/api/v1', '');
 const INTERNAL_KEY = process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? '';
@@ -46,6 +47,7 @@ interface IStoreItem {
   category?: string;
   region?: string;
   adminMemo?: string;
+  options?: string[];
   carNumber: string;
   status: 'active' | 'sold' | 'hidden' | 'pending';
   // 'personal'은 개인 직거래(정찰제, /market에 공개), 'auction'은 기존 딜러 경매
@@ -166,6 +168,7 @@ const StoreList = () => {
       priceKRW:     item.priceKRW,
       accident:     item.accident,
       adminMemo:    item.adminMemo,
+      options:      item.options ?? [],
       status:       item.status,
       hidePrice:    item.hidePrice ?? false,
     });
@@ -468,6 +471,10 @@ const StoreList = () => {
           placeholder="예: 36900000"
           formatter={v => v ? `${Number(v).toLocaleString()}` : ''}
         />
+      </Form.Item>
+      {/* 매물 상세의 "옵션정보" 탭에 그대로 나간다 — 안 고르면 그 탭이 빈 채로 뜬다 */}
+      <Form.Item label="옵션" name="options" className="col-span-2">
+        <OptionPicker />
       </Form.Item>
       <Form.Item label="어드민 메모" name="adminMemo" className="col-span-2">
         <Input.TextArea rows={2} placeholder="내부 참고 메모 (외부 미노출)" />
