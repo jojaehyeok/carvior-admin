@@ -7,6 +7,7 @@ import { useRouter } from "next/router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DamageEditorModal from "@/components/page/store/damage-editor";
 import ManualBlurEditorModal from "@/components/page/store/manual-blur-editor";
+import OptionPicker from '@/components/page/store/option-picker';
 
 const CAVIOR_BASE = (process.env.NEXT_PUBLIC_API_ENDPOINT || 'https://carvior.store/api/v1').replace('/api/v1', '');
 const INTERNAL_KEY = process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? '';
@@ -236,6 +237,7 @@ const StoreRegisterPageInner = () => {
           region:       item.region ?? '',
           priceKRW:     item.priceKRW,
           adminMemo:    item.adminMemo ?? '',
+          options:      item.options ?? [],
           maker:        item.maker ?? '',
           accident:     item.accident ?? false,
           status:       item.status,
@@ -735,6 +737,10 @@ const StoreRegisterPageInner = () => {
                   placeholder="예: 36900000"
                   formatter={v => v ? `${Number(v).toLocaleString()}` : ''}
                 />
+              </Form.Item>
+              {/* 매물 상세의 "옵션정보" 탭에 그대로 나간다 — 안 고르면 그 탭이 빈 채로 뜬다 */}
+              <Form.Item label="옵션" name="options" className="col-span-2">
+                <OptionPicker />
               </Form.Item>
               <Form.Item label="어드민 메모" name="adminMemo" className="col-span-2">
                 <Input.TextArea rows={2} placeholder="내부 참고 메모 (외부 미노출)" />
