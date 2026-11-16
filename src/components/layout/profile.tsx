@@ -1,4 +1,5 @@
 import { useAuth } from "@/lib/auth/auth-provider";
+import { clearApiTokenCache } from "@/lib/apiAuth";
 import { Dropdown, MenuProps } from "antd";
 import { ChevronDown, LogOut, User } from "lucide-react";
 import { signOut } from "next-auth/react";
@@ -9,6 +10,9 @@ const Profile = () => {
   const { session } = useAuth();
 
   const handleLogoutClick = useCallback(async () => {
+    // 백엔드 토큰 캐시를 비운다 — 다른 계정으로 바로 다시 로그인하면 앞 계정 토큰이
+    // 캐시 수명(1분)만큼 남아서 그 권한으로 요청이 나갈 수 있다.
+    clearApiTokenCache();
     // 앱 내부 경로는 "/login"이지만 실제로는 carvior.store/admin/* 경로로 프록시되고 있어서
     // 절대경로("/login")로 리다이렉트하면 프록시 프리픽스가 빠진 carvior.store/login으로 가버린다.
     signOut({ callbackUrl: "https://carvior.store/admin/login" });

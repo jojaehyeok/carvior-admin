@@ -19,6 +19,15 @@ declare module "next-auth" {
       canConfirmBilling: boolean;
       // 매입팀 전용 화면(진단 목록 컬럼 축소) 여부 — users.isPurchaseTeam
       isPurchaseTeam: boolean;
+      /**
+       * carvior-back이 로그인할 때 발급한 JWT. 백엔드의 관리자 전용 엔드포인트
+       * (AdminGuard)에 Authorization: Bearer로 보낸다 — NextAuth 세션 토큰은
+       * 대시보드 시크릿으로 서명돼서 백엔드가 검증할 수 없다.
+       *
+       * 하드코딩 슈퍼관리자(admin 계정)로 로그인하면 백엔드를 거치지 않아서 null이다.
+       * 그 경우 관리자 전용 엔드포인트를 쓸 수 없다 — DB 계정으로 로그인해야 한다.
+       */
+      apiToken: string | null;
     } & DefaultSession["user"];
   }
 }

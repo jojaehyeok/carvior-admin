@@ -18,6 +18,38 @@ const ADMIN_ACCOUNTS: Record<string, { password: string; name: string; role: str
   },
 };
 
+/**
+ * 하드코딩 슈퍼관리자용 백엔드 토큰.
+ *
+ * carvior-back의 관리자 전용 엔드포인트(AdminGuard)는 "DB의 users 레코드 + role=admin"으로
+ * 신원을 확인한다. 하드코딩 계정에는 그 레코드가 없어서 로그인 응답에 토큰이 없다.
+ *
+ * 그래서 비밀번호 없이 토큰만 받아오는 내부 경로(POST /users/issue-token, InternalKeyGuard)로
+ * 대신 받아 온다. 어느 계정으로 받을지는 env로 정한다 — 코드에 이메일을 박으면
+ * 계정을 바꿀 때 배포가 필요하다.
+ *
+ * ⚠ 둘 중 하나라도 env에 없으면 null이다. 그 상태에서 ADMIN_API_STRICT를 켜면
+ * 하드코딩 계정으로 로그인한 사람은 진단 목록 같은 화면이 막힌다 —
+ * 켜기 전에 DASHBOARD_SUPER_ADMIN_EMAIL / CARVIOR_INTERNAL_KEY를 먼저 채울 것.
+ */
+async function fetchSuperAdminToken(): Promise<string | null> {
+  const email = process.env.DASHBOARD_SUPER_ADMIN_EMAIL;
+  const internalKey = process.env.CARVIOR_INTERNAL_KEY;
+  if (!email || !internalKey) return null;
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_ENDPOINT}/users/issue-token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-internal-key": internalKey },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    return typeof body?.token === "string" && body.token ? body.token : null;
+  } catch {
+    return null;
+  }
+}
+
 const credentialsProviderOption: CredentialsConfig<{}> = {
   type: "credentials",
   id: "login-credentials",
@@ -43,6 +75,11 @@ const credentialsProviderOption: CredentialsConfig<{}> = {
         role: account.role,
         company: account.company,
         logoUrl: null,
+        // 이 계정은 백엔드를 거치지 않으므로 로그인 응답에서 토큰을 받을 수 없다.
+        // carvior-back의 내부 발급 경로로 따로 받아 온다(이 코드는 서버에서만 돌아서
+        // 내부키를 들고 있어도 안전하다). 받을 수 없으면 null이고, 그 상태로는
+        // 관리자 전용 엔드포인트를 쓸 수 없다 — DB 계정으로 로그인해야 한다.
+        apiToken: await fetchSuperAdminToken(),
       };
     }
 
@@ -71,6 +108,11 @@ const credentialsProviderOption: CredentialsConfig<{}> = {
         logoUrl: user.logoUrl ?? null,
         canConfirmBilling: !!user.canConfirmBilling,
         isPurchaseTeam: !!user.isPurchaseTeam,
+        // 백엔드가 로그인 응답에 같이 주는 JWT(users.service.ts의 issueToken).
+        // 지금까지는 버리고 있었는데, carvior-back의 관리자 전용 엔드포인트(AdminGuard)가
+        // 이걸로 신원을 확인한다. NextAuth 세션 토큰은 대시보드 자기 시크릿으로 서명돼서
+        // 백엔드가 검증할 수 없으므로, 백엔드 토큰을 따로 들고 있어야 한다.
+        apiToken: typeof user.token === 'string' ? user.token : null,
       };
     } catch {
       return null;
@@ -120,6 +162,7 @@ export default NextAuth({
         token.logoUrl = (user as any).logoUrl ?? null;
         token.canConfirmBilling = !!(user as any).canConfirmBilling;
         token.isPurchaseTeam = !!(user as any).isPurchaseTeam;
+        token.apiToken = (user as any).apiToken ?? null;
       }
       return token;
     },
@@ -133,6 +176,7 @@ export default NextAuth({
         logoUrl: (token.logoUrl as string | null) ?? null,
         canConfirmBilling: !!token.canConfirmBilling,
         isPurchaseTeam: !!token.isPurchaseTeam,
+        apiToken: (token.apiToken as string | null) ?? null,
       };
       return session;
     },

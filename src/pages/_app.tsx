@@ -2,6 +2,7 @@ import { fetcher } from "@/client/base";
 import { IDefaultLayoutPage } from "@/components/layout/default-layout";
 import SeoHead from "@/components/layout/seo-head";
 import AuthProvider from "@/lib/auth/auth-provider";
+import { installApiAuth } from "@/lib/apiAuth";
 import "@/styles/globals.css";
 import { ConfigProvider } from "antd";
 import koKR from "antd/locale/ko_KR";
@@ -17,6 +18,10 @@ const pretendard = localFont({
   weight: "45 920",
   variable: "--font-pretendard",
 });
+
+// 어떤 화면의 fetch보다 먼저 걸어야 한다 — 컴포넌트 안에서 걸면 첫 요청이 토큰 없이 나간다.
+// 서버 렌더 중에는 내부에서 알아서 아무 일도 하지 않는다(window가 없다).
+installApiAuth();
 
 export default function App({ Component, pageProps: { session, ...pageProps } }: AppProps) {
   const getLayout =
