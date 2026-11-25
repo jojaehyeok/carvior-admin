@@ -550,8 +550,26 @@ const ReportEditPage: IDefaultLayoutPage = () => {
           open
           imageUrl={blurTarget.url}
           onClose={() => setBlurTarget(null)}
-          onApplied={(newUrl: string) => {
+          onApplied={async (newUrl: string) => {
             const { cat, idx } = blurTarget;
+            // ⚠ 아래 "저장"(report-fields)은 완료 후 일정 시간이 지나면 잠긴다
+            // ("수정 가능 시간 지남"). 번호판 블러는 그 잠금을 안 받는 전용 경로가
+            // 따로 있다 — blur-fix. 내용 조작이 아니라 개인정보 보정이라서다.
+            // 그래서 저장 버튼에 기대지 않고 여기서 바로 반영한다.
+            try {
+              const res = await fetch(`${CAVIOR_BASE}/api/v1/external/inspection/${bookingId}/blur-fix`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', ...INTERNAL_HEADERS },
+                body: JSON.stringify({ category: cat, index: idx, newUrl }),
+              });
+              if (!res.ok) {
+                const err = await res.json().catch(() => null);
+                throw new Error(err?.message ?? `서버 응답 ${res.status}`);
+              }
+            } catch (e) {
+              message.error(`블러는 됐지만 리포트 반영에 실패했습니다 — ${(e as Error).message}`);
+              return;
+            }
             setPhotoOrder(prev => {
               const arr = [...(prev[cat] ?? [])];
               if (!arr[idx]) return prev;
@@ -559,7 +577,7 @@ const ReportEditPage: IDefaultLayoutPage = () => {
               return { ...prev, [cat]: arr };
             });
             setBlurTarget(null);
-            message.success('블러를 적용했습니다. 아래 "저장"을 눌러야 리포트에 반영됩니다.');
+            message.success('블러를 적용하고 리포트에 바로 반영했습니다. 따로 저장하지 않으셔도 됩니다.');
           }}
         />
       )}
