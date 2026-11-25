@@ -830,17 +830,44 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
     }
   };
 
+  // 자체접수(source가 "self-")는 "외주 처리 가능"으로 지정된 평가사만 앱에서 볼 수 있다 —
+  // 백엔드 findAll()이 self- 건을 목록 응답에서 걸러내고(source 파라미터 없이 부를 때),
+  // 앱은 canHandleOutsourced인 평가사만 includeSelf=true로 요청한다.
+  // 지정 안 된 평가사에게 배정하면 DB에는 정상 저장되고 이 화면에도 "배정됨"으로 보이지만
+  // 그 평가사 앱에는 아무것도 뜨지 않는다 — 배정된 줄 알고 진단일이 지나도록 방치된다
+  // (2026-11, self-anyone-motors 수동배정 4건이 전부 이렇게 미확인으로 멈춰 있었다).
+  // 그래서 "조용히 저장되는" 길을 막는다.
+  const isSelfSource = (src?: string | null) => !!src?.startsWith('self-');
+  const driverById = (driverId?: string | null) =>
+    drivers.find(d => String(d.id) === String(driverId));
+  const canHandleSelf = (driverId?: string | null) => !!driverById(driverId)?.canHandleOutsourced;
+  const outsourcedDrivers = useMemo(() => drivers.filter(d => d.canHandleOutsourced), [drivers]);
+
   // --- 💾 저장 로직 ---
   const handleUpdate = async () => {
     if (!editingBooking) return;
+
+    // 배정 초기화: selectedDriver가 null이고 기존에 배정돼 있었으면 PENDING 복원
+    const wasAssigned = !!editingBooking.assignedDriverId;
+    const isUnassigning = wasAssigned && !selectedDriver;
+    // 담당자가 실제로 바뀌는 경우에만 배정 요청을 보낸다
+    const willAssign = !!selectedDriver && selectedDriver.id !== editingBooking.assignedDriverId;
+
+    // 자체접수 건을 "외주 처리 불가" 평가사에게 넘기려는 경우 — 저장 전에 막는다.
+    // 아무것도 보내지 않고 돌아간다(상태·메모만 반쪽 저장되면 더 헷갈린다).
+    // 이미 배정된 건의 메모만 고치는 경우는 막지 않는다(willAssign으로 구분).
+    if (willAssign && isSelfSource(editingBooking.source) && !canHandleSelf(selectedDriver!.id)) {
+      message.error({
+        content: `${selectedDriver!.name} 평가사는 "외주 처리 가능" 지정이 안 돼 있어서 이 자체접수 건이 앱에 보이지 않습니다. 위 출처에서 "정상접수로 전환"하거나, 슈퍼관리자가 진단사 계정 관리에서 먼저 지정해 주세요.`,
+        duration: 8,
+      });
+      return;
+    }
+
     setIsUpdating(true);
     try {
       // 상태 + 메모 + 오더 기록 통합 저장
-      // 배정 초기화: selectedDriver가 null이고 기존에 배정돼 있었으면 PENDING 복원
-      const wasAssigned = !!editingBooking.assignedDriverId;
-      const isUnassigning = wasAssigned && !selectedDriver;
-
-      await fetch(`${API_BASE}/external/request/${editingBooking.id}/status`, {
+      const statusRes = await fetch(`${API_BASE}/external/request/${editingBooking.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -877,19 +904,34 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         })
       });
 
-      if (selectedDriver && selectedDriver.id !== editingBooking.assignedDriverId) {
-        await fetch(`${API_BASE}/external/request/${editingBooking.id}/assign`, {
+      // 응답을 확인하지 않으면 403·500이 나도 아래 성공 토스트가 그대로 떴다 —
+      // "저장했다는데 안 바뀌어 있다"가 되는 자리라 반드시 확인한다.
+      if (!statusRes.ok) throw new Error(`서버 응답 ${statusRes.status}`);
+
+      if (willAssign) {
+        const assignRes = await fetch(`${API_BASE}/external/request/${editingBooking.id}/assign`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: selectedDriver.id, name: selectedDriver.name })
+          body: JSON.stringify({ id: selectedDriver!.id, name: selectedDriver!.name })
         });
+        // 다른 수정은 이미 저장된 상태다 — 배정만 실패했다는 걸 분명히 알려야
+        // 관리자가 "배정은 됐겠지" 하고 넘어가지 않는다.
+        if (!assignRes.ok) {
+          const reason = await assignRes.json().catch(() => null);
+          message.error({
+            content: `다른 수정은 저장됐지만 진단사 배정에 실패했습니다 — ${reason?.message || `서버 응답 ${assignRes.status}`}`,
+            duration: 8,
+          });
+          fetchBookings();
+          return;
+        }
       }
 
       message.success("성공적으로 변경되었습니다.");
       setIsModalOpen(false);
       fetchBookings();
     } catch (e) {
-      message.error("저장 중 오류 발생");
+      message.error(`저장에 실패했습니다 — ${(e as Error).message}. 변경사항이 반영되지 않았습니다.`);
     } finally {
       setIsUpdating(false);
     }
@@ -1452,6 +1494,15 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
       render: (value: string, record: IBooking) => {
         const assignedDriver = drivers.find(d => String(d.id) === String(record.assignedDriverId));
         const phone = assignedDriver?.phone;
+        // 자체접수 건인데 담당 평가사가 "외주 처리 가능"이 아니면 그 평가사 앱에 이 건이
+        // 아예 안 뜬다 — 배정은 저장돼 있으니 여기선 멀쩡해 보인다. 게다가 아래에서
+        // 수동배정은 driverSeenAt을 보지 않고 무조건 "✅ 확인"으로 그리기 때문에, 그
+        // 초록 태그가 이 상태를 덮어 가려버린다(그래서 2주 넘게 방치된 건이 있었다).
+        // 그 경우엔 초록 태그를 걷어내고 경고를 띄운다.
+        const appInvisible =
+          !!record.assignedDriverId &&
+          isSelfSource(record.source) &&
+          !assignedDriver?.canHandleOutsourced;
         return (
           <div className="flex flex-col items-center gap-1">
             {value
@@ -1496,7 +1547,12 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 전화로 직접 확인시킨 경우) 태그를 클릭하면 수동으로 확인 처리할 수 있다(다시
                 클릭하면 되돌림) — driverSeenAt은 "앱에서 열었다"뿐 아니라 "어떤 식으로든
                 확인됐다"는 의미로 확장해서 씀. */}
-            {value && record.status === 'ASSIGNED' && (
+            {appInvisible && record.status === 'ASSIGNED' && (
+              <Tooltip title="자체접수(외주) 건은 '외주 처리 가능'으로 지정된 평가사만 앱에서 볼 수 있습니다. 이 평가사 앱에는 이 건이 뜨지 않아 진단이 진행되지 않습니다 — 상세에서 '정상접수로 전환'하거나, 이 평가사를 외주 처리 가능으로 지정해 주세요.">
+                <Tag color="red" className="text-xs cursor-help">⚠ 평가사 앱에 안 보임</Tag>
+              </Tooltip>
+            )}
+            {value && record.status === 'ASSIGNED' && !appInvisible && (
               record.assignSource === 'manual' || record.assignSource === 'self'
                 ? <Tag color="green" className="text-xs">✅ 확인 {record.assignedAt ? dayjs(record.assignedAt).format('MM/DD HH:mm') : ''}</Tag>
                 : record.driverSeenAt
@@ -2476,6 +2532,21 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
           {/* 진단사 배정 */}
           <div>
             <label className="block text-xs font-bold text-gray-400 mb-1">진단사 배정</label>
+            {/* 자체접수 건은 외주 지정된 평가사만 앱에서 볼 수 있다 — 저장할 때 막히기 전에
+                왜 못 고르는지부터 보여준다. 지정된 사람이 아무도 없으면 그것도 알려준다. */}
+            {isSelfSource(editingBooking?.source) && (
+              <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-800">
+                <b>자체접수(외주) 건입니다.</b> &ldquo;외주 처리 가능&rdquo;으로 지정된 평가사만 앱에서 이 건을 볼 수 있어서,
+                나머지 평가사는 아래에서 고를 수 없게 해두었습니다. 지정 안 된 평가사에게 배정하면 이 화면에는
+                배정된 것으로 보이지만 그 평가사 앱에는 아무것도 뜨지 않습니다.
+                {outsourcedDrivers.length === 0 ? (
+                  <> {" "}지금 지정된 평가사가 <b>한 명도 없습니다</b> — 위 출처의 &ldquo;정상접수로 전환&rdquo;을 쓰거나,
+                  슈퍼관리자가 진단사 계정 관리에서 먼저 지정해 주세요.</>
+                ) : (
+                  <> {" "}지정된 평가사: <b>{outsourcedDrivers.map(d => d.name).join(", ")}</b></>
+                )}
+              </div>
+            )}
             <div className="flex gap-2">
               {/* value는 문자열, options의 value도 문자열로 맞춘다.
                   숫자 value에 문자열 value를 물리면 antd가 짝을 못 찾아서 이름 대신
@@ -2484,8 +2555,19 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 className="flex-1"
                 placeholder="이름으로 검색하거나 아래 가까운 진단사에서 고르세요"
                 value={selectedDriver?.id}
-                onChange={(val, opt: any) => setSelectedDriver({ id: String(val), name: opt.label })}
-                options={drivers.map(d => ({ value: String(d.id), label: d.name }))}
+                onChange={(val, opt: any) =>
+                  setSelectedDriver({
+                    id: String(val),
+                    name: driverById(String(val))?.name ?? String(opt?.label ?? ""),
+                  })
+                }
+                options={drivers.map(d => ({
+                  value: String(d.id),
+                  label: isSelfSource(editingBooking?.source) && !d.canHandleOutsourced
+                    ? `${d.name} (외주 불가 — 앱에 안 보임)`
+                    : d.name,
+                  disabled: isSelfSource(editingBooking?.source) && !d.canHandleOutsourced,
+                }))}
                 showSearch
                 optionFilterProp="label"
                 filterOption={(input, option) =>
@@ -2518,20 +2600,26 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
                 <div className="flex flex-wrap gap-1.5">
                   {nearbyDrivers.map(d => {
                     const picked = String(d.id) === selectedDriver?.id;
+                    // 자체접수 건에 외주 미지정 평가사 — 칩으로도 담을 수 없게
+                    const blocked = isSelfSource(editingBooking?.source) && !canHandleSelf(String(d.id));
                     return (
                       <button
                         key={d.id}
                         type="button"
+                        disabled={blocked}
                         onClick={() => setSelectedDriver({ id: String(d.id), name: d.name })}
                         title={[
                           d.phone,
                           d.isActive ? "활동중" : "비활동",
                           d.locationFresh ? "위치 최신" : "위치 오래됨",
                           d.regionMatch ? "담당지역" : "담당지역 아님",
+                          blocked ? "외주 처리 미지정 — 자체접수 건이 앱에 안 보임" : null,
                         ].filter(Boolean).join(" · ")}
                         className={[
                           "px-2.5 py-1 rounded-full border text-xs transition-colors",
-                          picked
+                          blocked
+                            ? "border-gray-100 bg-gray-50 text-gray-300 line-through cursor-not-allowed"
+                            : picked
                             ? "border-blue-500 bg-blue-50 text-blue-600 font-semibold"
                             : "border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50/40",
                         ].join(" ")}
