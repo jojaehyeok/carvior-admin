@@ -5,6 +5,7 @@ import { Button, Input, message, Spin, Tag } from "antd";
 import { useRouter } from "next/router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import DamageEditorModal from "@/components/page/store/damage-editor";
+import ManualBlurEditorModal from "@/components/page/store/manual-blur-editor";
 
 const CAVIOR_BASE = (process.env.NEXT_PUBLIC_API_ENDPOINT || 'https://carvior.store/api/v1').replace('/api/v1', '');
 const INTERNAL_KEY = process.env.NEXT_PUBLIC_STORE_ITEMS_INTERNAL_KEY ?? '';
@@ -53,11 +54,15 @@ interface PhotoSectionProps {
   onRemove: (cat: string, idx: number) => void;
   onLightbox: (photos: string[], idx: number) => void;
   onOpenDamageEditor: () => void;
+  // 번호판 수동 블러 — 자동 감지(YOLO)가 자주 놓친다. 특히 뒷 번호판과
+  // 뒤에 주차된 남의 차 번호판은 거의 못 잡는다. 사람이 직접 칠할 수 있어야 한다.
+  onBlurPhoto: (cat: string, idx: number, url: string) => void;
 }
 
 const PhotoSection = React.memo(function PhotoSection({
   photoOrder, regImage, vinImage, dashboardImage, addingPhoto, replacingSingle,
   onAddPhotos, onReplaceSingle, onMovePhoto, onRemove, onLightbox, onOpenDamageEditor,
+  onBlurPhoto,
 }: PhotoSectionProps) {
   const singleInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const dragSrc = useRef<{ cat: string; idx: number } | null>(null);
@@ -181,6 +186,12 @@ const PhotoSection = React.memo(function PhotoSection({
                           onClick={e => { e.stopPropagation(); onRemove(cat, i); }}
                           className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[10px] font-bold flex items-center justify-center hover:bg-red-600 transition-colors leading-none"
                         >×</button>
+                        {/* 번호판 수동 블러 — 끌어서 영역을 칠하면 그 자리를 가린다 */}
+                        <button
+                          title="번호판 가리기"
+                          onClick={e => { e.stopPropagation(); onBlurPhoto(cat, i, url); }}
+                          className="absolute bottom-1 right-1 px-1.5 h-5 rounded-full bg-black/60 text-white text-[9px] font-bold flex items-center justify-center hover:bg-violet-600 transition-colors leading-none"
+                        >블러</button>
                       </div>
                     ))}
                   </div>
@@ -216,6 +227,10 @@ const ReportEditPage: IDefaultLayoutPage = () => {
 
   const [lightbox, setLightbox] = useState<Lightbox | null>(null);
   const [damageEditorOpen, setDamageEditorOpen] = useState(false);
+  // 번호판 수동 블러 대상 — 자동 감지가 놓친 사진을 사람이 직접 칠한다.
+  // 적용하면 블러본 URL이 돌아오는데, 그 자리에 끼워넣고 저장은 기존 "저장" 버튼이 한다
+  // (report-fields가 photos를 통째로 받는다). 저장 전엔 아무것도 안 바뀐다.
+  const [blurTarget, setBlurTarget] = useState<{ cat: string; idx: number; url: string } | null>(null);
   const [addingPhoto, setAddingPhoto] = useState<string | null>(null);
   const [replacingSingle, setReplacingSingle] = useState<string | null>(null);
   // form.carNumber를 ref로도 들고 있어서, 사진 업로드 콜백들이 텍스트 입력 때마다
@@ -379,6 +394,11 @@ const ReportEditPage: IDefaultLayoutPage = () => {
   const handleLightbox = useCallback((photos: string[], idx: number) => setLightbox({ photos, idx }), []);
   const handleOpenDamageEditor = useCallback(() => setDamageEditorOpen(true), []);
 
+  // PhotoSection이 memo라 참조가 매번 바뀌면 memo가 무용지물이 된다 — useCallback 필수
+  const handleBlurPhoto = useCallback((cat: string, idx: number, url: string) => {
+    setBlurTarget({ cat, idx, url });
+  }, []);
+
   if (loading) {
     return <div className="flex items-center justify-center h-96"><Spin size="large" tip="로딩 중…" /></div>;
   }
@@ -421,6 +441,7 @@ const ReportEditPage: IDefaultLayoutPage = () => {
           onRemove={removePhoto}
           onLightbox={handleLightbox}
           onOpenDamageEditor={handleOpenDamageEditor}
+          onBlurPhoto={handleBlurPhoto}
         />
 
         {/* ── 오른쪽: 폼 ── */}
@@ -522,6 +543,25 @@ const ReportEditPage: IDefaultLayoutPage = () => {
             >›</button>
           )}
         </div>
+      )}
+
+      {blurTarget && (
+        <ManualBlurEditorModal
+          open
+          imageUrl={blurTarget.url}
+          onClose={() => setBlurTarget(null)}
+          onApplied={(newUrl: string) => {
+            const { cat, idx } = blurTarget;
+            setPhotoOrder(prev => {
+              const arr = [...(prev[cat] ?? [])];
+              if (!arr[idx]) return prev;
+              arr[idx] = newUrl;
+              return { ...prev, [cat]: arr };
+            });
+            setBlurTarget(null);
+            message.success('블러를 적용했습니다. 아래 "저장"을 눌러야 리포트에 반영됩니다.');
+          }}
+        />
       )}
 
       {damageEditorOpen && bookingId && (
