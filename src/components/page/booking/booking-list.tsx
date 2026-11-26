@@ -167,6 +167,11 @@ interface IBooking {
   extraFeeMemo?: string | null;
   claimDeduction?: number | null;
   isUrgent?: boolean; // 관리자가 "긴급·당일배정"으로 전체 브로드캐스트한 건
+  // 접수는 받았지만 방문 일정이 확정되지 않은 건 — 신청 폼에서 "그 지역/시간엔 배정 불가"가
+  // 뜬 상태로 접수된 것이다. status는 PENDING 그대로고, 이 표시만 다르다.
+  // 발주사 계정은 상담 목록을 못 보기 때문에 여기(신청 목록)에 같이 뜨게 해둔 것이다.
+  unconfirmed?: boolean;
+  unconfirmedReason?: string | null;
   // /inspection(검차 신청 결제) 계좌이체 건 전용 — 입금 확인 전까지 자동배정/브로드캐스트 보류됨
   paymentMethod?: string | null;
   depositConfirmed?: boolean;
@@ -1761,16 +1766,26 @@ const BookingList = ({ companyFilter }: BookingListProps) => {
         }
         const editable = canEditPreferredDateTime(record);
         return (
-          <span
-            onDoubleClick={() => startInlineDateTimeEdit(record)}
-            title={editable ? "더블클릭하여 수정" : undefined}
-            className={
-              (value ? "text-red-500 font-bold" : "text-gray-300") +
-              (editable ? " cursor-pointer" : "")
-            }
-          >
-            {value ? value.replace('T', ' ') : "-"}
-          </span>
+          <div className="flex flex-col items-center gap-1">
+            <span
+              onDoubleClick={() => startInlineDateTimeEdit(record)}
+              title={editable ? "더블클릭하여 수정" : undefined}
+              className={
+                (value ? "text-red-500 font-bold" : "text-gray-300") +
+                (editable ? " cursor-pointer" : "")
+              }
+            >
+              {value ? value.replace('T', ' ') : "-"}
+            </span>
+            {/* 날짜가 적혀 있어도 "확정된 약속"이 아닌 건이 있다 — 접수 당시 그 지역·시간에
+                배정 가능한 진단사가 없었던 건. 그대로 두면 확정 예약으로 읽혀서 아무도
+                연락하지 않는다. 일정을 잡고 나면 이 칸을 고치면서 표시를 내린다. */}
+            {record.unconfirmed && (
+              <Tag color="magenta" style={{ margin: 0 }} title={record.unconfirmedReason ?? undefined}>
+                미확정
+              </Tag>
+            )}
+          </div>
         );
       },
     },
